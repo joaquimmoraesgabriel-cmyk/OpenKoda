@@ -1,0 +1,108 @@
+name: Windows 11 client startup
+
+on:
+  push:
+    branches: ['codex/openkoda-*', main]
+    paths:
+      - '.github/workflows/windows-client-smoke.yml'
+      - '.github/scripts/windows-client-smoke.ps1'
+      - 'OpenKoda/app/src/**'
+      - 'OpenKoda/app/src-tauri/**'
+      - 'OpenKoda/app/scripts/package-windows.ps1'
+      - 'OpenKoda/app/scripts/sandbox-release-guest.ps1'
+      - 'OpenKoda/app/scripts/verify-bundled-binary.py'
+      - 'OpenKoda/app/scripts/windows_release_recovery.py'
+      - 'OpenKoda/app/docs/avisos/**'
+      - 'OpenKoda/app/docs/RECUPERACAO-WINDOWS.md'
+      - 'OpenKoda/app/index.html'
+      - 'OpenKoda/app/package*.json'
+      - 'OpenKoda/app/tsconfig.json'
+      - 'OpenKoda/app/vite.config.ts'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: pwsh
+
+jobs:
+  build-x64:
+    runs-on: windows-2025
+    timeout-minutes: 75
+    outputs:
+      artifact-id: ${{ steps.upload.outputs.artifact-id }}
+      manifest-sha256: ${{ steps.transfer.outputs.manifest-sha256 }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install locked frontend dependencies
+        working-directory: OpenKoda/app
+        run: npm ci
+      - name: Build the unsigned x64 installer
+        working-directory: OpenKoda/app
+        run: ./scripts/package-windows.ps1 -Jobs 4
+      - name: Bind the two executables to the source commit
+        id: transfer
+        working-directory: OpenKoda/app
+        run: |
+          $package = Get-Content -Raw -LiteralPath '.local/package-windows.json' | ConvertFrom-Json
+          $setup = Get-Item -LiteralPath ("src-tauri/target/release/bundle/nsis/OpenKoda_" + $package.version + "_x64-setup.exe")
+          $exe = Get-Item -LiteralPath 'src-tauri/target/release/openkoda.exe'
+          $setupHash = (Get-FileHash -LiteralPath $setup.FullName).Hash.ToLowerInvariant()
+          if ($package.profile -ne 'release' -or @($package.files).Count -ne 1 -or $setup.FullName -ne $package.files[0].path -or $setupHash -ne $package.files[0].sha256) {
+            throw 'The x64 installer does not match the packaging receipt.'
+          }
+          $transfer = New-Item -ItemType Directory -Path (Join-Path $env:RUNNER_TEMP 'client-input')
+          Copy-Item -LiteralPath $setup.FullName -Destination (Join-Path $transfer.FullName 'setup.exe')
+          Copy-Item -LiteralPath $exe.FullName -Destination (Join-Path $transfer.FullName 'openkoda.exe')
+          $manifest = Join-Path $transfer.FullName 'transfer.json'
+          [ordered]@{
+            version = $package.version
+            commit = $env:GITHUB_SHA
+            runId = $env:GITHUB_RUN_ID
+            setupSha256 = $setupHash
+            sourceExeSha256 = (Get-FileHash -LiteralPath $exe.FullName).Hash.ToLowerInvariant()
+          } | ConvertTo-Json | Set-Content -LiteralPath $manifest -Encoding utf8
+          "manifest-sha256=$((Get-FileHash -LiteralPath $manifest).Hash.ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+      - uses: actions/upload-artifact@v4
+        id: upload
+        with:
+          name: client-x64-input-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/client-input/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+
+  installed-client:
+    needs: build-x64
+    runs-on: windows-11-arm
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ needs.build-x64.outputs.artifact-id }}
+          merge-multiple: true
+          path: ${{ runner.temp }}/client-input
+      - name: Verify the x64 release on Windows 11 Arm64
+        env:
+          MANIFEST_SHA256: ${{ needs.build-x64.outputs.manifest-sha256 }}
+        run: ./.github/scripts/windows-client-smoke.ps1
+      - name: Retain client and installation receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-11-arm-smoke-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/openkoda-client-smoke.json
+            ${{ runner.temp }}/openkoda-release-smoke.json
+          if-no-files-found: warn
+          retention-days: 14
