@@ -1,5 +1,19 @@
 # Etapas e evidências da construção
 
+**0.1.14 local.** O Perfil reúne a atividade das avaliações. Uso e orçamento mostra o saldo local e as reservas em dólares. Em Análises, o filtro por provedor e modelo atualiza o gráfico de tokens e a tabela de custos. Os modelos de OpenAI, OpenRouter e Groq podem ser escolhidos ao preparar a avaliação ou revisar um envio. As listas de Configurações, Avaliações e Achados rolam independentemente do conteúdo. O K da barra lateral identifica o executável e o instalador. [Guia de uso](README.md)
+
+Passaram 273 testes no Edge, 71 testes unitários da interface e 596 testes Rust, incluindo os testes de integração com a conectividade do Windows e o Kali dedicado. A inspeção de Perfil, Uso e Análises cobriu os temas claro e escuro com dados sintéticos.
+
+Sete roteiros nativos passaram em 78 grupos no mesmo executável de teste. Eles confirmaram a seleção de pasta, a recuperação dos dados, a retenção de cópias e o reenvio da mesma solicitação de avaliação. A verificação de provedores recuperou a mesma avaliação após reabertura e conferiu que remover uma credencial preserva as demais.
+
+Na migração direta, o binário da 0.1.13 criou um projeto e uma avaliação em um perfil de teste. O binário da 0.1.14 abriu esse perfil duas vezes. O projeto, a avaliação, o escopo e a credencial OpenAI de teste foram preservados, inclusive após a adição de uma credencial Groq. O reenvio recuperou o mesmo ID de avaliação.
+
+O binário nativo consultou o catálogo real da OpenAI com uma chamada e recebeu 96 modelos. O teste removeu a credencial do perfil temporário e realizou zero inferências. As integrações com OpenRouter e Groq foram testadas com transporte e credenciais de teste.
+
+O instalador local para Windows x64 tem 7.373.605 bytes e SHA-256 `8eed338257f847367f1421e047b676bcc3642b1f6f32bbe9b830a7067de8b5b6`. A inspeção do NSIS conferiu o executável, os recursos da interface e a licença MIT do Prestige UI.
+
+Os ambientes limpos de integração compilaram instaladores do commit `8325d02`. Em cada ambiente, a instalação abriu duas vezes, recuperou o mesmo projeto e preservou o banco após a desinstalação. [Windows Server 2022 e 2025](https://github.com/joaquimmoraesgabriel-cmyk/OpenKoda/actions/runs/43080907370) · [Windows 11 ARM64 com aplicativo x64](https://github.com/joaquimmoraesgabriel-cmyk/OpenKoda/actions/runs/43080906769)
+
 **0.1.13 local.** A Visão geral usa os projetos e as avaliações da instalação. A lateral fixa dá acesso ao Perfil e às Configurações durante a rolagem. O seletor do Windows devolve o alvo ao formulário e permite cancelar sem substituir o caminho anterior. O teste nativo escolheu um arquivo, cancelou outra seleção e criou o projeto a partir de uma pasta. [Como usar](README.md)
 
 Passaram 266 testes no Edge, 68 testes unitários da interface e 593 testes Rust, incluindo conectividade do Windows e execução no Kali dedicado. O instalador local x64 passou por instalação, substituição pela mesma versão, duas aberturas e desinstalação. O teste conferiu que os dados persistidos foram preservados.

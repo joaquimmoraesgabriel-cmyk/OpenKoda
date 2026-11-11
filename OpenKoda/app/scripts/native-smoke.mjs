@@ -1298,7 +1298,18 @@ try {
     await rejects('retention.apply', { ...decision, confirmation: 'yes' });
     expect((await request('retention.inventory')).journals.find(value => value.id === retentionPlan.id).status).toBe('prepared');
     await access(ownedPath(selectedBackup.path)); await access(ownedPath(selectedReport.directory));
-    const applied = await request('retention.apply', decision);
+    let applied;
+    await expect.poll(async () => {
+      try {
+        applied = await request('retention.apply', decision);
+        return true;
+      } catch (error) {
+        // The native dispatcher returns this exact refusal before entering
+        // retention. Never repeat an admitted or ambiguous deletion.
+        if (error.message === 'page.evaluate: Retenção indisponível durante outra operação.') return false;
+        throw error;
+      }
+    }, {timeout: 15_000, message: 'The reviewed retention plan is admitted after transient readers finish'}).toBe(true);
     expect(applied.status).toBe('applied'); expect(applied.progress.length).toBeGreaterThan(0);
     expect(applied.progress.every(value => value.status === 'deleted')).toBe(true);
     for (const directory of [ownedPath(selectedBackup.path), ownedPath(selectedReport.directory)]) {
