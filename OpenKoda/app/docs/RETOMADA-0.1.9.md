@@ -17,6 +17,8 @@ O instalador x64 sem assinatura passou na extração e no ciclo local de instala
 | Recuperação da instalação | 21 regressões de recuperação. O ensaio com os instaladores 0.1.7 e 0.1.8 confirmou reparo, recusa do retorno com dados alterados e retomada entre desinstalar o binário novo e reinstalar o anterior. Os seis processos NSIS terminaram com código zero. |
 | Acessibilidade | Cinco percursos com teclado e zoom nativo de 200% no Edge. No debug intermediário 0.1.9, o NVDA 2026.3 apresentou a prévia, a confirmação, a disponibilidade do botão e o anúncio de sucesso da gravação de um arquivo de suporte de 267 bytes. O teste usou o Visualizador da Fala com sintetizador silencioso. |
 
+A integração com a OpenAI foi verificada no debug preservado desta versão. Em um perfil temporário, o aplicativo guardou a credencial pelo mesmo comando das configurações, consultou o catálogo oficial e recebeu 96 modelos. A chave foi removida ao final. O teste fez uma consulta e zero inferências.
+
 ## Comparação visual
 
 As referências V-01 a V-06 foram comparadas com capturas em 1440 × 810. Os projetos, avaliações e achados usaram títulos e modalidades do laboratório ilustrado. Painel, formulário, achados e projetos preservam seleção à esquerda e detalhe à direita. O painel real inclui escopo e política de dados antes do resumo. Kali apresenta saúde, abas e catálogo com o estado desconectado da prévia. As configurações mantêm o menu por assunto, a conexão e o orçamento. Na prévia, ações que exigem um provedor ou executor aparecem indisponíveis. As seis telas couberam na largura medida. [Referências originais](../../planejamento/VISUAL-E-TELAS.md)
