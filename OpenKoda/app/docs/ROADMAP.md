@@ -1,5 +1,8 @@
 # OpenKoda — roadmap de capacidades e validação
 
+<!-- local-0.1.11 -->
+**Situação após a 0.1.11.** Foram entregues a comparação entre avaliações do mesmo projeto e a consulta independente de Internet no Windows. O APT foi testado em um volume com falta de espaço. [Resultados, plataformas e limites](RETOMADA-0.1.11.md)
+
 <!-- local-0.1.10 -->
 **Situação após a 0.1.10.** Preparação do Windows com reentrada, retirada guiada do Kali e abertura do aplicativo instalado em dois Windows Server têm evidência de teste. A validação em Windows cliente sem WebView2, o reinício durante manutenção e a falha de disco em uma operação de pacotes permanecem como cenários de plataforma. As extensões condicionais continuam descritas no planejamento. [Validação da versão](RETOMADA-0.1.10.md)
 

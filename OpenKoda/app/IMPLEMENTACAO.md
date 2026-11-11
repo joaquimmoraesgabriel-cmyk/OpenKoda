@@ -1,5 +1,8 @@
 # Etapas e evidências da construção
 
+<!-- local-0.1.11 -->
+**0.1.11 local.** A comparação de avaliações e a consulta de Internet pelo Windows passaram pela interface nativa. A atualização 0.1.10 → 0.1.11 preservou os dados. [Resultados e limites](docs/RETOMADA-0.1.11.md)
+
 <!-- local-0.1.10 -->
 **0.1.10 local.** Passaram 582 testes Rust no Windows, um teste adicional no Kali gerido, 66 unitários da interface, 249 de navegador e 74 grupos nativos. A atualização da 0.1.9 foi testada neste PC. Cada imagem Windows do CI abriu o aplicativo instalado duas vezes e confirmou a persistência do projeto. [Validação da versão](docs/RETOMADA-0.1.10.md)
 

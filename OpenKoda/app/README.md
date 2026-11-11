@@ -1,5 +1,8 @@
 # OpenKoda desktop
 
+<!-- local-0.1.11 -->
+**0.1.11 local para Windows x64.** Consulte o [guia de comparação de avaliações e de conectividade](docs/GUIA-0.1.11.md) e os [resultados dos testes](docs/RETOMADA-0.1.11.md). Neste checkout, o [instalador sem assinatura](releases/0.1.11-local-20261111/OpenKoda_0.1.11_x64-setup.exe) está pronto para uso.
+
 <!-- local-0.1.10 -->
 A 0.1.10 orienta a preparação do Windows para WSL, retoma a verificação ao reabrir e oferece a retirada guiada do executor Kali. Para gerar o instalador a partir do repositório, use `npm ci` e `.\scripts\package-windows.ps1` nesta pasta. Neste checkout, a cópia conferida está em [OpenKoda_0.1.10_x64-setup.exe](releases/0.1.10-local-20261111/OpenKoda_0.1.10_x64-setup.exe). [Guia da 0.1.10](docs/GUIA-0.1.10.md) · [Resultados e limites](docs/RETOMADA-0.1.10.md)
 

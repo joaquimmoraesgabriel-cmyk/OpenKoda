@@ -1,5 +1,8 @@
 # Matriz completa de aceitação e evidências
 
+<!-- local-0.1.11 -->
+**0.1.11.** A comparação entre avaliações, a operação offline da interface e o indicador de Internet têm testes. A recuperação de falha de espaço nos índices do APT foi exercitada em um contêiner Kali. [Evidências](RETOMADA-0.1.11.md)
+
 <!-- local-0.1.10 -->
 **0.1.10.** AC-01 e AC-02 incluem orientação dos requisitos e reentrada no Windows. AC-16 inclui replay simultâneo do mesmo recibo. As duas imagens Windows hospedadas conferiram a persistência do projeto entre aberturas da versão de produção. A retirada do executor ganhou revisão da identidade, registro de conflitos, preservação opcional e recuperação do histórico em backup. [Resultados, artefatos e alcance](RETOMADA-0.1.10.md)
 
