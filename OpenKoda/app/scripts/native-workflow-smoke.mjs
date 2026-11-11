@@ -1,4 +1,4 @@
-// OpenKoda 0.1.10 native IPC fixture. All application data and HTTP peers are owned
+// OpenKoda 0.1.11 native IPC fixture. All application data and HTTP peers are owned
 // by this run. The exact coordinator-reviewed custom-protocol binary is required.
 // No provider, credential, WSL, personal profile, or existing target is used.
 import { chromium, expect } from '@playwright/test';
@@ -15,21 +15,21 @@ import { authorizeData, reviewedBackup } from './data-fixture.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
-if (args.length !== 2 || args[0] !== '--expected-sha256' || !/^[a-f0-9]{64}$/.test(args[1])) throw new Error('Use --expected-sha256 <coordinator-reviewed 0.1.10 custom-protocol debug hash>.');
+if (args.length !== 2 || args[0] !== '--expected-sha256' || !/^[a-f0-9]{64}$/.test(args[1])) throw new Error('Use --expected-sha256 <coordinator-reviewed 0.1.11 custom-protocol debug hash>.');
 if (process.platform !== 'win32') throw new Error('This fixture requires native Windows WebView2.');
 const hash = value => createHash('sha256').update(value).digest('hex');
 const binary = join(root, 'src-tauri', 'target', 'debug', 'openkoda.exe');
 const binaryBytes = await readFile(binary);
 if (await realpath(binary) !== binary || hash(binaryBytes) !== args[1]) throw new Error('Debug binary differs from the reviewed artifact.');
-const legacyRelease = join(root, 'releases', '0.1.9-local-20261111');
+const legacyRelease = join(root, 'releases', '0.1.10-local-20261111');
 const legacyManifest = JSON.parse((await readFile(join(legacyRelease, 'release.json'), 'utf8')).replace(/^\uFEFF/, ''));
 const legacyBinary = join(legacyRelease, 'openkoda-debug.exe');
-if (legacyManifest.version !== '0.1.9' || legacyManifest.schema !== 8 || await realpath(legacyBinary) !== legacyBinary || hash(await readFile(legacyBinary)) !== legacyManifest.nativeTestBinarySha256) throw new Error('Preserved 0.1.9 artifact differs from its release manifest.');
+if (legacyManifest.version !== '0.1.10' || legacyManifest.schema !== 8 || await realpath(legacyBinary) !== legacyBinary || hash(await readFile(legacyBinary)) !== legacyManifest.nativeTestBinarySha256) throw new Error('Preserved 0.1.10 artifact differs from its release manifest.');
 const directory = join(root, '.local', `native-workflow-${randomUUID()}`);
 const dataDirectory = join(directory, 'data');
 await mkdir(directory, { recursive: true });
 if (await realpath(directory) !== directory) throw new Error('Fixture directory must not redirect.');
-const result = { passed: false, directory, artifact: { version: '0.1.10', binary, sha256: args[1], bytes: binaryBytes.length, scriptSha256: hash(await readFile(fileURLToPath(import.meta.url))) }, records: [], limits: [
+const result = { passed: false, directory, artifact: { version: '0.1.11', binary, sha256: args[1], bytes: binaryBytes.length, scriptSha256: hash(await readFile(fileURLToPath(import.meta.url))) }, records: [], limits: [
   'Mutations use public native IPC. Read-only SQLite is restricted to this run and checks actual journals, capture bytes and hashes; it injects no authority.',
   'Only the owned loopback HTTP fixture and WebView2 CDP endpoint are contacted. No credential, provider, WSL, personal TXT or pre-existing profile is accessed.',
   'The fixture releases held responses explicitly. Cancellation confirms local completion; it does not undo a HEAD already received by the peer.',
@@ -193,7 +193,7 @@ try {
   await openApp(legacyBinary, legacyManifest.nativeTestBinarySha256);
   await gate('preserved-previous-release-creates-fixture', async () => {
     expect((await request('snapshot')).projects).toEqual([]);
-    legacyProject = await request('project.create', { name: 'Preserved 0.1.9 project', kind: 'web', target, description: 'Synthetic pre-upgrade metadata created through the preserved native IPC.' });
+    legacyProject = await request('project.create', { name: 'Preserved 0.1.10 project', kind: 'web', target, description: 'Synthetic pre-upgrade metadata created through the preserved native IPC.' });
     const db = new DatabaseSync(await plainOwned(join(dataDirectory, 'openkoda.sqlite3')), { readOnly: true });
     try {
       expect(db.prepare('PRAGMA user_version').get().user_version).toBe(8);
@@ -204,8 +204,8 @@ try {
     }
     finally { db.close(); }
     expect(traffic).toHaveLength(0);
-    previousEnvironmentState = await environmentDatabase(1);
-    return { version: '0.1.9', sha256: legacyManifest.nativeTestBinarySha256, schema: 8, environmentSchema: 1, projectId: legacyProject.id, coreSha256: legacyRawHash };
+    previousEnvironmentState = await environmentDatabase(2);
+    return { version: '0.1.10', sha256: legacyManifest.nativeTestBinarySha256, schema: 8, environmentSchema: 2, projectId: legacyProject.id, coreSha256: legacyRawHash };
   });
   await closeApp();
   await openApp();
@@ -214,7 +214,7 @@ try {
     expect(migrated.state.projects).toEqual([legacyProject]); expect(migrated.attempts).toEqual([]); expect(migrated.captures).toEqual([]);
     expect(migrated.requestCount).toBe(0); expect(migrated.vaultCount).toBe(0); expect(traffic).toHaveLength(0);
     expect(await environmentDatabase(2)).toBe(previousEnvironmentState);
-    return { schema: [8, 8], environmentSchema: [1, 2], exactEnvironmentPreserved: true, exactJsonPreserved: true, existingProjectUnchanged: true, noAutomaticDispatch: true };
+    return { schema: [8, 8], environmentSchema: [2, 2], exactEnvironmentPreserved: true, exactJsonPreserved: true, existingProjectUnchanged: true, noAutomaticDispatch: true };
   });
   await gate('windows-preparation-and-retirement-start-without-authority', async () => {
     expect(await request('environment.host.resume')).toBeNull();
@@ -229,7 +229,7 @@ try {
   await gate('native-dag-pure-plan-and-single-first-dispatch', async () => {
     expect((await request('snapshot')).projects).toEqual([legacyProject]);
     const project = await request('project.create', { name: 'Owned workflow fixture', kind: 'web', target, description: 'Loopback listener owned by native-workflow-smoke.mjs.' }); projectId = project.id;
-    assessmentId = (await reviewedAssessment(request, { projectId, title: 'Native workflow 0.1.10', kind: 'web', target, objective: 'Validate reviewed native DAG without provider or Linux.' }, ['http.headers.v1'])).id;
+    assessmentId = (await reviewedAssessment(request, { projectId, title: 'Native workflow 0.1.11', kind: 'web', target, objective: 'Validate reviewed native DAG without provider or Linux.' }, ['http.headers.v1'])).id;
     firstPlanCommit = await newPlan([native('a'), { key: 'b', existingNodeId: null, purpose: 'Review the observation identity.', expectedObservation: 'An explicit human decision.', dependsOnKeys: ['a'], intent: { kind: 'human_review', inputs: [{ kind: 'dependency_output', nodeKey: 'a', outputRole: 'evidence' }] } }, native('c', ['b'])]);
     expect(traffic).toHaveLength(0); expect((await audit()).state.executions).toEqual([]); expect((await plan()).jobs[1].canPrepare).toBe(false);
     const a = await prepare(0); expect(traffic).toHaveLength(0);
@@ -324,6 +324,35 @@ try {
     const after = await audit();
     expect(after).toEqual(before); expect(traffic).toHaveLength(3);
     return { emptyCandidates: true, nonexistentAndNativeEffectsRejected: true, fabricatedReviewRejected: true, unchangedStorage: true };
+  });
+  await gate('comparison-reads-only-selected-project-assessments', async () => {
+    const second = await reviewedAssessment(request, {
+      projectId, title:'Comparison fixture', kind:'web', target, objective:'Compare two local records without dispatch.',
+    }, ['http.headers.v1']);
+    const ids = [assessmentId, second.id];
+    const prior = await audit();
+    const previousTraffic = traffic.length;
+    expect(await request('kali.mcp.assessmentEnvironments', {projectId,assessmentIds:ids})).toEqual([]);
+    await denied('kali.mcp.assessmentEnvironments',{projectId:legacyProject.id,assessmentIds:ids});
+    await page.reload();
+    await expect(page.locator('#main-content')).toHaveAttribute('aria-busy','false');
+    await page.getByRole('button',{name:'Projetos',exact:true}).click();
+    await page.getByRole('button',{name:/Owned workflow fixture/}).click();
+    await page.getByRole('navigation',{name:'Seções'}).getByRole('button',{name:'Avaliações'}).click();
+    await page.getByText('Comparar avaliações',{exact:true}).click();
+    await page.getByLabel('Avaliação A',{exact:true}).selectOption(ids[0]);
+    await page.getByLabel('Avaliação B',{exact:true}).selectOption(ids[1]);
+    await page.getByRole('button',{name:'Comparar registros'}).click();
+    const details=page.getByRole('region',{name:'Resultado da comparação'});
+    await expect(details.getByRole('region',{name:'Métodos da revisão de escopo'})).toContainText('http.headers.v1');
+    await expect(details.getByRole('region',{name:'Identidades de ambiente no histórico do Kali'})).toContainText('Dados insuficientes');
+    await expect(details).not.toContainText('O histórico de ambientes do Kali está indisponível.');
+    const after=await audit();
+    expect(after.rawSha256).toBe(prior.rawSha256);
+    expect(after.attempts.length).toBe(prior.attempts.length);
+    expect(after.requestCount).toBe(prior.requestCount);
+    expect(traffic).toHaveLength(previousTraffic);
+    return {distinctAssessments:2,projectBoundaryVerified:true,coreUnchanged:true,noAutomaticDispatch:true};
   });
   await gate('reviewed-backup-restore-keeps-capture-bytes-and-pauses-work', async () => {
     const before = await audit(); const backup = await reviewedBackup(request, { projectIds: [legacyProject.id, projectId] });

@@ -356,6 +356,31 @@ try {
     await rejects('project.create', { name: '', kind: 'code', target: fixtureDirectory, description: '' });
     expect((await request('snapshot')).projects).toEqual([]);
   });
+  await gate('E1-host-connectivity', 'Windows connectivity has its own on-demand Settings observation', async () => {
+    await page.getByRole('button', { name: 'Configurações', exact: true }).click();
+    await page.getByRole('button', { name: 'Geral', exact: true }).click();
+    const panel = page.getByRole('region', { name: 'Conectividade com a Internet' });
+    const status = panel.getByRole('status');
+    await expect(panel.getByText(/Gerenciador de Lista de Redes do Windows/)).toBeVisible();
+    await expect(status).toContainText('Ainda não consultado');
+    await panel.getByRole('button', { name: 'Consultar conectividade' }).click();
+    const labels = ['Acesso à Internet indicado', 'Apenas rede local', 'Rede conectada sem tráfego detectado',
+      'Desconectado da rede', 'Indicador indisponível'];
+    const timestamp = status.locator('time');
+    await expect(timestamp).toBeVisible({ timeout: 15_000 });
+    const displayedAt = await timestamp.getAttribute('datetime');
+    const displayedStatus = (await status.locator('p').first().innerText()).trim();
+    expect(labels).toContain(displayedStatus);
+    expect(Number.isFinite(Date.parse(displayedAt))).toBe(true);
+
+    await rejects('host.connectivity', { endpoint: 'invalid fixture' }, 'não recebe parâmetros');
+    const observation = await request('host.connectivity');
+    expect(Object.keys(observation).sort()).toEqual(['observedAt', 'source', 'status']);
+    expect(observation.source).toBe('windowsNlm');
+    expect(['internet', 'local', 'noTraffic', 'disconnected', 'unavailable']).toContain(observation.status);
+    expect(Number.isFinite(Date.parse(observation.observedAt))).toBe(true);
+    return { displayedStatus, displayedAt, observation };
+  });
   await gate('E1-capability-refusal', 'The main native webview is denied ungranted window and webview creation by Tauri permissions', async () => {
     const before = await request('snapshot');
     const pagesBefore = browser.contexts().flatMap(context => context.pages()).length;
