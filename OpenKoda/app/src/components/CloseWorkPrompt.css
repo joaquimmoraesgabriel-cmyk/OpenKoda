@@ -1,0 +1,12 @@
+.close-work-dialog {
+  width: min(32rem, calc(100vw - 3rem));
+  padding: 1.5rem;
+  border: 1px solid var(--line);
+  border-radius: .75rem;
+  color: var(--text);
+  background: var(--surface);
+}
+.close-work-dialog h2 { margin: 0 0 .75rem; font-size: 1.2rem; }
+.close-work-dialog p { line-height: 1.5; }
+.close-work-dialog::backdrop { background: rgb(5 10 16 / 60%); }
+

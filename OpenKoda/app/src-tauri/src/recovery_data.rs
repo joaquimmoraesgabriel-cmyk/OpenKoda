@@ -18,6 +18,8 @@ const ENVIRONMENT: &[(&str, &str)] = &[
     ("environment_plans", "CREATE TABLE environment_plans(id TEXT PRIMARY KEY, data TEXT NOT NULL)"),
     ("environment_repairs", "CREATE TABLE environment_repairs(id TEXT PRIMARY KEY,data TEXT NOT NULL)"),
 ];
+const ENVIRONMENT_SWITCH: (&str, &str) = ("environment_switches",
+    "CREATE TABLE environment_switches(environment_id TEXT PRIMARY KEY, plan_id TEXT UNIQUE NOT NULL, previous_state TEXT NOT NULL, selected_registration TEXT NOT NULL, activated_at TEXT NOT NULL)");
 const BRIDGE: &[(&str, &str)] = &[("bridge_runs", "CREATE TABLE bridge_runs(id TEXT PRIMARY KEY,data TEXT NOT NULL)")];
 const REMEDIATION: &[(&str, &str)] = &[("remediation_plans", "CREATE TABLE remediation_plans(id TEXT PRIMARY KEY, finding_id TEXT NOT NULL, data TEXT NOT NULL, backup BLOB)")];
 const RETENTION: &[(&str, &str)] = &[("retention_plans", "CREATE TABLE retention_plans(id TEXT PRIMARY KEY,data TEXT NOT NULL)")];
@@ -59,6 +61,9 @@ fn expected(name: &str, version: i64) -> Result<Vec<(&'static str, &'static str)
         _ => return Err("Banco fora do conjunto de recuperação revisado.".into()),
     };
     let mut schema=base.to_vec();
+    if matches!(name, "environment.sqlite3" | "environment-history.sqlite3") && version == 1 {
+        schema.push(ENVIRONMENT_SWITCH);
+    }
     if name=="openkoda.sqlite3" && version>=7 {
         schema.extend(crate::work_store::WORK_SCHEMA.iter().copied().filter(|(table,_)|version>=8||*table!="work_ai_dispositions"));
         schema.extend_from_slice(crate::capture::CAPTURE_SCHEMA);
@@ -68,7 +73,11 @@ fn expected(name: &str, version: i64) -> Result<Vec<(&'static str, &'static str)
 
 pub(super) fn verify_schema(db: &Connection, name: &str) -> Result<i64, String> {
     let version: i64 = db.query_row("PRAGMA user_version", [], |r| r.get(0)).map_err(failure)?;
-    let valid_version = if name == "openkoda.sqlite3" { (1..=core::STORE_VERSION).contains(&version) } else { version == 0 };
+    let valid_version = match name {
+        "openkoda.sqlite3" => (1..=core::STORE_VERSION).contains(&version),
+        "environment.sqlite3" | "environment-history.sqlite3" => (0..=1).contains(&version),
+        _ => version == 0,
+    };
     if !valid_version { return Err("Versão de banco não reconhecida para a cópia de recuperação.".into()); }
     let schema = expected(name,version)?;
     let integrity: String = db.query_row("PRAGMA quick_check", [], |r| r.get(0)).map_err(failure)?;
@@ -201,6 +210,32 @@ impl LogicalDatabase {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn historical_environment_copies_keep_legacy_and_switched_schemas_distinct() {
+        let dir = tempfile::tempdir().unwrap();
+        for version in [0, 1] {
+            let source = dir.path().join(format!("source-{version}.sqlite3"));
+            let db = Connection::open(&source).unwrap();
+            for (_, ddl) in ENVIRONMENT { db.execute_batch(ddl).unwrap(); }
+            if version == 1 {
+                db.execute_batch(ENVIRONMENT_SWITCH.1).unwrap();
+                db.execute("INSERT INTO environment_switches VALUES (?1,?2,?3,?4,?5)",
+                    ["target-id","plan-id","previous-state","selected-registration","recorded-time"]).unwrap();
+            }
+            db.pragma_update(None, "user_version", version).unwrap();
+            let packet = prepare_database(&source, "environment.sqlite3", &|_| false).unwrap();
+            let destination = dir.path().join(format!("history-{version}.sqlite3"));
+            packet.write_new(&destination).unwrap();
+            let historical = Connection::open(&destination).unwrap();
+            assert_eq!(verify_schema(&historical, "environment-history.sqlite3").unwrap(), version);
+            if version == 1 {
+                let previous: String = historical.query_row("SELECT previous_state FROM environment_switches", [], |r| r.get(0)).unwrap();
+                assert_eq!(previous, "previous-state");
+            }
+            historical.pragma_update(None, "user_version", 1 - version).unwrap();
+            assert!(verify_schema(&historical, "environment-history.sqlite3").is_err());
+        }
+    }
     fn core_db(path: &Path) -> Connection {
         let db = Connection::open(path).unwrap();
         db.execute_batch(CORE[0].1).unwrap();

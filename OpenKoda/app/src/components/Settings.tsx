@@ -1,4 +1,5 @@
 import ProjectDataSettings from './ProjectDataSettings';
+import SupportPackage from './SupportPackage';
 import { useEffect, useState } from 'react';
 import { version } from '../../package.json';
 import { Settings as SettingsIcon, Layers, ShieldCheck, Users, RefreshCw } from 'lucide-react';
@@ -28,6 +29,7 @@ export default function Settings({settings,projects,action,busy,dataRequest=0,on
     {section==='Permissões'&&<section className="content-section"><h2>Autoridade de execução</h2><KeyValue label="Modo disponível">Assistido</KeyValue><KeyValue label="Execução de ferramentas">Aguardando executor verificado</KeyValue><Notice>Cadastrar um alvo não autoriza operações. Cada avaliação deve ter escopo e efeitos revisados antes da execução.</Notice><p className="muted">Políticas avançadas, elevação e manutenção terão revisão própria quando seus executores estiverem disponíveis.</p></section>}
     {section==='Dados e privacidade'&&<section className="content-section"><h2>Armazenamento local</h2><p>Projetos, avaliações e evidências permanecem no armazenamento desta instalação. A prévia do navegador usa dados separados.</p><div className="form-group"><Field label="Retenção desejada (dias)" hint="Prazo de referência para revisão. Salvar não agenda nem exclui arquivos; a exclusão depende de seleção e confirmação abaixo."><input type="number" min={1} max={3650} value={draft.retentionDays} required onChange={e=>change('retentionDays',e.target.valueAsNumber)}/></Field></div><Notice>Cada mensagem exige a revisão do contexto e o consentimento de envio. A IA recebe somente o conteúdo selecionado nessa revisão; não executa ferramentas automaticamente.</Notice></section>}
     {section==='Dados e privacidade'&&<ProjectDataSettings projects={projects} action={action} busy={busy}/>}
+    {section==='Dados e privacidade'&&<SupportPackage/>}
     {section==='Dados e privacidade'&&<Recovery projects={projects} action={action} busy={busy}/>}
     {section==='Dados e privacidade'&&<Retention action={action} busy={busy}/>}
     {section==='Dados e privacidade'&&<ProjectPurge projects={projects} action={action} busy={busy} onStatus={onPurgeStatus}/>}

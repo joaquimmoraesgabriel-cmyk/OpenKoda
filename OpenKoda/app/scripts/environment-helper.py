@@ -79,7 +79,7 @@ def verified_repair_receipt(journal, sha256, raw):
            for key in ('repairId', 'planId', 'environmentId')):
         raise RuntimeError('Invalid native termination identity')
     issued = receipt['verifiedAtUnixSeconds']
-    if receipt['terminationVerified'] is not True or receipt['distro'] != 'OpenKoda-Kali' \
+    if receipt['terminationVerified'] is not True or receipt['distro'] not in ('OpenKoda-Kali', 'OpenKoda-Recovery-' + sys.argv[2]) \
             or receipt['environmentId'] != sys.argv[2] or type(issued) is not int \
             or not -30 <= time.time() - issued <= 180:
         raise RuntimeError('Unverified, expired or mismatched termination receipt')

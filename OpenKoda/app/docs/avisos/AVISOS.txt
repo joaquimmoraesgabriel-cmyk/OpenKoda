@@ -1,4 +1,4 @@
-Avisos de terceiros do OpenKoda 0.1.8
+Avisos de terceiros do OpenKoda 0.1.9
 
 O índice identifica o pacote, a versão e os arquivos de origem de cada texto. Procure o SHA-256 indicado para localizar o texto integral na segunda parte deste documento.
 O grafo Cargo segue dependências normais resolvidas para Windows x64 com custom-protocol. Exclui ramos exclusivos de build, testes e macros de compilação. O linker pode descartar código. A lista web cobre as dependências de produção e o auxiliar de carregamento de módulos do Vite.

@@ -107,7 +107,7 @@ struct ProcessResult {
 
 trait Runner: Send + Sync {
     fn run(&self, command: &CommandSpec) -> Result<ProcessResult, String>;
-    fn export_tar(&self, _target: fs::File, _limit: u64) -> Result<(u64, String), String> {
+    fn export_tar(&self, _distribution: &str, _target: fs::File, _limit: u64) -> Result<(u64, String), String> {
         Err("O exportador TAR não está disponível neste executor.".into())
     }
 
@@ -174,8 +174,8 @@ fn process_command(spec: &CommandSpec) -> Command {
 }
 
 impl Runner for SystemRunner {
-    fn export_tar(&self, target: fs::File, limit: u64) -> Result<(u64, String), String> {
-        archives::system_export_tar(target, limit)
+    fn export_tar(&self, distribution: &str, target: fs::File, limit: u64) -> Result<(u64, String), String> {
+        archives::system_export_tar(distribution, target, limit)
     }
 
     fn run(&self, spec: &CommandSpec) -> Result<ProcessResult, String> {
@@ -274,7 +274,7 @@ impl EnvironmentManager {
         self.archives.check_source_stop()?;
         let state=self.state()?;
         crate::core::valid_id(&state.id)?;
-        if state.phase!="ready"||state.registration.as_ref().is_none_or(|r|r.name!=DISTRO||r.version!=2){
+        if state.phase!="ready"||state.registration.as_ref().is_none_or(|r|r.version!=2)||self.bound_location(&state).is_err(){
             return Err("Prepare o ambiente gerido antes de revisar uma transferência local.".into());
         }
         Ok(state.id)
@@ -300,10 +300,26 @@ impl EnvironmentManager {
     fn with_sources(root: PathBuf, runner: Arc<dyn Runner>, images:Arc<dyn ImageSource>) -> Result<Self, String> {
         fs::create_dir_all(&root).map_err(|e| e.to_string())?;
         let root = root.canonicalize().map_err(|e| e.to_string())?;
-        let connection = Connection::open(root.join("environment.sqlite3")).map_err(|e| e.to_string())?;
+        let mut connection = Connection::open(root.join("environment.sqlite3")).map_err(|e| e.to_string())?;
         connection.busy_timeout(Duration::from_secs(5)).map_err(|e| e.to_string())?;
-        connection.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; CREATE TABLE IF NOT EXISTS environment_state(id INTEGER PRIMARY KEY CHECK(id=1), data TEXT NOT NULL); CREATE TABLE IF NOT EXISTS environment_plans(id TEXT PRIMARY KEY, data TEXT NOT NULL);").map_err(|e| e.to_string())?;
-        connection.execute_batch("CREATE TABLE IF NOT EXISTS environment_repairs(id TEXT PRIMARY KEY,data TEXT NOT NULL);").map_err(|e|e.to_string())?;
+        let supported=|version:i64|if matches!(version,0|1){Ok(())}else{Err("Versão de registro de ambiente não reconhecida.".to_string())};
+        let version=connection.pragma_query_value(None,"user_version",|row|row.get(0)).map_err(|e|e.to_string())?;
+        supported(version)?;
+        connection.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;").map_err(|e| e.to_string())?;
+        {
+            let migration=connection.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate).map_err(|e|e.to_string())?;
+            let version=migration.pragma_query_value(None,"user_version",|row|row.get(0)).map_err(|e|e.to_string())?;
+            supported(version)?;
+            if version==0 {
+                migration.execute_batch("CREATE TABLE IF NOT EXISTS environment_state(id INTEGER PRIMARY KEY CHECK(id=1), data TEXT NOT NULL);
+                    CREATE TABLE IF NOT EXISTS environment_plans(id TEXT PRIMARY KEY, data TEXT NOT NULL);
+                    CREATE TABLE IF NOT EXISTS environment_repairs(id TEXT PRIMARY KEY,data TEXT NOT NULL);
+                    CREATE TABLE IF NOT EXISTS environment_switches(environment_id TEXT PRIMARY KEY, plan_id TEXT UNIQUE NOT NULL, previous_state TEXT NOT NULL, selected_registration TEXT NOT NULL, activated_at TEXT NOT NULL);
+                    PRAGMA user_version=1;").map_err(|e|e.to_string())?;
+            }
+            migration.prepare("SELECT environment_id,plan_id,previous_state,selected_registration,activated_at FROM environment_switches LIMIT 0").map_err(|e|e.to_string())?;
+            migration.commit().map_err(|e|e.to_string())?;
+        }
         let initial = EnvironmentState { id: uuid::Uuid::new_v4().to_string(), phase: "absent".into(), registration: None,
             last_error: None, last_output: String::new(), updated_at: now(), install_exit:None };
         connection.execute("INSERT OR IGNORE INTO environment_state(id,data) VALUES(1,?1)", [serde_json::to_string(&initial).map_err(|e| e.to_string())?]).map_err(|e| e.to_string())?;
@@ -348,22 +364,74 @@ impl EnvironmentManager {
         Ok(items)
     }
 
-    fn owned_registration(&self, state: &EnvironmentState) -> Result<Registration, String> {
-        let expected = state.registration.as_ref().ok_or("O ambiente ainda não tem propriedade gerida comprovada.")?;
-        let current = self.inventory()?.into_iter().find(|r| r.name == DISTRO).ok_or("A distribuição gerida não foi encontrada.")?;
-        if current != *expected || current.version != 2 || !same_path(&current.base_path, &self.install_location()) {
-            return Err("A identidade, versão ou destino da distribuição mudou. Nenhuma manutenção foi iniciada.".into());
+    fn bound_location(&self,state:&EnvironmentState)->Result<PathBuf,String>{
+        let registration=state.registration.as_ref().ok_or("Ambiente sem registro gerido.")?;
+        if registration.name==DISTRO {return Ok(self.install_location());}
+        let id=uuid::Uuid::parse_str(&state.id).map_err(|_|"Identidade de recuperação inválida.")?;
+        if registration.name==format!("OpenKoda-Recovery-{id}") && id.to_string()==state.id {
+            return Ok(self.root.join("kali-recovery").join(&state.id));
         }
-        Ok(current)
+        Err("O registro não corresponde a uma distribuição gerida desta instalação.".into())
     }
 
+    fn owned_registration(&self, state: &EnvironmentState) -> Result<Registration, String> {
+        let expected = state.registration.as_ref().ok_or("O ambiente ainda não tem propriedade gerida comprovada.")?;
+        let path = self.bound_location(state)?;
+        let inventory = self.inventory()?;
+        let mut matches = inventory.iter().filter(|r|r.name.eq_ignore_ascii_case(&expected.name)||same_path(&r.base_path,&path));
+        let current = matches.next().ok_or("A distribuição gerida não foi encontrada.")?;
+        if current!=expected || matches.next().is_some() || current.version!=2 || !same_path(&current.base_path,&path) {
+            return Err("A identidade, versão ou destino da distribuição mudou. Nenhuma manutenção foi iniciada.".into());
+        }
+        Ok(current.clone())
+    }
+
+    /// Resolve the WSL argv directly before spawning a session bound to this UUID.
+    pub(crate) fn launch_distribution(&self, identity:&str)->Result<String,String>{
+        self.archives.check_source_stop()?;
+        let state=self.state()?;
+        if state.phase!="ready" || state.id!=identity {return Err("A sessão pertence a outro ambiente executor. Revise a operação no ambiente ativo.".into())}
+        Ok(self.owned_registration(&state)?.name)
+    }
+
+    /// Read fixed file metadata as the bound user. Never start the parser or send evidence.
+    pub(crate) fn queued_scan_available(&self, identity: &str) -> Result<bool, String> {
+        let distro = self.launch_distribution(identity)?;
+        const PROBE: &str = r#"import os, pwd, stat, sys
+uid = os.geteuid()
+marker = os.open('/etc/openkoda/environment-id', os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+with os.fdopen(marker, 'rb') as stream:
+    if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode) or stream.read(65).strip() != sys.argv[1].encode('ascii'):
+        raise ValueError('identity')
+if uid == 0 or uid != pwd.getpwnam('openkoda').pw_uid:
+    raise ValueError('user')
+try:
+    info = os.stat('/usr/bin/rg', follow_symlinks=False)
+except FileNotFoundError:
+    ready = False
+else:
+    ready = stat.S_ISREG(info.st_mode) and info.st_uid == 0 and not (info.st_mode & 0o6022) and os.access('/usr/bin/rg', os.X_OK) and 0 < info.st_size <= 32 * 1024 * 1024
+print('ready' if ready else 'unavailable')"#;
+        let args = ["--distribution", &distro, "--user", "openkoda", "--cd", "/", "--exec",
+                    "/usr/bin/python3", "-I", "-c", PROBE, identity];
+        let output = self.wsl("queued scan prerequisites", args.iter().map(|s| s.to_string()).collect(), 10)?;
+        complete_capture(&output)?;
+        if output.code == 0 {
+            match output.stdout.trim() {
+                "ready" => return Ok(true),
+                "unavailable" => return Ok(false),
+                _ => {}
+            }
+        }
+        Err("Não foi possível verificar o ripgrep no ambiente Kali ativo.".into())
+    }
     fn install_location(&self) -> PathBuf { self.root.join("kali-distro") }
 
     fn helper(&self, state: &EnvironmentState, action: &'static str, extra: Vec<String>, timeout: u64) -> Result<Value, String> {
-        self.owned_registration(state)?;
+        let registration=self.owned_registration(state)?;
         // Source and structured arguments travel over the owned process pipe,
         // avoiding Windows command-line length limits for metapackage plans.
-        let args = vec!["--distribution".into(), DISTRO.into(), "--user".into(), "root".into(), "--cd".into(), "/".into(), "--exec".into(),
+        let args = vec!["--distribution".into(), registration.name, "--user".into(), "root".into(), "--cd".into(), "/".into(), "--exec".into(),
             "/usr/bin/python3".into(), "-I".into(), "-c".into(), HELPER_BOOT.into()];
         let wire = json!({"action":action,"identity":state.id,"args":extra,"helper":HELPER});
         let result = self.runner.run(&CommandSpec { purpose: action, executable: system_binary("wsl.exe"), args,
@@ -389,7 +457,8 @@ impl EnvironmentManager {
         // the confirmed offline interval. Serialize them with maintenance.
         let _operation = self.operation.try_lock().map_err(|_| "Outra operação do ambiente está em andamento.")?;
         if self.archives.stop_pending()? && matches!(action, "environment.status" | "environment.diagnose") {
-            return Ok(json!({"status":"degraded","distro":DISTRO,"message":"Confira o estado da parada em Manutenção → Cópias do Kali.","tools":[],"phase":"archive_stop_unknown","executorReady":false}));
+            let state=self.state()?;
+            return Ok(json!({"status":"degraded","distro":state.registration.as_ref().map_or(DISTRO,|r|r.name.as_str()),"message":"Confira o estado da parada em Manutenção → Cópias do Kali.","tools":[],"phase":"archive_stop_unknown","executorReady":false}));
         }
         self.archives.check_source_stop()?;
         match action {
@@ -415,7 +484,8 @@ impl EnvironmentManager {
 
     fn diagnose(&self) -> Result<Value, String> {
         let state = self.state()?;
-        let base = |status: &str, message: String, details: Value| json!({"status":status,"distro":DISTRO,"message":message,
+        let name=state.registration.as_ref().map_or(DISTRO,|r|r.name.as_str());
+        let base = |status: &str, message: String, details: Value| json!({"status":status,"distro":name,"message":message,
             "tools":[],"environmentId":state.id,"phase":state.phase,"updatedAt":state.updated_at,"details":details,
             "executorReady":false,"containment":"WSL gerido; não é sandbox para código hostil","lastError":state.last_error,
             "managedRegistration":state.registration.is_some(),"imageProvisionAvailable":false,"repairAvailable":false});
@@ -423,9 +493,9 @@ impl EnvironmentManager {
             Ok(value) => value,
             Err(error) => return Ok(base("unavailable", error, json!({"diagnosticFailed":true}))),
         };
-        let found = inventory.iter().find(|r| r.name == DISTRO);
+        let found = inventory.iter().find(|r| r.name == name);
         let repair_available=matches!(state.phase.as_str(),"degraded"|"maintenance")
-            && found.is_some_and(|current|state.registration.as_ref()==Some(current)&&current.version==2&&same_path(&current.base_path,&self.install_location()));
+            && found.is_some_and(|current|state.registration.as_ref()==Some(current)&&current.version==2&&self.bound_location(&state).is_ok_and(|p|same_path(&current.base_path,&p)));
         if state.registration.is_none() {
             let mut result=base(if found.is_some() { "degraded" } else { "unavailable" },
                 if found.is_some() { "Existe uma distribuição com esse nome sem vínculo gerido. Ela não será adotada ou alterada automaticamente.".into() }
@@ -596,33 +666,33 @@ impl EnvironmentManager {
         let registration=state.registration.clone().ok_or("Recuperação exige distribuição gerida já vinculada.")?;
         let probe=self.helper(&state,"probe",vec![],30)?;
         let (sha,journal)=repair_snapshot(&probe)?;
-        self.save_plan("environment-repair",json!({"distro":DISTRO,"environmentId":state.id,"registration":registration,
+        self.save_plan("environment-repair",json!({"distro":registration.name,"environmentId":state.id,"registration":registration,
             "stateSha256":digest(&serde_json::to_value(&state).map_err(|e|e.to_string())?),"maintenanceSha256":sha,"maintenance":journal,
-            "effects":["Encerrar somente a distribuição gerida OpenKoda-Kali, incluindo processos pendentes nela","Confirmar parada pela lista de distribuições em execução e reconferir GUID/destino","Preservar o journal original, reiniciar o helper gerido e auditar locks APT/dpkg e integridade de pacotes"],
-            "limits":["Não encerra outras distribuições e não executa shutdown global","Não repete apt update/install nem executa reparo de pacotes automaticamente","Pode interromper manutenção ainda ativa dentro de OpenKoda-Kali; estado parcial exige revisão","ACK incerto mantém o ambiente bloqueado; uma nova tentativa exige um novo plano","Parada comprovada não declara que a atualização de índices foi bem-sucedida"]}))
+            "effects":["Encerrar somente a distribuição gerida identificada nesta revisão, incluindo processos pendentes nela","Confirmar parada pela lista de distribuições em execução e reconferir GUID/destino","Preservar o journal original, reiniciar o helper gerido e auditar locks APT/dpkg e integridade de pacotes"],
+            "limits":["Não encerra outras distribuições e não executa shutdown global","Não repete apt update/install nem executa reparo de pacotes automaticamente","Pode interromper manutenção ainda ativa na distribuição revisada; estado parcial exige revisão","ACK incerto mantém o ambiente bloqueado; uma nova tentativa exige um novo plano","Parada comprovada não declara que a atualização de índices foi bem-sucedida"]}))
     }
 
     fn repair_apply(&self,approval:Approval)->Result<Value,String>{
         let plan=self.consume_plan(approval,"environment-repair")?;let mut state=self.state()?;
         let registration=state.registration.clone().ok_or("Ambiente sem vínculo gerido.")?;
-        if !matches!(state.phase.as_str(),"degraded"|"maintenance")||plan.payload["distro"]!=DISTRO||plan.payload["environmentId"]!=state.id
+        if !matches!(state.phase.as_str(),"degraded"|"maintenance")||plan.payload["distro"]!=registration.name||plan.payload["environmentId"]!=state.id
             ||plan.payload["registration"]!=serde_json::to_value(&registration).map_err(|e|e.to_string())?
             ||plan.payload["stateSha256"]!=digest(&serde_json::to_value(&state).map_err(|e|e.to_string())?){return Err("Estado ou identidade mudou desde a revisão. Calcule outro plano; nada foi encerrado.".into());}
         let probe=self.helper(&state,"probe",vec![],30)?;let (sha,_)=repair_snapshot(&probe)?;
         if plan.payload["maintenanceSha256"]!=sha{return Err("O journal mudou desde a revisão. Nenhum processo foi encerrado; revise um novo plano.".into());}
         self.owned_registration(&state)?;
-        let mut repair=RepairAttempt{id:uuid::Uuid::new_v4().to_string(),plan_id:plan.id,environment_id:state.id.clone(),registration,
+        let mut repair=RepairAttempt{id:uuid::Uuid::new_v4().to_string(),plan_id:plan.id,environment_id:state.id.clone(),registration:registration.clone(),
             maintenance_sha256:sha.clone(),status:"terminating".into(),created_at:now(),finished_at:None,termination_receipt:None,error:None};
         self.save_repair(&repair)?;
         state.phase="maintenance".into();state.updated_at=now();self.save_state(&state)?;
         let outcome=(||{
-            let termination=self.wsl("WSL repair termination",vec!["--terminate".into(),DISTRO.into()],30)?;
+            let termination=self.wsl("WSL repair termination",vec!["--terminate".into(),registration.name.clone()],30)?;
             state.last_output=safe_tail(&(termination.stdout.clone()+&termination.stderr));checked(&termination)?;
             let inventory=self.inventory()?;
-            if !inventory.iter().any(|current|current==&repair.registration&&same_path(&current.base_path,&self.install_location())){return Err("Registro mudou após o encerramento. Nenhum helper de recuperação foi iniciado.".into());}
+            if !inventory.iter().any(|current|current==&repair.registration&&self.bound_location(&state).is_ok_and(|p|same_path(&current.base_path,&p))){return Err("Registro mudou após o encerramento. Nenhum helper de recuperação foi iniciado.".into());}
             let running=self.wsl("WSL repair running inventory",vec!["--list".into(),"--running".into(),"--quiet".into()],30)?;
-            require_stopped(&running,&inventory)?;self.owned_registration(&state)?;
-            let receipt=json!({"repairId":repair.id,"planId":repair.plan_id,"environmentId":state.id,"distro":DISTRO,
+            require_stopped_name(&running,&inventory,&registration.name)?;self.owned_registration(&state)?;
+            let receipt=json!({"repairId":repair.id,"planId":repair.plan_id,"environmentId":state.id,"distro":registration.name,
                 "maintenanceSha256":sha,"terminationVerified":true,"verifiedAtUnixSeconds":chrono::Utc::now().timestamp()});
             repair.status="terminated".into();repair.termination_receipt=Some(receipt.clone());self.save_repair(&repair)?;
             repair.status="auditing".into();self.save_repair(&repair)?;
@@ -636,7 +706,7 @@ impl EnvironmentManager {
             Ok((audit,probe))=>{
                 repair.status="completed".into();repair.finished_at=Some(now());self.save_repair(&repair)?;
                 state.phase="ready".into();state.last_error=None;state.updated_at=now();self.save_state(&state)?;
-                Ok(json!({"status":"ready","phase":"ready","distro":DISTRO,"environmentId":state.id,"managedRegistration":true,
+                Ok(json!({"status":"ready","phase":"ready","distro":registration.name,"environmentId":state.id,"managedRegistration":true,
                     "repairAvailable":false,"imageProvisionAvailable":false,"executorReady":false,"tools":[],"details":probe,"repair":repair,"repairAudit":audit,
                     "message":"Parada e auditoria confirmadas. Nenhuma atualização ou instalação foi repetida; confira o resultado da manutenção original.","containment":"WSL gerido; não é sandbox para código hostil"}))
             },
@@ -677,7 +747,7 @@ impl EnvironmentManager {
             item["version"] = observation.map(|p| p["version"].clone()).unwrap_or(Value::Null);
             item
         }).collect::<Vec<_>>();
-        Ok(json!({"version":"1","tools":tools,"inventoryVerified":observed.is_some(),"distro":DISTRO}))
+        Ok(json!({"version":"1","tools":tools,"inventoryVerified":observed.is_some(),"distro":state.registration.as_ref().map_or(DISTRO,|r|r.name.as_str())}))
     }
 
     fn refresh(&self) -> Result<Value, String> {
@@ -723,14 +793,16 @@ fn repair_snapshot(probe:&Value)->Result<(String,Value),String>{
         return Err("O journal não descreve manutenção interrompida recuperável. Use diagnóstico/retomada para estado já reconciliado.".into());
     }Ok((sha.into(),journal.clone()))
 }
-fn require_stopped(result:&ProcessResult,inventory:&[Registration])->Result<(),String>{
+#[cfg(test)]
+fn require_stopped(result:&ProcessResult,inventory:&[Registration])->Result<(),String>{require_stopped_name(result,inventory,DISTRO)}
+fn require_stopped_name(result:&ProcessResult,inventory:&[Registration],name:&str)->Result<(),String>{
     checked(result)?;
     if !result.stderr.trim().is_empty(){return Err("A lista WSL contém diagnóstico inesperado; parada não confirmada.".into());}
     let names=result.stdout.lines().map(str::trim).filter(|name|!name.is_empty()).collect::<Vec<_>>();
     if names.len()>1000||names.iter().any(|name|name.chars().any(char::is_control)||!inventory.iter().any(|r|r.name==*name)){
         return Err("Não foi possível interpretar a lista completa de distribuições em execução.".into());
     }
-    if names.contains(&DISTRO){return Err("OpenKoda-Kali ainda consta em execução; recuperação não será despachada.".into());}Ok(())
+    if names.iter().any(|v|v.eq_ignore_ascii_case(name)){return Err("A distribuição revisada ainda consta em execução; recuperação não será despachada.".into());}Ok(())
 }
 fn image_retryable(state:&EnvironmentState)->bool{
     if state.registration.is_some(){return false;}
@@ -919,6 +991,23 @@ mod tests {
             let result=manager.executor_owned_identity();if replaced{assert!(result.is_err());}else{assert_eq!(result.unwrap(),state.id);}
             let calls=runner.calls.lock().unwrap();assert_eq!(calls.len(),1);assert_eq!(calls[0].purpose,"WSL registry");
             assert!(!calls[0].executable.to_string_lossy().to_ascii_lowercase().ends_with("wsl.exe"));
+        }
+    }
+    #[test]
+    fn queued_scan_checks_the_bound_clone_and_accepts_only_confirmed_availability() {
+        for (reply,expected) in [("unavailable",Some(false)),("ready",Some(true)),("unexpected",None)] {
+            let dir=tempfile::tempdir().unwrap();
+            let id=uuid::Uuid::new_v4().to_string();
+            let path=dir.path().canonicalize().unwrap().join("kali-recovery").join(&id);
+            fs::create_dir_all(&path).unwrap();
+            let registration=Registration{guid:"fixture-clone".into(),name:format!("OpenKoda-Recovery-{id}"),base_path:display_path(&path),version:2};
+            let runner=fake(vec![("WSL registry",success(json!([registration]).to_string())),("queued scan prerequisites",success(reply))]);
+            let manager=EnvironmentManager::with_runner(dir.path().into(),runner.clone()).unwrap();
+            let mut state=manager.state().unwrap();state.id=id.clone();state.phase="ready".into();state.registration=Some(registration.clone());manager.save_state(&state).unwrap();
+            assert_eq!(manager.queued_scan_available(&id).ok(),expected);
+            let calls=runner.calls.lock().unwrap();assert_eq!(calls.len(),2);
+            assert_eq!(calls[1].args[..10],["--distribution",&registration.name,"--user","openkoda","--cd","/","--exec","/usr/bin/python3","-I","-c"]);
+            assert_eq!(calls[1].args.last(),Some(&id));assert!(calls[1].input.is_none());
         }
     }
     #[test]

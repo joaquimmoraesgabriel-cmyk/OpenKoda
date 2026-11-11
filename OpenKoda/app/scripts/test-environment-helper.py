@@ -335,6 +335,16 @@ class MaintenanceOutcomeTests(unittest.TestCase):
         self.assertEqual(history['originalSha256'], receipt['maintenanceSha256'])
         execute.assert_called_once_with(['/usr/bin/dpkg', '--audit'])
 
+    def test_recovered_executor_accepts_only_its_own_clone_repair_receipt(self):
+        original, raw, receipt, argv = self.repair_fixture()
+        receipt['distro'] = 'OpenKoda-Recovery-' + receipt['environmentId']
+        with patch.object(helper.sys, 'argv', [*argv[:3], json.dumps(receipt)]):
+            checked = helper.verified_repair_receipt(original, receipt['maintenanceSha256'], raw)
+            self.assertEqual(checked['repairId'], receipt['repairId'])
+        receipt['distro'] = 'OpenKoda-Recovery-99999999-9999-4999-8999-999999999999'
+        with patch.object(helper.sys, 'argv', [*argv[:3], json.dumps(receipt)]), self.assertRaises(RuntimeError):
+            helper.verified_repair_receipt(original, receipt['maintenanceSha256'], raw)
+
     def test_untrusted_expired_or_changed_receipt_never_reaches_locks_or_audit(self):
         original, _, receipt, argv = self.repair_fixture()
         for fields in ({'terminationVerified': False}, {'distro': 'Ubuntu'},

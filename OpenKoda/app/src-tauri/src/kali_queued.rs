@@ -165,6 +165,21 @@ impl KaliBridge {
             let deadline=crate::scope::deadline(store,&grant.expected.scope_ref,Duration::from_secs(45))?;
             self.recheck_kali_data(store,&grant.prepared,&ai.data_redactor())?;
             check_work(store,&permit)?;
+            if binding.operation==KaliOperation::Scan {
+                let unavailable=match self.launcher.queued_scan_available(&binding.environment_id) {
+                    Ok(true)=>None,
+                    Ok(false)=>Some("O ripgrep não está disponível no Kali ativo. Confira o pacote em Kali e ferramentas e prepare uma nova análise.".to_owned()),
+                    Err(_)=>Some("Não foi possível verificar o ripgrep no Kali ativo. Execute o diagnóstico e prepare uma nova análise.".to_owned()),
+                };
+                if let Some(reason)=unavailable {
+                    run.status="failed".into();run.error=Some(reason);run.cleanup_confirmed=true;run.finished_at=Some(model::now());
+                    self.save(&run)?;run_saved=Some(run.clone());
+                    self.data_policy.finish(store,&receipt,crate::data_policy::DataUseOutcome::NotSent,vec![])?;
+                    return settle_queued(store,&mut permit,&run,&binding,true,false);
+                }
+                check_wait(deadline,&cancel)?;
+                check_work(store,&permit)?;
+            }
             run.launch_attempted=true;self.save(&run)?;run_saved=Some(run.clone());
             let mut transport=self.launcher.launch(&run,&cancel)?;
             run.status="running".into();self.save(&run)?;
@@ -192,12 +207,7 @@ impl KaliBridge {
             run_saved=Some(run.clone());
             let family_clean=run.cleanup_confirmed&&!self.runs()?.iter().any(|r|r.reconciliation_of.as_deref()==Some(&run.id)&&work::unresolved(r));
             if family_clean&&run_has_observation(&run){run.evidence_id=Some(model::id());self.save(&run)?;}
-            let mut completion=store.work_transaction(|conn,s|{
-                let c=finalize_locked(conn,s,&run,&binding,family_clean,collected)?;
-                supervisor::finish_kali_locked(conn,s,&permit,&c)?;
-                supervisor::finish_permit_locked(conn,&permit,c.termination)?;Ok(c)
-            })?;
-            permit.acknowledge_finished();completion.capture_ids=binding.capture_ids();Ok(completion)
+            settle_queued(store,&mut permit,&run,&binding,family_clean,collected)
         })();
         *self.active.lock().map_err(|_|"Supervisor MCP indisponível.")?=None;
         if result.is_err(){
@@ -214,6 +224,17 @@ impl KaliBridge {
 }
 
 fn check_work(store:&Store,permit:&crate::work_supervisor::EffectPermit<'_>)->Result<(),String>{store.work_read(|conn,_|match crate::work_supervisor::work_control_locked(conn,permit)?{crate::work_supervisor::WorkControl::Active=>Ok(()),crate::work_supervisor::WorkControl::Paused=>Err("work_paused".into()),crate::work_supervisor::WorkControl::Canceled=>Err("work_canceled".into())})}
+fn settle_queued(store:&Store, permit:&mut crate::work_supervisor::EffectPermit<'_>, run:&BridgeRun, binding:&KaliWorkBinding, clean:bool, collected:bool)->Result<WorkKaliCompletion,String>{
+    let mut completion=store.work_transaction(|conn,s|{
+        let completion=finalize_locked(conn,s,run,binding,clean,collected)?;
+        crate::work_supervisor::finish_kali_locked(conn,s,permit,&completion)?;
+        crate::work_supervisor::finish_permit_locked(conn,permit,completion.termination)?;
+        Ok(completion)
+    })?;
+    permit.acknowledge_finished();
+    completion.capture_ids=binding.capture_ids();
+    Ok(completion)
+}
 fn run_has_observation(run:&BridgeRun)->bool{matches!(&run.work_context,Some(capture_io::KaliRunContext::Producer{observed:Some(_),..}))}
 fn queued_arguments(s:&model::Snapshot,binding:&KaliWorkBinding)->Result<Value,String>{
     let ResultRef::Evidence{id,raw_sha256}=&binding.input_refs[0] else{return Err("work_input_changed".into());};
@@ -241,6 +262,8 @@ fn finalize_locked(conn:&Connection,s:&mut model::Snapshot,run:&BridgeRun,bindin
                     let loss=manifest.body.loss_reason.or(if interrupted{Some(crate::capture::CaptureLossReason::Interrupted)}else{None});
                     capture_complete&=!interrupted&&loss.is_none()&&manifest.body.observed_bytes==Some(m.preserved_bytes);
                     (manifest.body.observed_bytes,loss,interrupted)
+                }else if !run.launch_attempted && m.preserved_bytes==0 {
+                    (Some(0),None,false)
                 }else{capture_complete=false;(None,Some(crate::capture::CaptureLossReason::Interrupted),true)};
                 if std::str::from_utf8(&bytes).is_err(){crate::capture::mark_encoding_unknown_locked(conn,&m.id)?;capture_complete=false;}
                 crate::capture::seal_locked(conn,&m.id,count,loss,interrupted)?;

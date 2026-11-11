@@ -155,12 +155,17 @@ fn archive_receipt_controls(raw: &Value, view: &mut Value) {
     }
     view["operation"]["kind"] = json!(kind);
     if known_status { view["status"] = json!(status); }
+    if kind=="import" && status=="inactive" {
+        if let Some(value@("active"|"previous"|"available"))=raw["activationState"].as_str(){
+            view["activationState"]=json!(value);
+        }
+    }
 }
 
 fn archive_view(action: &str, raw: Value, redactor: &dyn DataRedactor) -> Value {
     let mut view = project_value(raw.clone(), redactor);
     match action {
-        "environment.archive.exportPlan" | "environment.archive.importPlan" => {
+        "environment.archive.exportPlan" | "environment.archive.importPlan" | "environment.archive.activatePlan" => {
             // Do not issue a usable review digest if the user cannot see the whole reviewed payload.
             if redactor.mode() == RedactionMode::MetadataOnly || view["payload"] != raw["payload"] {
                 view["digest"] = Value::Null;
@@ -171,6 +176,7 @@ fn archive_view(action: &str, raw: Value, redactor: &dyn DataRedactor) -> Value 
                 for (record, row) in records.iter().zip(views) { archive_receipt_controls(record, row); }
             }
         }
+        "environment.archive.activate" if redactor.mode()==RedactionMode::MetadataOnly && raw["status"]=="activated" => {view["status"]=json!("activated");}
         "environment.archive.export" | "environment.archive.import" | "environment.archive.inspectStop"
             if redactor.mode() == RedactionMode::MetadataOnly => archive_receipt_controls(&raw, &mut view),
         _ => (),
@@ -249,7 +255,7 @@ mod tests{
         let id = crate::model::id();
         let receipt = json!({"operation":{"kind":"export","backup":{"id":id,"source":{"name":"PRIVATE-SENTINEL"}}},
             "status":"exported","error":"PRIVATE-SENTINEL"});
-        let clone = json!({"operation":{"kind":"import","restore":{"id":id}},"status":"inactive"});
+        let clone = json!({"operation":{"kind":"import","restore":{"id":id}},"status":"inactive","activationState":"previous"});
         let invalid = json!({"operation":{"kind":"export","backup":{"id":"PRIVATE-SENTINEL"}},"status":"exported"});
         let mut bad_status = receipt.clone();
         bad_status["status"] = json!("PRIVATE-SENTINEL");
@@ -261,6 +267,7 @@ mod tests{
         assert_eq!(response["records"][0]["status"], "exported");
         assert_eq!(response["records"][1]["operation"]["kind"], "import");
         assert_eq!(response["records"][1]["status"], "inactive");
+        assert_eq!(response["records"][1]["activationState"],"previous");
         assert_ne!(response["records"][2]["operation"]["kind"], "export");
         assert_eq!(response["records"][4]["operation"]["kind"], "export");
         assert_eq!(response["records"][4]["status"], "exporting_source");
@@ -274,6 +281,10 @@ mod tests{
         let ready = ArchiveRedactor(RedactionMode::Ready);
         assert_eq!(archive_view("environment.archive.exportPlan", review.clone(), &ready)["digest"], digest);
         assert!(archive_view("environment.archive.importPlan", review.clone(), &metadata)["digest"].is_null());
+        assert!(archive_view("environment.archive.activatePlan", review.clone(), &metadata)["digest"].is_null());
+        assert_eq!(archive_view("environment.archive.activatePlan",review.clone(),&ready)["digest"],digest);
+        let applied=archive_view("environment.archive.activate",json!({"status":"activated","distro":"PRIVATE-SENTINEL"}),&metadata);
+        assert_eq!(applied["status"],"activated");assert!(!applied.to_string().contains("PRIVATE-SENTINEL"));
         review["payload"]["target"] = json!("PRIVATE-SENTINEL");
         let hidden = archive_view("environment.archive.exportPlan", review, &ready);
         assert!(hidden["digest"].is_null());

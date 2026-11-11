@@ -14,6 +14,17 @@ async function nativeFixture(page:Page, environmentReady=false, bridgeMode='succ
     const disk={id:crypto.randomUUID(),sourceId:crypto.randomUUID(),source:{name:'OpenKoda-Kali'},maxBytes:64*1024**3,spool:{terminalCaptures:0,sessionRecords:0},
       ...(imageMode==='archive-legacy-vhdx'?{}:{format:'tar'})};
     const restore={id:crypto.randomUUID(),backup:disk,bytes:4096,sha256:'a'.repeat(64),firstWslDistribution:false};
+    const activationFixture = imageMode.startsWith('archive-bind');
+    const formerId = crypto.randomUUID();
+    const targetName = 'OpenKoda-Recovery-' + restore.id;
+    const previousName = 'OpenKoda-Recovery-' + formerId;
+    let activationReviewed: { id: string; digest: string } | undefined;
+    let activated = false;
+    let supportReview: { reviewId: string; fileName: string; relativePath: string; sha256: string; bytes: number } | undefined;
+    let releaseOldInventory: (() => void) | undefined;
+    const oldInventory = imageMode === 'archive-bind-probe'
+      ? new Promise<void>(resolve => { releaseOldInventory = resolve; }) : undefined;
+    if (oldInventory) Object.assign(window, { __releaseOldInventory: () => releaseOldInventory?.() });
     const interrupted={operation:{kind:'export',backup:{...disk,id:crypto.randomUUID()}},status:imageMode==='archive-metadata'?'exporting_source':'stop_unknown',startedAt:now};
     const archives:{operation:object;status:string;startedAt:string}[]=[interrupted];
     if(imageMode==='archive-legacy-vhdx')archives.push({operation:{kind:'export',backup:disk},status:'exported',startedAt:now});
@@ -48,9 +59,55 @@ async function nativeFixture(page:Page, environmentReady=false, bridgeMode='succ
       if(action==='projectPurge.status')return {hasUnresolved:false,hasPartialHistory:false,journals:[],limits:[],confirmationPhrase:'EXCLUIR PROJETO E HISTÓRICO'};
       if(action==='assessment.scopeStatus')return scope.status(payload.assessmentId);
       if(action==='snapshot')return structuredClone(state);
+      if(action==='support.review') {
+        const reviewId=crypto.randomUUID(), fileName='suporte-'+reviewId+'.json';
+        const contents={formatVersion:1,appVersion:'0.1.9',platform:'windows',architecture:'x86_64',coreSchema:8,
+          localDatabaseFiles:{present:7,absent:1,unavailable:0},telemetry:'disabled',remoteTransmission:false};
+        const preview=JSON.stringify(contents,null,2)+'\n', encoded=new TextEncoder().encode(preview);
+        const sha256=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',encoded)),b=>b.toString(16).padStart(2,'0')).join('');
+        supportReview={reviewId,fileName,relativePath:'exports/'+fileName,sha256,bytes:encoded.length};
+        return {...supportReview,contents,preview:imageMode==='support-changed'?preview+' ':preview,
+          expiresAt:new Date(Date.now()+(imageMode==='support-expired'?-1000:600000)).toISOString()};
+      }
+      if(action==='support.export') {
+        if(!supportReview || payload.reviewId!==supportReview.reviewId || payload.confirmation!==true)throw Error('Confirmação do arquivo divergente.');
+        const {reviewId,...receipt}=supportReview;
+        if(imageMode==='support-error')throw Error('A pasta de exportações está indisponível.');
+        return {...receipt,bytes:imageMode==='support-receipt'?receipt.bytes+1:receipt.bytes};
+      }
+      if(oldInventory && (action==='environment.status' || action==='packages.catalog')){
+        await oldInventory;
+        if (action==='packages.catalog') return {version:'1',inventoryVerified:true,distro:previousName,tools:[{
+          package:'previous-fixture',name:'Ferramenta do executor anterior',group:'Teste',description:'Inventário antigo',adapter:'',
+          executionReady:true,availability:'Disponível',installed:true,version:'1',
+        }]};
+        return {status:'ready',distro:previousName,environmentId:formerId,message:'Diagnóstico anterior',tools:[],executorReady:true};
+      }
       if(action==='environment.status'||action==='environment.diagnose')return {status:environmentReady?'ready':imageMode==='registered'||imageMode.startsWith('repair')?'degraded':'unavailable',distro:'OpenKoda-Kali',message:'Ambiente de contrato sem executor.',tools:[],executorReady:false,managedRegistration:environmentReady||imageMode==='registered'||imageMode.startsWith('repair'),imageProvisionAvailable:!environmentReady&&imageMode!=='registered'&&!imageMode.startsWith('repair'),repairAvailable:imageMode.startsWith('repair')};
       if(action==='packages.catalog')return {version:'1',tools:[],inventoryVerified:false,distro:'OpenKoda-Kali'};
+      if(action==='environment.archive.list' && activationFixture){
+        if(payload.beforeId !== undefined && payload.beforeId !== formerId) throw new Error('Cursor inesperado.');
+        const older=payload.beforeId===formerId;
+        const record={status:'inactive',startedAt:now,operation:{kind:'import',restore:older?restore:{...restore,id:formerId}},
+          activationState:older?(activated?'active':'available'):(activated?'previous':'active')};
+        return {records:[record],nextBeforeId:older?null:formerId};
+      }
       if(action==='environment.archive.list')return {records:structuredClone(archives)};
+      if(action==='environment.archive.activatePlan' && activationFixture){
+        if(payload.id!==restore.id || activated)throw new Error('Cópia indisponível para ativação.');
+        activationReviewed={id:crypto.randomUUID(),digest:'d'.repeat(64)};
+        return {...activationReviewed,digest:imageMode==='archive-bind-hidden'?null:activationReviewed.digest,
+          expiresAt:new Date(Date.now()+(imageMode==='archive-bind-expired'?-60000:60000)).toISOString(),
+          payload:{previousEnvironmentId:formerId,previousDistribution:previousName,targetEnvironmentId:restore.id,targetDistribution:targetName,
+            registration:{name:targetName,guid:'{'+crypto.randomUUID()+'}',basePath:'D:/Fixture/recovery/'+restore.id,version:2},
+            effects:['Verificar a identidade da cópia antes de vincular o executor.','Preservar a distribuição anterior e suas autorizações.']}};
+      }
+      if(action==='environment.archive.activate' && activationFixture){
+        if (!activationReviewed || payload.planId!==activationReviewed.id || payload.digest!==activationReviewed.digest || activated) throw new Error('Revisão divergente.');
+        activated=true;
+        if(imageMode==='archive-bind-lost') throw new Error('Resposta da troca indisponível.');
+        return {status:'activated',environmentId:restore.id,distro:targetName,previousEnvironmentId:formerId,previousDistribution:previousName};
+      }
       if(action==='environment.archive.inspectStop'){interrupted.status='incomplete_copy';return structuredClone(interrupted);}
       if(action==='environment.archive.exportPlan')return {...diskReview,id:'export-review',payload:{backup:disk,target:'fixture.tar',effects:'Exportar arquivos da distribuição de teste'}};
       if(action==='environment.archive.importPlan')return {...diskReview,id:'import-review',payload:{restore,target:'fixture-clone',distribution:'OpenKoda-Recovery-archive-clone',effects:'Recuperar cópia de teste'}};
@@ -314,7 +371,163 @@ test('cópias do Kali anteriores sem formato exibem VHDX e exigem revisão antes
   await expect(panel.getByRole('button',{name:'Importar cópia revisada'})).toBeDisabled();
   await panel.getByRole('button',{name:'Fechar revisão da cópia'}).click();
   expect(await calls(page,'environment.archive.import')).toHaveLength(0);
+  await expect(panel.getByRole('navigation',{name:'Páginas de cópias do Kali'})).toHaveCount(0);
 });
+
+async function openRecoveryCandidate(page: Page, mode: string) {
+  await nativeFixture(page, true, 'success', 'none', mode);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Kali e ferramentas', exact: true }).click();
+  await page.getByRole('button', { name: 'Manutenção', exact: true }).click();
+  const panel = page.getByRole('region', { name: 'Cópias do Kali' });
+  await panel.getByRole('button', { name: 'Consultar cópias do Kali' }).click();
+  await expect(panel.getByText('Cópia vinculada ao executor')).toBeVisible();
+  const navigation = panel.getByRole('navigation', { name: 'Páginas de cópias do Kali' });
+  await expect(navigation.getByRole('button', { name: 'Tentativas mais recentes' })).toBeDisabled();
+  await navigation.getByRole('button', { name: 'Tentativas mais antigas' }).click();
+  await expect(navigation).toContainText('Página 2');
+  await expect(navigation.getByRole('button', { name: 'Tentativas mais antigas' })).toBeDisabled();
+  return { panel, navigation, prepare: panel.getByRole('button', { name: 'Revisar uso desta cópia como executor' }) };
+}
+
+async function openSupport(page: Page, mode?: string) {
+  if(mode) await nativeFixture(page,true,'success','none',mode);
+  await page.goto('/');
+  await page.getByRole('button',{name:'Configurações',exact:true}).click();
+  await page.getByRole('button',{name:'Dados e privacidade',exact:true}).click();
+  return page.getByRole('region',{name:'Pacote de suporte local'});
+}
+test('pacote de suporte mostra os bytes exatos, exige confirmação e confere o recibo',async({page})=>{
+  const panel=await openSupport(page,'support-ok');
+  await expect(panel).toContainText('Desativada');
+  expect(await calls(page,'support.review')).toEqual([]);
+  const prepare=panel.getByRole('button',{name:'Preparar prévia do pacote de suporte'});
+  const review=panel.getByRole('region',{name:'Revisão do pacote de suporte'});
+  await prepare.click(); await expect(review).toBeFocused();
+  await review.getByRole('checkbox').check(); await review.getByRole('button',{name:'Descartar prévia'}).click();
+  await expect(panel.getByRole('status')).toHaveText('Revisão descartada.');
+  expect(await calls(page,'support.export')).toEqual([]);
+  await prepare.click(); await expect(review).toBeFocused();
+  const text=await review.locator('pre').textContent(); expect(text).toMatch(/\n$/);
+  const content=JSON.parse(text!);expect(content.telemetry).toBe('disabled');expect(content.remoteTransmission).toBe(false);
+  const target=await review.getByText(/^exports\/suporte-/).innerText();
+  const save=review.getByRole('button',{name:'Salvar pacote de suporte'});
+  await expect(save).toBeDisabled();await page.keyboard.press('Tab');await expect(review.getByRole('checkbox')).toBeFocused();
+  await page.keyboard.press('Space');await page.keyboard.press('Tab');await expect(save).toBeFocused();await page.keyboard.press('Enter');
+  await expect(panel.getByRole('status')).toContainText('Pacote de suporte salvo');
+  await expect(panel.getByText(target,{exact:true})).toBeVisible();
+  const reviewId=target.slice('exports/suporte-'.length,-5);
+  expect((await calls(page,'support.export')).map(c=>c.payload)).toEqual([{reviewId,confirmation:true}]);
+  expect(await calls(page,'ai.test')).toEqual([]);
+});
+for(const mode of ['changed','expired','error','receipt']) test('pacote de suporte trata falha '+mode+' sem declarar arquivo salvo',async({page})=>{
+  const panel=await openSupport(page,'support-'+mode);
+  await panel.getByRole('button',{name:'Preparar prévia do pacote de suporte'}).click();
+  const invalidReview=['changed','expired'].includes(mode);
+  if (!invalidReview) {
+    const review=panel.getByRole('region',{name:'Revisão do pacote de suporte'});
+    await review.getByRole('checkbox').check();await review.getByRole('button',{name:'Salvar pacote de suporte'}).click();
+  }
+  await expect(panel.getByRole('alert')).toContainText(invalidReview?'Não foi possível conferir':mode==='error'?'indisponível':'O recibo não confirma');
+  await expect(panel.getByRole('region',{name:'Revisão do pacote de suporte'})).toHaveCount(0);
+  await expect(panel.getByRole('status')).not.toContainText('Pacote de suporte salvo');
+  expect(await calls(page,'support.export')).toHaveLength(invalidReview?0:1);
+});
+test('pacote de suporte na prévia do navegador explica a disponibilidade no desktop',async({page})=>{
+  const panel=await openSupport(page);await expect(panel).toContainText('Telemetria');await expect(panel).toContainText('Desativada');
+  await expect(panel).toContainText('aplicativo desktop');await expect(panel.getByRole('button')).toHaveCount(0);
+});
+
+test('histórico paginado do Kali usa o cursor da consulta e descarta o consentimento ao mudar de página', async ({ page }) => {
+  const { panel, navigation, prepare } = await openRecoveryCandidate(page, 'archive-bind');
+  const pages = await calls(page, 'environment.archive.list');
+  expect(pages.map(call=>call.payload)).toEqual([{}, { beforeId: expect.stringMatching(/^[0-9a-f-]{36}$/) }]);
+  expect(await calls(page, 'environment.archive.activatePlan')).toHaveLength(0);
+  await prepare.click();
+  const review = panel.getByRole('region', { name: 'Revisão do vínculo do executor' });
+  await review.getByRole('checkbox').check();
+  await navigation.getByRole('button', { name: 'Tentativas mais recentes' }).click();
+  await expect(review).toHaveCount(0);
+  await expect(navigation).toContainText('Página 1');
+  await expect(prepare).toHaveCount(0);
+  await navigation.getByRole('button', { name: 'Tentativas mais antigas' }).click();
+  await prepare.click();
+  await expect(review.getByRole('checkbox')).not.toBeChecked();
+  await expect(review.getByRole('button', { name: 'Confirmar troca de executor' })).toBeDisabled();
+  await review.getByRole('button', { name: 'Fechar revisão do vínculo' }).click();
+  expect(await calls(page, 'environment.archive.activate')).toHaveLength(0);
+  expect((await calls(page, 'environment.archive.list')).map(call=>call.payload)).toEqual([{}, pages[1].payload, {}, pages[1].payload]);
+});
+
+test('ativar cópia do Kali exige revisão exata e atualiza o executor sem iniciar outro diagnóstico', async ({ page }) => {
+  const { panel, navigation, prepare } = await openRecoveryCandidate(page, 'archive-bind');
+  const initialProbes = (await calls(page, 'environment.status')).length;
+  await prepare.click();
+  const review = panel.getByRole('region', { name: 'Revisão do vínculo do executor' });
+  const targetId = (await calls(page, 'environment.archive.activatePlan'))[0].payload.id as string;
+  await expect(review).toContainText('OpenKoda-Recovery-'+targetId);
+  await expect(review).toContainText('D:/Fixture/recovery/'+targetId);
+  await expect(review.getByRole('listitem')).toHaveText(['Verificar a identidade da cópia antes de vincular o executor.','Preservar a distribuição anterior e suas autorizações.']);
+  const submit = review.getByRole('button', { name: 'Confirmar troca de executor' });
+  await expect(submit).toBeDisabled();
+  await review.getByRole('checkbox').check();
+  await submit.click();
+  await expect(panel.getByRole('status')).toContainText('Executor vinculado a OpenKoda-Recovery-'+targetId);
+  await expect(panel.getByText('Vínculo anterior do executor')).toBeVisible();
+  await navigation.getByRole('button', { name: 'Tentativas mais antigas' }).click();
+  await expect(panel.getByText('Cópia vinculada ao executor')).toBeVisible();
+  await expect(prepare).toHaveCount(0);
+  expect((await calls(page,'environment.archive.activate')).map(call=>call.payload)).toEqual([
+    { planId:expect.stringMatching(/^[0-9a-f-]{36}$/), digest:'d'.repeat(64) },
+  ]);
+  expect(await calls(page, 'environment.status')).toHaveLength(initialProbes);
+  await page.getByRole('button',{name:'Ambiente',exact:true}).click();
+  await expect(page.getByText(targetId,{exact:true})).toBeVisible();
+  await expect(page.getByText('Consultar diagnóstico',{exact:true})).toBeVisible();
+});
+
+test('troca de executor preserva a identidade nova quando o inventário anterior termina depois', async ({page}) => {
+  const {panel,prepare} = await openRecoveryCandidate(page, 'archive-bind-probe');
+  await prepare.click();
+  const targetId = (await calls(page,'environment.archive.activatePlan'))[0].payload.id as string;
+  const review = panel.getByRole('region',{name:'Revisão do vínculo do executor'});
+  await review.getByRole('checkbox').check();
+  await review.getByRole('button',{name:'Confirmar troca de executor'}).click();
+  await expect(panel.getByRole('status')).toContainText('Executor vinculado');
+  expect(await calls(page,'projectPurge.status')).toHaveLength(0);
+  await page.evaluate(() => (window as unknown as {__releaseOldInventory: () => void}).__releaseOldInventory());
+  await expect.poll(async () => (await calls(page,'projectPurge.status')).length).toBeGreaterThan(0);
+  await page.getByRole('button',{name:'Ambiente',exact:true}).click();
+  await expect(page.getByText(targetId,{exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Ferramentas',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'Nenhuma ferramenta verificada'})).toBeVisible();
+  await expect(page.getByText('Ferramenta do executor anterior')).toHaveCount(0);
+});
+
+for (const mode of ['hidden', 'expired', 'lost']) {
+  test('troca de executor com revisão ou resposta ' + mode + ' exige nova decisão', async ({ page }) => {
+    const {panel, prepare, navigation} = await openRecoveryCandidate(page, 'archive-bind-'+mode);
+    await prepare.click();
+    const review=panel.getByRole('region',{name:'Revisão do vínculo do executor'});
+    const submit=review.getByRole('button',{name:'Confirmar troca de executor'});
+    if(mode==='hidden') {
+      await expect(panel.getByRole('alert')).toContainText('identidade da cópia não estão disponíveis');
+      await expect(review).toHaveCount(0);
+    } else if(mode==='expired') {
+      await review.getByRole('checkbox').check();
+      await expect(submit).toBeDisabled();
+    } else {
+      await review.getByRole('checkbox').check();
+      await submit.click();
+      await expect(panel.getByRole('alert')).toContainText('Resposta da troca indisponível');
+      await expect(review).toHaveCount(0);
+      await navigation.getByRole('button',{name:'Tentativas mais antigas'}).click();
+      await expect(panel.getByText('Cópia vinculada ao executor')).toBeVisible();
+      await expect(prepare).toHaveCount(0);
+    }
+    expect(await calls(page,'environment.archive.activate')).toHaveLength(mode==='lost'?1:0);
+  });
+}
 
 test('preparação do Kali só aplica o plano depois da revisão',async({page})=>{
   await nativeFixture(page);await page.goto('/');await page.getByRole('button',{name:'Kali e ferramentas',exact:true}).click();

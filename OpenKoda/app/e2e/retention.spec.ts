@@ -28,8 +28,13 @@ async function retentionFixture(page:Page,mode='success'){
       if(action==='backup.list')return {backups:[]};
       if(action==='activation.status')return {currentProfile:{kind:'base'},activeProfile:{kind:'base'},previousProfile:null,pendingPlan:null,restartRequired:false,notice:'Fixture; perfil não alterado.'};
       if(action==='activation.list')return {plans:[]};
-      if(action==='retention.inventory')return structuredClone({items,journals:plan?[plan]:[],hasUnresolved:plan?.status==='unknown',blocked,limits,projectPurgeSupported:false,automaticPurge:false,retentionDays:90});
+      if(action==='retention.inventory'){
+        const reads=windowFixture.__retentionCalls.filter(call=>call.action===action).length;
+        if(mode==='busy-inventory' && (reads===1||reads===3))throw Error('Retenção indisponível durante outra operação.');
+        return structuredClone({items,journals:plan?[plan]:[],hasUnresolved:plan?.status==='unknown',blocked,limits,projectPurgeSupported:false,automaticPurge:false,retentionDays:90});
+      }
       if(action==='retention.plan'){
+        if(mode==='busy-inventory')throw Error('Não foi possível registrar o plano selecionado.');
         const requested=payload.items as {category:string;id:string}[];
         const selected:Artifact[]=items.filter(item=>requested.some(entry=>entry.id===item.id&&entry.category===item.category)).map(item=>({...item,files:item.files.map(file=>({...file,sha256:'a'.repeat(64)}))}));
         for(const item of selected)if(item.category==='kali_capture_metadata'){
@@ -234,6 +239,22 @@ test('retenção descarta confirmação ao mudar a seleção e bloqueia plano ex
   await expect(panel.getByRole('button',{name:'Excluir itens revisados permanentemente',exact:true})).toBeDisabled();
   await panel.getByRole('checkbox',{name:/Relatório do laboratório/}).check();
   await expect(panel.getByLabel('Plano de exclusão')).toHaveCount(0);expect(await calls(page,'retention.apply')).toEqual([]);
+});
+
+test('inventário de retenção recupera disputa inicial e limpa somente erros de consulta',async({page})=>{
+  await retentionFixture(page,'busy-inventory');const panel=page.locator('.retention');
+  const update=panel.getByRole('button',{name:'Atualizar arquivos e histórico'});
+  const choice=panel.getByRole('checkbox',{name:/Backup do laboratório/});
+  await expect(choice).toBeEnabled();expect(await calls(page,'retention.inventory')).toHaveLength(2);
+  await expect(panel.getByRole('alert')).toHaveCount(0);
+  await update.click();await expect(panel.getByRole('alert')).toContainText('Retenção indisponível');
+  expect(await calls(page,'retention.inventory')).toHaveLength(3);
+  await update.click();await expect(panel.getByRole('alert')).toHaveCount(0);
+  await choice.check();await panel.getByRole('button',{name:'Revisar exclusão selecionada'}).click();
+  await expect(panel.getByRole('alert')).toContainText('Não foi possível registrar o plano');
+  await update.click();await expect(update).toBeEnabled();
+  await expect(panel.getByRole('alert')).toContainText('Não foi possível registrar o plano');
+  expect(await calls(page,'retention.plan')).toHaveLength(1);expect(await calls(page,'retention.apply')).toHaveLength(0);
 });
 
 test('retenção recusa arquivo alterado e atualizar inventário não repete exclusão',async({page})=>{

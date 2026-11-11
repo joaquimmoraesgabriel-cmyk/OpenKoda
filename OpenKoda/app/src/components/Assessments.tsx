@@ -29,13 +29,19 @@ import AiOperationProposal from './AiOperationProposal';
 import { OperationAdapter } from '../ai-operation';
 import { native } from '../api';
 
-export default function Assessments({assessments,projects,findings,settings,plans=[],executions=[],scopeRevisions=[],assessmentScopes=[],scopeReceipts=[],workPlanBindings=[],selected,onSelect,creating,initialProject,onCancelNew,onCreate,onProjects,onFindings,action,busy,onExport}:{assessments:Assessment[];projects:Project[];findings:Finding[];settings:Settings;plans?:ExecutionPlan[];executions?:Execution[];scopeRevisions?:ScopeRevision[];assessmentScopes?:AssessmentScope[];scopeReceipts?:ScopeReceipt[];workPlanBindings?:WorkPlanBinding[];selected:string;onSelect:(id:string)=>void;creating:boolean;initialProject?:string;onCancelNew:()=>void;onCreate:(p:Record<string,unknown>,start:boolean)=>Promise<void>;onProjects:()=>void;onFindings:(id?:string)=>void;action:Action;busy:boolean;onExport:(path:string)=>void}){
+export default function Assessments({closeQueue,onCloseQueueOpened,assessments,projects,findings,settings,plans=[],executions=[],scopeRevisions=[],assessmentScopes=[],scopeReceipts=[],workPlanBindings=[],selected,onSelect,creating,initialProject,onCancelNew,onCreate,onProjects,onFindings,action,busy,onExport}:{closeQueue?:string;onCloseQueueOpened?:()=>void;assessments:Assessment[];projects:Project[];findings:Finding[];settings:Settings;plans?:ExecutionPlan[];executions?:Execution[];scopeRevisions?:ScopeRevision[];assessmentScopes?:AssessmentScope[];scopeReceipts?:ScopeReceipt[];workPlanBindings?:WorkPlanBinding[];selected:string;onSelect:(id:string)=>void;creating:boolean;initialProject?:string;onCancelNew:()=>void;onCreate:(p:Record<string,unknown>,start:boolean)=>Promise<void>;onProjects:()=>void;onFindings:(id?:string)=>void;action:Action;busy:boolean;onExport:(path:string)=>void}){
  const [search,setSearch]=useState('');const [filter,setFilter]=useState('all');const [tab,setTab]=useState('Resumo');const [cancelConfirm,setCancelConfirm]=useState(false);
  const [workFocus,setWorkFocus]=useState<string>();
  const [candidateDraft,setCandidateDraft]=useState<CandidateDraft>();
  const detailRef=useRef<HTMLElement>(null);const [operationNavigation,setOperationNavigation]=useState<{assessmentId:string;adapter:OperationAdapter;revision:number}>();
  const a=assessments.find(a=>a.id===selected);const filtered=assessments.filter(a=>(a.title+' '+a.target).toLowerCase().includes(search.toLowerCase())&&(filter==='all'||a.status===filter));
  const scopeState=useAssessmentScope(a);const combined=scopeRevisions.some(r=>r.assessmentId===a?.id&&!!r.body.targetSet);const hasKind=(kind:string)=>combined?scopeState.status?.revision?.body.targetSet?.entries.some(t=>t.kind===kind):a?.kind===kind;const allowed=(method:Parameters<typeof scopeAllows>[1])=>!native||scopeAllows(scopeState.status,method);
+ useEffect(()=>{
+   if(closeQueue && closeQueue===a?.id){
+     setTab('Plano e fila');onCloseQueueOpened?.();
+     requestAnimationFrame(()=>detailRef.current?.querySelector<HTMLButtonElement>('nav.tabs button[aria-current="page"]')?.focus());
+   }
+ },[closeQueue,a?.id,onCloseQueueOpened]);
  const related=a?findings.filter(f=>f.assessmentId===a.id):[];const assessmentExecutions=a?executions.filter(e=>e.assessmentId===a.id):[];const candidates=related.filter(f=>f.status==='candidate');
  const selectedPlans=plans.filter(p=>p.assessmentId===a?.id);const managedPlan=workPlanBindings.find(binding=>binding.executionPlanId===selectedPlans.at(-1)?.id);
  const sourceEvidenceIds=assessmentExecutions.filter(execution=>plans.some(plan=>plan.id===execution.planId&&plan.adapter==='source.rules.v1')).map(execution=>execution.evidenceId).filter((id):id is string=>!!id);

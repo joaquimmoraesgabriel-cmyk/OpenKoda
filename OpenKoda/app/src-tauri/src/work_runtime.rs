@@ -28,6 +28,7 @@ pub(crate) fn wake(services:Arc<Services>,store:Arc<Store>){
     // empty queue: that could reject the next reviewed maintenance commit.
     // Enqueue/resume provide their own wakeup after committing new work.
     if !matches!(has_queued_work(&store),Ok(true)){return;}
+    let Ok(Some(admission)) = services.close_gate.admit(Some(crate::close_guard::Activity::queue(None))) else {return;};
     {
         let mut state=services.work_wakeup.lock().unwrap_or_else(|poisoned|poisoned.into_inner());
         if state.running{state.pending=true;return;}
@@ -35,7 +36,7 @@ pub(crate) fn wake(services:Arc<Services>,store:Arc<Store>){
     }
     tauri::async_runtime::spawn_blocking(move ||{
         loop{
-            let drained=std::panic::catch_unwind(std::panic::AssertUnwindSafe(||drain(&services,&store)));
+            let drained=std::panic::catch_unwind(std::panic::AssertUnwindSafe(||drain(&services,&store,&admission)));
             let mut state=services.work_wakeup.lock().unwrap_or_else(|poisoned|poisoned.into_inner());
             // A panic is not evidence of effect termination. Permit Drop retains
             // its durable unknown state; no polling or retry follows here.
@@ -50,7 +51,7 @@ fn has_queued_work(store:&Store)->Result<bool,String>{
     store.work_read(|conn,_|conn.query_row("SELECT EXISTS(SELECT 1 FROM work_jobs j JOIN work_plan_heads h ON h.plan_id=j.plan_id WHERE j.state='queued' AND h.control='active' AND h.head_revision_id=j.revision_id)",[],|row|row.get(0)).map_err(crate::workflow::storage_error))
 }
 
-fn drain(services:&Services,store:&Store)->Result<(),String>{
+fn drain(services:&Services,store:&Store,admission:&crate::close_guard::Admission)->Result<(),String>{
     let mut attempted=std::collections::HashSet::new();
     loop{
         if !has_queued_work(store)?{return Ok(());}
@@ -60,6 +61,7 @@ fn drain(services:&Services,store:&Store)->Result<(),String>{
         let Some(dispatch)=services.supervisor.next_dispatch(store,&services.workflow)? else{return Ok(());};
         // A rejected concrete attempt is never retried by this wakeup, even if
         // an unexpected service failure left its queue entry unchanged.
+        admission.identify_job(dispatch.assessment_id());
         if !attempted.insert(dispatch.attempt_id().to_owned()){return Err("work_reconciliation_required".into());}
         // The same backend services and shared arbiter handle both queued and
         // direct work. Keep maintenance excluded through the complete attempt.

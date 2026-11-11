@@ -61,8 +61,8 @@ function MetadataResult({item,plan}:{item:Artifact;plan:RetentionPlan}){
 export default function Retention({action,busy}:{action:Action;busy:boolean}) {
   const [inventory,setInventory]=useState<Inventory>();const [selected,setSelected]=useState<string[]>([]);
   const [review,setReview]=useState<RetentionPlan>();const [approved,setApproved]=useState(false);const [confirmation,setConfirmation]=useState('');
-  const [pending,setPending]=useState(false);const [error,setError]=useState('');const [attempted,setAttempted]=useState<string[]>([]);
-  const initialized=useRef(false);
+  const [pending,setPending]=useState(native);const [error,setError]=useState('');const [attempted,setAttempted]=useState<string[]>([]);
+  const [inventoryError,setInventoryError]=useState('');
   const prepareButton=useRef<HTMLButtonElement>(null);const refreshButton=useRef<HTMLButtonElement>(null);
   function clearApproval(){setApproved(false);setConfirmation('');}
   function closeReview(){
@@ -71,11 +71,30 @@ export default function Retention({action,busy}:{action:Action;busy:boolean}) {
     else refreshButton.current?.focus();
   }
   async function refresh(){
-    const next=await request<Inventory>('retention.inventory');setInventory(next);
+    const next=await request<Inventory>('retention.inventory');setInventory(next);setInventoryError('');
     setSelected(current=>current.filter(key=>next.items.some(item=>itemKey(item)===key)));
     setReview(current=>current?next.journals.find(plan=>plan.id===current.id)??current:current);
   }
-  useEffect(()=>{if(!native||initialized.current)return;initialized.current=true;void refresh().catch(e=>setError(errorMessage(e)));},[]);
+  useEffect(()=>{
+    if(!native)return;
+    let disposed=false;
+    const delays=[200,500,1000];
+    let retry=0;
+    async function initialRead(){
+      try{await refresh();}
+      catch(e){
+        if(disposed)return;
+        const reason=errorMessage(e);
+        if(reason==='Retenção indisponível durante outra operação.'&&retry<delays.length){
+          timer=window.setTimeout(initialRead,delays[retry++]);return;
+        }
+        setInventoryError(reason);
+      }
+      if(!disposed)setPending(false);
+    }
+    let timer=window.setTimeout(initialRead,0);
+    return ()=>{disposed=true;window.clearTimeout(timer);};
+  },[]);
   async function prepare(){
     setPending(true);setError('');setReview(undefined);clearApproval();
     try{
@@ -95,7 +114,7 @@ export default function Retention({action,busy}:{action:Action;busy:boolean}) {
     try{setReview(await action<RetentionPlan>('retention.reconcile',{id:plan.id}));await refresh();}
     catch(e){setError(errorMessage(e));await refresh().catch(()=>{});}finally{setPending(false);}
   }
-  async function consult(){setPending(true);try{await refresh();}catch(e){setError(errorMessage(e));}finally{setPending(false);}}
+  async function consult(){setPending(true);try{await refresh();}catch(e){setInventoryError(errorMessage(e));}finally{setPending(false);}}
   function toggle(item:Artifact,checked:boolean){setSelected(keys=>checked?[...keys,itemKey(item)]:keys.filter(key=>key!==itemKey(item)));setReview(undefined);clearApproval();}
   const disabled=busy||pending;const blocked=!!inventory&&(inventory.blocked||inventory.hasUnresolved);
   const expired=review?Date.parse(review.expiresAt)<=Date.now():false;
@@ -104,6 +123,7 @@ export default function Retention({action,busy}:{action:Action;busy:boolean}) {
     <p className="muted">Selecione as cópias de backup, os relatórios, as capturas ou seus metadados terminais que deseja excluir permanentemente. O prazo salvo é apenas uma referência; nenhuma exclusão é agendada automaticamente.</p>
     {!native?<Notice>A revisão e a exclusão de arquivos geridos estão disponíveis no aplicativo desktop.</Notice>:<>
       {error&&<div role="alert"><Notice tone="warning">{error}</Notice></div>}
+      {inventoryError&&<div role="alert"><Notice tone="warning">{inventoryError}</Notice></div>}
       <Notice>Ao excluir uma captura, seu conteúdo deixa de estar disponível. O manifesto, a origem e os hashes permanecem no histórico. A cópia local e a cópia no Kali são itens separados; selecione cada uma que deseja remover. Projetos, avaliações e demais evidências são preservados.</Notice>
       {!!inventory?.items.some(item=>item.category==='kali_capture_metadata')&&<Notice>Metadados de captura são uma seleção separada, disponível após remover os bytes no Kali. Sua consolidação exige outra revisão e preserva a prova no histórico do produtor.</Notice>}
       <button ref={refreshButton} type="button" className="button" disabled={disabled} onClick={()=>void consult()}>Atualizar arquivos e histórico</button>

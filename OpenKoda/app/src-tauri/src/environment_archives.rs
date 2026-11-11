@@ -7,7 +7,7 @@ use uuid::Uuid;
 const EXPORT: &str = "kali-vhd-export";
 const IMPORT: &str = "kali-vhd-import";
 const MAX_IMAGE: u64 = 64 * 1024 * 1024 * 1024;
-const MAX_RECORDS: i64 = 128;
+const PAGE_SIZE: usize = 128;
 const INSPECT: &str = include_str!("../../scripts/kali-archive-inspect.py");
 const PROTOCOL_SOURCE: &str = include_str!("../../scripts/kali-executor.py");
 const REKEY: &str = include_str!("../../scripts/kali-restore-marker.py");
@@ -15,13 +15,17 @@ const REKEY: &str = include_str!("../../scripts/kali-restore-marker.py");
 pub(super) fn supports(action: &str) -> bool {
     matches!(action, "environment.archive.list" | "environment.archive.exportPlan"
         | "environment.archive.export" | "environment.archive.importPlan"
-        | "environment.archive.import" | "environment.archive.inspectStop")
+        | "environment.archive.import" | "environment.archive.inspectStop" | "environment.archive.activatePlan" | "environment.archive.activate")
 }
 pub(super) fn exclusive(action: &str) -> bool { supports(action) && action != "environment.archive.list" }
 
 #[derive(Deserialize)]
 #[serde(rename_all="camelCase", deny_unknown_fields)]
 struct Selection { id: String }
+
+#[derive(Deserialize)]
+#[serde(rename_all="camelCase", deny_unknown_fields)]
+struct PageRequest { before_id: Option<String> }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all="camelCase", deny_unknown_fields)]
@@ -86,48 +90,71 @@ impl ArchiveStore {
     pub(super) fn open(root: &Path) -> Result<Self,String> {
         let db = Connection::open(root.join("environment-archives.sqlite3")).map_err(storage_error)?;
         db.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;
-            CREATE TABLE IF NOT EXISTS archive_ops(id TEXT PRIMARY KEY,data TEXT NOT NULL);").map_err(storage_error)?;
+            CREATE TABLE IF NOT EXISTS archive_ops(id TEXT PRIMARY KEY,data TEXT NOT NULL);
+            CREATE INDEX IF NOT EXISTS archive_status ON archive_ops(json_extract(data,'$.status'));").map_err(storage_error)?;
         let store=Self(Mutex::new(db));
-        for mut record in store.all()? {
-            // A crash can leave a partial new file or a registered clone. None
-            // becomes eligible for reuse. A source termination needs observation.
-            match record.status.as_str() {
-                "stopping_source" | "exporting_source" => record.status="stop_unknown".into(),
-                "copying" => record.status="incomplete_copy".into(),
-                "importing" | "personalizing" | "stopping_copy" => record.status="copy_unknown".into(),
-                _ => continue,
+        loop {
+            let interrupted = {
+                let db = store.db()?;
+                let mut q = db.prepare("SELECT id,data FROM archive_ops
+                    WHERE json_extract(data,'$.status') IN ('stopping_source','exporting_source','copying','importing','personalizing','stopping_copy')
+                    LIMIT ?1").map_err(storage_error)?;
+                Self::records(&mut q, params![PAGE_SIZE])?
+            };
+            if interrupted.is_empty() { break; }
+            for mut record in interrupted {
+                // A crash can leave a partial file or a registered clone.
+                record.status = match record.status.as_str() {
+                    "stopping_source" | "exporting_source" => "stop_unknown",
+                    "copying" => "incomplete_copy",
+                    "importing" | "personalizing" | "stopping_copy" => "copy_unknown",
+                    _ => return Err(storage_error("unexpected interrupted operation")),
+                }.into();
+                record.error=Some("O aplicativo foi interrompido. Consulte os dados da tentativa antes de preparar outra operação.".into());
+                store.save(&mut record)?;
             }
-            record.error=Some("O aplicativo foi interrompido. Consulte os dados da tentativa antes de preparar outra operação.".into());
-            store.save(&mut record)?;
         }
         Ok(store)
     }
     fn db(&self) -> Result<MutexGuard<'_,Connection>,String> { self.0.lock().map_err(storage_error) }
-    fn check_capacity(&self) -> Result<(),String> {
-        let n:i64=self.db()?.query_row("SELECT count(*) FROM archive_ops",[],|r|r.get(0)).map_err(storage_error)?;
-        if n>=MAX_RECORDS {return Err("O histórico de cópias chegou ao limite de 128 tentativas.".into())}
-        Ok(())
+    fn record(id: String, raw: String) -> Result<Record, String> {
+        uuid(&id)?;
+        let record: Record = serde_json::from_str(&raw).map_err(storage_error)?;
+        if record.operation.id() != id { return Err(storage_error("identity")); }
+        Ok(record)
     }
-    fn all(&self) -> Result<Vec<Record>,String> {
-        let db=self.db()?;
-        let mut q=db.prepare("SELECT id,data FROM archive_ops ORDER BY rowid DESC LIMIT 129").map_err(storage_error)?;
-        let rows=q.query_map([],|r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?))).map_err(storage_error)?;
-        let mut records=Vec::new();
-        for row in rows {
-            let(id,raw)=row.map_err(storage_error)?;
-            let record:Record=serde_json::from_str(&raw).map_err(storage_error)?;
-            uuid(&id)?;
-            if record.operation.id()!=id || records.len()>=MAX_RECORDS as usize {return Err(storage_error("identity"))}
-            records.push(record);
-        }
-        Ok(records)
+    fn records(q: &mut rusqlite::Statement<'_>, args: impl rusqlite::Params) -> Result<Vec<Record>, String> {
+        let rows = q.query_map(args, |r| Ok((r.get::<_,String>(0)?, r.get::<_,String>(1)?))).map_err(storage_error)?;
+        rows.map(|row| {
+            let (id, raw) = row.map_err(storage_error)?;
+            Self::record(id, raw)
+        }).collect()
     }
-    fn get(&self,id:&str)->Result<Record,String>{
+    fn page(&self, before: Option<&str>) -> Result<(Vec<Record>, Option<String>), String> {
+        let db = self.db()?;
+        let mut records = if let Some(id) = before {
+            uuid(id)?;
+            let cursor: i64 = db.query_row("SELECT rowid FROM archive_ops WHERE id=?1", [id], |r| r.get(0))
+                .optional().map_err(storage_error)?.ok_or("Página de cópias não encontrada.")?;
+            let mut q = db.prepare("SELECT id,data FROM archive_ops WHERE rowid<?1 ORDER BY rowid DESC LIMIT ?2").map_err(storage_error)?;
+            Self::records(&mut q, params![cursor, PAGE_SIZE + 1])?
+        } else {
+            let mut q = db.prepare("SELECT id,data FROM archive_ops ORDER BY rowid DESC LIMIT ?1").map_err(storage_error)?;
+            Self::records(&mut q, params![PAGE_SIZE + 1])?
+        };
+        let next = if records.len() > PAGE_SIZE {
+            records.truncate(PAGE_SIZE);
+            records.last().map(|r| r.operation.id().to_owned())
+        } else { None };
+        Ok((records, next))
+    }
+    fn get(&self, id: &str) -> Result<Record,String> {
         uuid(id)?;
-        self.all()?.into_iter().find(|r|r.operation.id()==id).ok_or_else(||"Tentativa de cópia não encontrada.".into())
+        let raw = self.db()?.query_row("SELECT data FROM archive_ops WHERE id=?1", [id], |r| r.get(0))
+            .optional().map_err(storage_error)?.ok_or("Tentativa de cópia não encontrada.")?;
+        Self::record(id.to_owned(), raw)
     }
     fn begin(&self,operation:Operation,status:&str)->Result<Record,String>{
-        self.check_capacity()?;
         uuid(operation.id())?;
         let record=Record{operation,status:status.into(),started_at:now(),updated_at:now(),bytes:None,sha256:None,registration:None,error:None};
         self.db()?.execute("INSERT INTO archive_ops VALUES(?1,?2)",params![record.operation.id(),serde_json::to_string(&record).map_err(storage_error)?]).map_err(storage_error)?;
@@ -139,7 +166,9 @@ impl ArchiveStore {
         if changed!=1{return Err(storage_error("missing receipt"))}Ok(())
     }
     pub(super) fn stop_pending(&self)->Result<bool,String>{
-        Ok(self.all()?.iter().any(|r|matches!(r.status.as_str(),"stopping_source"|"exporting_source"|"stop_unknown")))
+        self.db()?.query_row("SELECT EXISTS(SELECT 1 FROM archive_ops
+            WHERE json_extract(data,'$.status') IN ('stopping_source','exporting_source','stop_unknown'))",
+            [], |r| r.get(0)).map_err(storage_error)
     }
     pub(super) fn check_source_stop(&self)->Result<(),String>{
         if self.stop_pending()? {Err("A parada anterior do Kali precisa ser conferida em Manutenção → Cópias do Kali.".into())}
@@ -231,10 +260,10 @@ fn archive_hash(file: &mut File, format: ArchiveFormat, limit: u64) -> Result<(u
     Ok(actual)
 }
 
-pub(super) fn system_export_tar(target: File, limit: u64) -> Result<(u64, String), String> {
+pub(super) fn system_export_tar(distribution: &str, target: File, limit: u64) -> Result<(u64, String), String> {
     let spec = CommandSpec {
         purpose: "WSL archive export", executable: system_binary("wsl.exe"),
-        args: vec!["--export".into(), DISTRO.into(), "-".into(), "--format".into(), "tar".into()],
+        args: vec!["--export".into(), distribution.into(), "-".into(), "--format".into(), "tar".into()],
         input: None, timeout: Duration::from_secs(3600),
     };
     let mut child = process_command(&spec).spawn().map_err(disk_error)?;
@@ -278,6 +307,12 @@ pub(super) fn system_export_tar(target: File, limit: u64) -> Result<(u64, String
 }
 
 fn clone_name(id:&str)->String {format!("OpenKoda-Recovery-{id}")}
+// wsl.exe can report this optional systemd session failure even when a fixed
+// --exec command completed as the verified unprivileged user. All other stderr
+// remains an error for these protocol responses.
+fn user_stderr_ok(text:&str)->bool{
+    text.lines().all(|line|matches!(line.trim(),""|"wsl: Failed to start the systemd user session for 'openkoda'. See journalctl for more details."))
+}
 fn stop_check(result:&ProcessResult,inventory:&[Registration],name:&str)->Result<(),String>{
     checked(result)?;
     let names:Vec<_>=result.stdout.lines().map(str::trim).filter(|s|!s.is_empty()).collect();
@@ -290,7 +325,13 @@ fn stop_check(result:&ProcessResult,inventory:&[Registration],name:&str)->Result
 impl EnvironmentManager {
     pub(super) fn archive_action(&self,action:&str,payload:Value)->Result<Value,String>{
         match action {
-            "environment.archive.list" => {empty(&payload)?; Ok(json!({"records":self.archives.all()?}))}
+            "environment.archive.list" => {
+                let input: PageRequest = decode(payload)?;
+                let (records, next) = self.archives.page(input.before_id.as_deref())?;
+                Ok(json!({"records":self.activation_rows(records)?,"nextBeforeId":next}))
+            }
+            "environment.archive.activatePlan" => self.activate_plan(decode(payload)?),
+            "environment.archive.activate" => self.activate_restored(decode(payload)?),
             "environment.archive.inspectStop" => self.inspect_archive_stop(decode(payload)?),
             _=>{
                 // A verified archive can be restored even if its original registration was lost.
@@ -298,7 +339,6 @@ impl EnvironmentManager {
                 if matches!(action, "environment.archive.exportPlan" | "environment.archive.export") {
                     self.archives.check_source_stop()?;
                 }
-                self.archives.check_capacity()?;
                 match action {
                     "environment.archive.exportPlan"=>{empty(&payload)?;self.archive_export_plan()}
                     "environment.archive.export"=>self.archive_export(decode(payload)?),
@@ -326,15 +366,15 @@ impl EnvironmentManager {
     }
 
     fn inspect_spool(&self,state:&EnvironmentState)->Result<SpoolInventory,String>{
-        self.owned_registration(state)?;
+        let registration=self.owned_registration(state)?;
         let command=CommandSpec{
             purpose:"WSL archive spool inventory", executable:system_binary("wsl.exe"),
-            args:vec!["--distribution".into(),DISTRO.into(),"--user".into(),"openkoda".into(),"--cd".into(),"/".into(),"--exec".into(),
+            args:vec!["--distribution".into(),registration.name,"--user".into(),"openkoda".into(),"--cd".into(),"/".into(),"--exec".into(),
                 "/usr/bin/python3".into(),"-I".into(),"-c".into(),INSPECT.into(),state.id.clone()],
             input:Some(PROTOCOL_SOURCE.as_bytes().to_vec()),timeout:Duration::from_secs(60)
         };
         let result=self.runner.run(&command)?;
-        if checked(&result).is_err()||!result.stderr.trim().is_empty(){return Err("O inventário do spool não pôde ser confirmado. Confira as capturas e sessões pendentes antes de exportar.".into())}
+        if checked(&result).is_err()||!user_stderr_ok(&result.stderr){return Err("O inventário do spool não pôde ser confirmado. Confira as capturas e sessões pendentes antes de exportar.".into())}
         let inventory:SpoolInventory=serde_json::from_str(result.stdout.trim()).map_err(|_|"Inventário de capturas inválido.")?;
         if inventory.raw_captures>0{return Err("Há bytes de captura no Kali. Em Configurações → Dados e privacidade, revise a retenção das capturas no Kali antes de exportar o disco.".into())}
         if inventory.terminal_captures>256 || inventory.session_records>100000{return Err("Inventário de capturas acima do limite.".into())}
@@ -343,7 +383,7 @@ impl EnvironmentManager {
     fn archive_export_plan(&self)->Result<Value,String>{
         let state=self.state()?;if state.phase!="ready"{return Err("O Kali gerido precisa estar pronto para a cópia.".into())}
         let source=self.owned_registration(&state)?;
-        let location=self.install_location();let _hold=node(&location,true,false)?;
+        let location=self.bound_location(&state)?;let _hold=node(&location,true,false)?;
         let(file,disk_id)=node(&location.join("ext4.vhdx"),false,true)?;
         let bytes=file.metadata().map_err(disk_error)?.len();
         if bytes<8{return Err("O disco de origem é inválido.".into())}
@@ -359,14 +399,14 @@ impl EnvironmentManager {
         let state=self.require_ready()?;
         if self.inspect_spool(&state)?!=backup.spool{return Err("O inventário do spool mudou. Prepare uma nova revisão.".into())}
         if state.id!=backup.source_id||self.owned_registration(&state)?!=backup.source{return Err("A origem da cópia mudou.".into())}
-        let _base=node(&self.root,true,false)?;let location=self.install_location();let _source=node(&location,true,false)?;
+        let _base=node(&self.root,true,false)?;let location=self.bound_location(&state)?;let _source=node(&location,true,false)?;
         let disk=location.join("ext4.vhdx");let (metadata,id)=node(&disk,false,true)?;
         if id!=backup.disk_id || metadata.metadata().map_err(disk_error)?.len()<8{return Err("O VHDX mudou. Prepare outra revisão.".into())}
         let _target=ensure_dir(&self.archive_dir())?;let path=self.disk_path(&backup.id,backup.format)?;must_be_new(&path)?;
         let mut record=self.archives.begin(Operation::Export{backup:backup.clone()},"stopping_source")?;
         let outcome=(||{
-            checked(&self.wsl("WSL archive stop source",vec!["--terminate".into(),DISTRO.into()],60)?)?;
-            self.check_stop(DISTRO,&backup.source,&location)?;
+            checked(&self.wsl("WSL archive stop source",vec!["--terminate".into(),backup.source.name.clone()],60)?)?;
+            self.check_stop(&backup.source.name,&backup.source,&location)?;
             record.status="copying".into();self.archives.save(&mut record)?;
             let (_held,current_id)=node(&disk,false,true)?;
             if current_id!=backup.disk_id{return Err("O disco de origem mudou antes da exportação.".into())}
@@ -376,8 +416,8 @@ impl EnvironmentManager {
             // WSL may temporarily mount the source to generate TAR. A lost client
             // result must not attest that the reviewed source is still stopped.
             record.status="exporting_source".into();self.archives.save(&mut record)?;
-            let exported=self.runner.export_tar(target.try_clone().map_err(disk_error)?, backup.max_bytes);
-            self.check_stop(DISTRO,&backup.source,&location)?;
+            let exported=self.runner.export_tar(&backup.source.name,target.try_clone().map_err(disk_error)?, backup.max_bytes);
+            self.check_stop(&backup.source.name,&backup.source,&location)?;
             record.status="copying".into();self.archives.save(&mut record)?;
             let copied=exported?;
             target.sync_all().map_err(disk_error)?;
@@ -396,7 +436,7 @@ impl EnvironmentManager {
         let Operation::Export{backup}=&record.operation else{return Err("Tentativa de exportação inválida.".into())};
         if record.status!="stop_unknown"{return Err("Esta tentativa não aguarda confirmação de parada.".into())}
         if self.state()?.id!=backup.source_id{return Err("Identidade do ambiente divergiu.".into())}
-        self.check_stop(DISTRO,&backup.source,&self.install_location())?;
+        self.check_stop(&backup.source.name,&backup.source,&self.bound_location(&self.state()?)?)?;
         record.status="incomplete_copy".into();record.error=Some("Parada conferida. Prepare outra revisão para criar uma nova cópia.".into());
         self.archives.save(&mut record)?;Ok(json!(record))
     }
@@ -481,3 +521,6 @@ impl EnvironmentManager {
 #[cfg(test)]
 #[path="environment_archive_tests.rs"]
 mod tests;
+
+#[path = "environment_switch.rs"]
+mod switch;

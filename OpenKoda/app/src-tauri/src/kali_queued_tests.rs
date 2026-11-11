@@ -79,6 +79,43 @@ fn queued_identity_failure_keeps_data_review_unconsumed_and_dependency_blocked()
 }
 
 #[test]
+fn queued_scan_without_ripgrep_never_starts_producer_or_sends_evidence() {
+    struct MissingParser { identity:String, store:Arc<Store>, probes:std::sync::atomic::AtomicUsize }
+    impl Launcher for MissingParser {
+        fn queued_scan_available(&self, identity:&str)->Result<bool,String> {
+            assert_eq!(identity,self.identity);
+            self.store.work_read(|db,_|{
+                let bound:u32=db.query_row("SELECT count(*) FROM work_leases WHERE state='bound' AND effect_kind='kali_run'",[],|row|row.get(0)).map_err(db_error)?;
+                assert_eq!(bound,1); Ok(())
+            })?;
+            self.probes.fetch_add(1,Ordering::SeqCst);Ok(false)
+        }
+        fn launch(&self,_:&BridgeRun,_:&AtomicBool)->Result<Box<dyn Transport>,String>{
+            panic!("an unavailable parser must never launch the producer or a collector")
+        }
+    }
+    let mut f=QueuedFixture::new();
+    let parser=Arc::new(MissingParser{identity:f.environment.clone(),store:f.store.clone(),probes:0.into()});
+    f.bridge.launcher=parser.clone();
+    let completion=dispatch_scan(&f);
+    assert_eq!(completion.outcome(),AttemptState::Failed);
+    assert_eq!(parser.probes.load(Ordering::SeqCst),1);
+    let runs=f.bridge.runs().unwrap();assert_eq!(runs.len(),1);
+    assert!(!runs[0].launch_attempted && runs[0].cleanup_confirmed);
+    assert!(runs[0].error.as_deref().unwrap().contains("ripgrep"));
+    let snapshot=f.store.snapshot().unwrap();let receipts=&snapshot.data_use_receipts;
+    assert_eq!(snapshot.assessments[0].evidence.len(),1);
+    assert_eq!(receipts.len(),1);
+    assert_eq!(receipts[0].events.iter().map(|e|e.outcome).collect::<Vec<_>>(),[crate::data_policy::DataUseOutcome::Admitted,crate::data_policy::DataUseOutcome::NotSent]);
+    let (capture,bytes)=stdout_capture(&f);
+    assert!(bytes.is_empty());assert_eq!(capture.observed_bytes,Some(0));assert_eq!(capture.state,crate::capture::CaptureState::Sealed);
+    assert_eq!(f.bridge.spool_metadata(&f.store,Some(&f.aid)).unwrap()[0].availability,"unavailable");
+    assert!(ensure_capture_history_purgeable(&f.store.root,&runs,&[f.aid.clone()]).is_ok());
+    assert!(f.supervisor.arbiter().ensure_quiescent(&f.store).is_ok());
+    assert_ne!(f.view()["jobs"][1]["state"],"awaiting_preparation");
+}
+
+#[test]
 fn failed_atomic_final_commit_retains_unknown_binding_and_does_not_publish_evidence(){
     let f=QueuedFixture::new();f.queued();let(token,grant)=f.next();
     f.store.fail_commit_when(|s|s.assessments[0].evidence.len()>1);

@@ -1,4 +1,5 @@
 pub mod core;
+mod close_guard;
 pub mod model;
 pub mod ai;
 pub mod environment;
@@ -42,7 +43,7 @@ use std::sync::Arc;
 use tauri::Manager;
 use core::{Request, Store};
 
-struct Services { ai: ai::AiService, environment: environment::EnvironmentManager, executor: executor::Executor, recovery:recovery::RecoveryService, kali:kali_bridge::KaliBridge, remediation:remediation::RemediationService, activation:activation::ActivationService, retention:retention::RetentionService, project_purge:project_purge::ProjectPurgeService, data_policy:Arc<data_policy::DataPolicyService>, workflow:workflow::WorkflowService, supervisor:work_supervisor::WorkSupervisor, work_wakeup:work_runtime::WakeGate, environment_gate: std::sync::RwLock<()> }
+struct Services { close_gate: Arc<close_guard::CloseGate>, ai: ai::AiService, environment: Arc<environment::EnvironmentManager>, executor: executor::Executor, recovery:recovery::RecoveryService, kali:kali_bridge::KaliBridge, remediation:remediation::RemediationService, activation:activation::ActivationService, retention:retention::RetentionService, project_purge:project_purge::ProjectPurgeService, data_policy:Arc<data_policy::DataPolicyService>, workflow:workflow::WorkflowService, supervisor:work_supervisor::WorkSupervisor, work_wakeup:work_runtime::WakeGate, environment_gate: std::sync::RwLock<()> }
 
 // Check under the operation lease, so a purge cannot begin between this test
 // and another mutation. Read-only views remain available for human inspection.
@@ -72,9 +73,21 @@ async fn request(
     if window.label() != "main" {
         return Err("Janela não autorizada.".into());
     }
+    let admission = services.close_gate.admit(close_guard::Activity::request(&request.action, &request.payload))?;
     let store = state.inner().clone();
     let services = services.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
+        let _admission = admission;
+        // Support is an allowlisted metadata-only document, even when the credential vault is unavailable.
+        if matches!(request.action.as_str(), "support.review" | "support.export") {
+            let _lease = services.environment_gate.try_read()
+                .map_err(|_| "Diagnóstico indisponível durante manutenção local.")?;
+            if request.action == "support.export" {
+                ensure_purge_access(&services, &request.action)?;
+                allow_new_work(&services)?;
+            }
+            return services.recovery.support(&request.action, request.payload);
+        }
         let public_action=request.action.clone();
         let result=(||{
         if capture_access::supports(&request.action){
@@ -274,6 +287,10 @@ async fn request(
                     services.supervisor.shared_arbiter().ensure_quiescent(&store)?;
                 }
                 if services.kali.has_unresolved()&&!matches!(request.action.as_str(),"environment.repair.plan"|"environment.repair.apply"){return Err("Reconcilie sessões MCP com término não confirmado antes da manutenção.".into());}
+                if matches!(request.action.as_str(),"environment.archive.activatePlan"|"environment.archive.activate")
+                    && (services.retention.has_unresolved()? || services.remediation.has_unresolved()?) {
+                    return Err("Reconcilie a retenção e a correção pendentes antes de trocar o executor.".into());
+                }
                 if store.snapshot()?.assessments.iter().any(|a| core::active(&a.status)) {
                     return Err("Manutenção bloqueada enquanto há avaliações ativas ou com efeito desconhecido.".into());
                 }
@@ -320,6 +337,22 @@ async fn request(
 
 pub fn run() {
     tauri::Builder::default()
+        .on_window_event(|window, event| {
+            if window.label() != "main" { return; }
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                let Some(services) = window.try_state::<Arc<Services>>() else { return };
+                if let Some(activity) = services.close_gate.request_close() {
+                    api.prevent_close();
+                    if let Some(webview) = window.get_webview_window("main") {
+                        // Only enum names and a parsed UUID enter this presentation signal.
+                        // The WebView cannot acknowledge or override the host close decision.
+                        if let Ok(detail) = serde_json::to_string(&activity) {
+                            let _ = webview.eval(format!("window.dispatchEvent(new CustomEvent('openkoda-close-review',{{detail:{detail}}}))"));
+                        }
+                    }
+                }
+            }
+        })
         .setup(|app| {
             let legacy = app.path().app_data_dir()?;
             #[cfg(debug_assertions)]
@@ -330,12 +363,14 @@ pub fn run() {
             let store = Store::open(storage.root.clone()).map_err(std::io::Error::other)?;
             let data_policy=Arc::new(data_policy::DataPolicyService::new());
             let supervisor=work_supervisor::WorkSupervisor::default();
+            let environment=Arc::new(environment::EnvironmentManager::new(storage.base.clone()).map_err(std::io::Error::other)?);
             let services=Services{
+                close_gate: Arc::default(),
                 ai:ai::AiService::new_with_budget_root(store.root.clone(),storage.base.clone()).map_err(std::io::Error::other)?.with_data_policy(data_policy.clone()).with_arbiter(supervisor.shared_arbiter()),
-                environment:environment::EnvironmentManager::new(storage.base.clone()).map_err(std::io::Error::other)?,
+                environment:environment.clone(),
                 executor:executor::Executor::default().with_arbiter(supervisor.shared_arbiter()),
                 recovery:recovery::RecoveryService::new(store.root.clone()).map_err(std::io::Error::other)?,
-                kali:kali_bridge::KaliBridge::new(store.root.clone()).map_err(std::io::Error::other)?.with_data_policy(data_policy.clone()).with_arbiter(supervisor.shared_arbiter()),
+                kali:kali_bridge::KaliBridge::new(store.root.clone()).map_err(std::io::Error::other)?.with_environment(environment).with_data_policy(data_policy.clone()).with_arbiter(supervisor.shared_arbiter()),
                 remediation:remediation::RemediationService::new(store.root.clone()).map_err(std::io::Error::other)?,
                 activation:activation::ActivationService::new(storage.base.clone(),store.root.clone()).map_err(std::io::Error::other)?,
                 retention:retention::RetentionService::new(store.root.clone()).map_err(std::io::Error::other)?,

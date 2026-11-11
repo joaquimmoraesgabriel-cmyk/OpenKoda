@@ -1448,6 +1448,27 @@ try {
     expect(await request('snapshot')).toEqual(before);
     return { ledgerRecreated: false, identityPreserved: true, historyAccessible: true, providerRequests: 0, originalLedgerRestored: true };
   });
+  await gate('E5-local-support', 'Reviewed local diagnostics match the bytes written to the active profile', async () => {
+    const state = await request('activation.status');
+    const profile = state.currentProfile;
+    const profileDirectory = profile.kind === 'base' ? dataDirectory : ownedPath(join(dataDirectory, 'profiles', profile.id));
+    const review = await request('support.review', {});
+    const appVersion = JSON.parse(await readFile(join(appRoot, 'package.json'), 'utf8')).version;
+    expect(review.contents).toMatchObject({ appVersion, telemetry: 'disabled', remoteTransmission: false });
+    expect(JSON.parse(review.preview)).toEqual(review.contents);
+    expect(sha256(Buffer.from(review.preview, 'utf8'))).toBe(review.sha256);
+    expect(review.fileName).toMatch(/^suporte-[0-9a-f-]+\.json$/);
+    const output = ownedPath(join(profileDirectory, 'exports', review.fileName));
+    await expect(access(output)).rejects.toMatchObject({ code: 'ENOENT' });
+    await rejects('support.export', { reviewId: review.reviewId, confirmation: false });
+    await expect(access(output)).rejects.toMatchObject({ code: 'ENOENT' });
+    const decision = { reviewId: review.reviewId, confirmation: true };
+    const saved = await request('support.export', decision);
+    expect(saved).toMatchObject({ fileName: review.fileName, sha256: review.sha256, bytes: review.bytes });
+    expect(await readFile(output, 'utf8')).toBe(review.preview);
+    expect(await request('support.export', decision)).toEqual(saved);
+    return { sha256: review.sha256, bytes: review.bytes, duplicateVerified: true, remoteTransmission: false };
+  });
   succeeded = true;
 } catch (error) {
   if (page) await screenshot('failure.png').catch(() => {});

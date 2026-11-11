@@ -38,7 +38,7 @@ impl AiLocalClosurePermit<'_>{pub(crate) fn candidate(&self)->&crate::work_dispo
 impl Drop for AiLocalClosurePermit<'_>{fn drop(&mut self){self.arbiter.reconciling.store(false,Ordering::Release);}}
 pub(crate) enum DispatchOrigin { Direct, Queued(QueuedAttemptToken) }
 /// Host-only token. Neither a renderer payload nor a reconstructed grant.
-pub(crate) struct QueuedAttemptToken { job_id:String, attempt_id:String, generation:u64, boot_id:String }
+pub(crate) struct QueuedAttemptToken { assessment_id:String, job_id:String, attempt_id:String, generation:u64, boot_id:String }
 impl QueuedAttemptToken {
     pub(crate) fn job_id(&self)->&str{&self.job_id}
     pub(crate) fn attempt_id(&self)->&str{&self.attempt_id}
@@ -59,7 +59,11 @@ pub(crate) struct NativeWorkContext { pub attempt_id:String, pub max_capture_byt
 pub(crate) struct KaliWorkContext {pub attempt_id:String,pub reserved_run_id:String,pub max_capture_bytes:u64,pub data_review_ref:crate::data_policy::DataReviewRef}
 pub(crate) struct QueuedNativeDispatch {pub plan_id:String,pub digest:String,pub token:QueuedAttemptToken}
 pub(crate) enum QueuedDispatch {Native(QueuedNativeDispatch),Ai{token:QueuedAttemptToken,grant:crate::ai::QueuedAiGrant},Kali{token:QueuedAttemptToken,grant:crate::kali_bridge::QueuedKaliGrant}}
-impl QueuedDispatch {pub(crate) fn attempt_id(&self)->&str{match self{Self::Native(n)=>n.token.attempt_id(),Self::Ai{token,..}|Self::Kali{token,..}=>token.attempt_id()}}}
+impl QueuedDispatch {
+    pub(crate) fn assessment_id(&self)->&str {
+        match self {Self::Native(n)=>&n.token.assessment_id, Self::Ai{token,..}|Self::Kali{token,..}=>&token.assessment_id}
+    }
+    pub(crate) fn attempt_id(&self)->&str{match self{Self::Native(n)=>n.token.attempt_id(),Self::Ai{token,..}|Self::Kali{token,..}=>token.attempt_id()}}}
 /// Observation-only control token; it neither replaces nor frees the unknown
 /// resource lease and cannot be constructed from renderer fields.
 pub(crate) struct ReconciliationPermit<'a>{arbiter:&'a WorkArbiter,lease:LeaseRecord}
@@ -526,7 +530,7 @@ impl WorkSupervisor {
                 };
                 let valid=valid_grant&&a.view.state==AttemptState::Reserved&&a.view.effect.is_none()&&a.boot_id==self.arbiter.boot_id&&j.compiled.as_ref()==Some(&a.compiled)&&check_current_body(s,&work_store::revision(conn,&j.revision.revision_id)?.body).is_ok()&&work_store::resolve_inputs(conn,s,&j).is_ok_and(|inputs|inputs==a.input_refs);
                 if !valid{if a.view.state!=AttemptState::Reserved||a.view.effect.is_some(){return Err(error("work_unknown_effect"));}a.view.state=AttemptState::NotStarted;a.view.cleanup=CleanupState::Confirmed;a.view.finished_at=Some(model::now());a.reserved_capture_bytes=0;a.reserved_critical_events=0;j.state=JobState::AwaitingPreparation;j.generation+=1;j.compiled=None;j.reasons=vec![WorkReason::new(WorkReasonCode::WorkPreparationRequired,Some(j.id.clone()))];work_store::save_attempt(conn,&a)?;work_store::save_job(conn,&j)?;work_store::append_event(conn,&j.revision.plan_id,&j.assessment_id,WorkEventType::AttemptFinished,Some(j.id),Some(a.view.id),Some(JobState::AwaitingPreparation),Some(WorkReasonCode::WorkPreparationRequired),None)?;return Ok(None);}
-                Ok(Some(QueuedAttemptToken{job_id:j.id,attempt_id:a.view.id,generation:j.generation,boot_id:self.arbiter.boot_id.clone()}))
+                Ok(Some(QueuedAttemptToken{assessment_id:j.assessment_id,job_id:j.id,attempt_id:a.view.id,generation:j.generation,boot_id:self.arbiter.boot_id.clone()}))
             })?;
             if let Some(token)=token{return match grant{Some(BackendGrant::Ai(grant))=>Ok(Some(QueuedDispatch::Ai{token,grant})),Some(BackendGrant::Kali(grant))=>Ok(Some(QueuedDispatch::Kali{token,grant})),None=>Err(error("work_storage_unavailable"))};}
             if store.work_read(|conn,_|Ok(work_store::job(conn,&candidate.id)?.state==JobState::Queued))?{return Ok(None);}
@@ -555,7 +559,7 @@ impl WorkSupervisor {
                     j.state=JobState::AwaitingPreparation;j.generation+=1;j.compiled=None;j.reasons=vec![WorkReason::new(WorkReasonCode::WorkPreparationRequired,Some(j.id.clone()))];work_store::save_attempt(conn,&a)?;work_store::save_job(conn,&j)?;
                     work_store::append_event(conn,&j.revision.plan_id,&j.assessment_id,WorkEventType::AttemptFinished,Some(j.id),Some(a.view.id),Some(j.state),Some(WorkReasonCode::WorkPreparationRequired),None)?;return Ok(None);
                 }
-                Ok(Some(QueuedNativeDispatch{plan_id:plan_id.clone(),digest:digest.clone(),token:QueuedAttemptToken{job_id:j.id,attempt_id:a.view.id,generation:j.generation,boot_id:self.arbiter.boot_id.clone()}}))
+                Ok(Some(QueuedNativeDispatch{plan_id:plan_id.clone(),digest:digest.clone(),token:QueuedAttemptToken{assessment_id:j.assessment_id,job_id:j.id,attempt_id:a.view.id,generation:j.generation,boot_id:self.arbiter.boot_id.clone()}}))
             })?;
             if dispatch.is_some(){return Ok(dispatch);}
             // No waiting or polling: only continue over the finite queue after

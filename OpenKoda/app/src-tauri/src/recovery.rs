@@ -10,6 +10,8 @@ use std::{collections::HashSet, fs, io::{Read, Write}, path::{Path, PathBuf}, sy
 mod data;
 #[path="recovery_review.rs"]
 mod review;
+#[path="recovery_support.rs"]
+mod support;
 
 const MAX_FILE: u64 = 128 * 1024 * 1024;
 const MAX_MANIFEST: u64 = 1024 * 1024;
@@ -34,7 +36,12 @@ struct IdInput { id: String }
 #[serde(rename_all="camelCase", deny_unknown_fields)]
 struct ReportInput { id: String, #[serde(default)] include_evidence: bool }
 
-pub struct RecoveryService { root: PathBuf, operation: Mutex<()>, reviews:Mutex<std::collections::HashMap<String,review::OutputReview>> }
+pub struct RecoveryService {
+    root: PathBuf,
+    operation: Mutex<()>,
+    reviews: Mutex<std::collections::HashMap<String, review::OutputReview>>,
+    support_reviews: Mutex<std::collections::HashMap<uuid::Uuid, support::SupportReview>>,
+}
 
 pub fn supports(action: &str) -> bool {
     matches!(action, "backup.create" | "backup.prepare" | "backup.commit" | "backup.list" | "backup.verify" | "backup.restore" | "report.bundle" | "report.prepare" | "report.commit")
@@ -50,7 +57,8 @@ fn empty(value: &Value) -> Result<(), String> {
 impl RecoveryService {
     pub fn new(root: PathBuf) -> Result<Self, String> {
         fs::create_dir_all(&root).map_err(|e| e.to_string())?;
-        Ok(Self { root:root.canonicalize().map_err(|e|e.to_string())?, operation:Mutex::new(()), reviews:Mutex::new(std::collections::HashMap::new()) })
+        Ok(Self { root:root.canonicalize().map_err(|e|e.to_string())?, operation:Mutex::new(()),
+            reviews:Mutex::default(), support_reviews:Mutex::default() })
     }
 
     pub fn handle(&self, action: &str, payload: Value, store: &Store) -> Result<Value, String> {

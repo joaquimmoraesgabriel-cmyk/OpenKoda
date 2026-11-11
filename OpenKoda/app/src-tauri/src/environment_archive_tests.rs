@@ -11,6 +11,7 @@ struct Laboratory {
     lose_stop: AtomicBool,
     bad_clone: AtomicBool,
     raw: AtomicBool,
+    wrong_marker: AtomicBool,
     export_loses_stop: AtomicBool,
     remove_original_and_others: AtomicBool,
 }
@@ -18,8 +19,8 @@ fn response(stdout:String)->ProcessResult{
     ProcessResult{stdout,stderr:String::new(),code:0,timed_out:false,truncated:false}
 }
 impl Runner for Laboratory {
-    fn export_tar(&self, target: File, limit: u64) -> Result<(u64, String), String> {
-        self.calls.lock().unwrap().push(("WSL archive export".into(), vec![DISTRO.into()]));
+    fn export_tar(&self, distribution: &str, target: File, limit: u64) -> Result<(u64, String), String> {
+        self.calls.lock().unwrap().push(("WSL archive export".into(), vec![distribution.into()]));
         assert!(!self.running.lock().unwrap().contains(&DISTRO.to_string()));
         if self.export_loses_stop.load(Ordering::SeqCst) {
             self.running.lock().unwrap().push(DISTRO.to_string());
@@ -39,7 +40,11 @@ impl Runner for Laboratory {
                 json!(inventory).to_string()
             }
             "WSL archive spool inventory"=>json!({"rawCaptures":u32::from(self.raw.load(Ordering::SeqCst)),"terminalCaptures":1,"sessionRecords":3}).to_string(),
-            "probe"=>json!({"ok":true,"result":{"maintenance":null,"uid":1000,"interopEnabled":false,"windowsMounts":[]}}).to_string(),
+            "probe"=>{
+                let wire:Value=serde_json::from_slice(spec.input.as_deref().unwrap()).unwrap();
+                let id=if self.wrong_marker.load(Ordering::SeqCst){Value::Null}else{wire["identity"].clone()};
+                json!({"ok":true,"result":{"environmentId":id,"user":"openkoda","maintenance":null,"uid":1000,"interopEnabled":false,"windowsMounts":[]}}).to_string()
+            }
             "WSL archive stop source"|"WSL archive stop copy"=>{
                 assert_eq!(spec.args[0],"--terminate");
                 assert_ne!(spec.args[1],"PersonalLinux");
@@ -57,6 +62,12 @@ impl Runner for Laboratory {
                 assert!(fs::metadata(&spec.args[3]).unwrap().len()>8);
                 self.clone.lock().unwrap().replace(Registration{name:spec.args[1].clone(),guid:"new-registration".into(),base_path:if self.bad_clone.load(Ordering::SeqCst){"C:\\personal".into()}else{spec.args[2].clone()},version:2});
                 String::new()
+            }
+            "WSL activation runtime check"=>{
+                assert_eq!(spec.args[0],"--distribution");
+                let id=spec.args[1].strip_prefix("OpenKoda-Recovery-").unwrap();
+                assert_eq!(&spec.args[2..4],["--user","openkoda"]);
+                return Ok(ProcessResult{stderr:"wsl: Failed to start the systemd user session for 'openkoda'. See journalctl for more details.".into(),..response(json!({"uid":1000,"user":"openkoda","marker":id}).to_string())})
             }
             "WSL archive new identity"=>{
                 assert_ne!(spec.args[1],DISTRO);
@@ -78,7 +89,7 @@ impl Fixture{
         fs::write(location.join("ext4.vhdx"),b"vhdxfileSYNTHETIC_DISK").unwrap();
         let source=Registration{guid:"owned".into(),name:DISTRO.into(),base_path:display_path(&location),version:2};
         let runner=Arc::new(Laboratory{source:source.clone(),clone:Mutex::new(None),calls:Mutex::new(Vec::new()),
-            running:Mutex::new(vec!["PersonalLinux".into(),DISTRO.into()]),lose_stop:AtomicBool::new(false),bad_clone:AtomicBool::new(false),raw:AtomicBool::new(false),export_loses_stop:AtomicBool::new(false),remove_original_and_others:AtomicBool::new(false)});
+            running:Mutex::new(vec!["PersonalLinux".into(),DISTRO.into()]),lose_stop:AtomicBool::new(false),bad_clone:AtomicBool::new(false),raw:AtomicBool::new(false),wrong_marker:AtomicBool::new(false),export_loses_stop:AtomicBool::new(false),remove_original_and_others:AtomicBool::new(false)});
         let manager=EnvironmentManager::with_runner(root,runner.clone()).unwrap();
         let mut state=manager.state().unwrap();state.phase="ready".into();state.registration=Some(source);manager.save_state(&state).unwrap();
         Self{temp,manager,runner}
@@ -105,7 +116,7 @@ fn archive_restores_a_verified_copy_with_new_marker_and_inactive_registration(){
     assert!(f.approve("environment.archive.import",&restore_plan).is_err());
     assert_eq!(f.calls("WSL archive import"),1);assert_eq!(f.calls("WSL archive new identity"),1);
     assert_eq!(&*f.runner.running.lock().unwrap(),&["PersonalLinux".to_string()]);
-    assert_eq!(f.manager.archives.all().unwrap().len(),2);
+    assert_eq!(f.manager.archives.page(None).unwrap().0.len(),2);
 }
 #[test]
 fn changed_archive_refuses_import_before_any_wsl_process(){
@@ -131,7 +142,7 @@ fn archive_rechecks_the_registration_before_entering_a_restored_clone(){
     let f=Fixture::new();let export=f.export();let plan=f.import_plan(&export);f.runner.bad_clone.store(true,Ordering::SeqCst);
     assert!(f.approve("environment.archive.import",&plan).is_err());
     assert_eq!(f.calls("WSL archive new identity"),0);assert_eq!(f.calls("WSL archive stop copy"),0);
-    assert_eq!(f.manager.archives.all().unwrap()[0].status,"copy_unknown");assert_eq!(f.manager.state().unwrap().phase,"ready");
+    assert_eq!(f.manager.archives.page(None).unwrap().0[0].status,"copy_unknown");assert_eq!(f.manager.state().unwrap().phase,"ready");
 }
 #[test]
 fn preexisting_archive_target_and_caller_paths_are_refused(){
@@ -186,7 +197,7 @@ fn raw_bytes_appearing_after_preview_stop_export_before_source_termination(){
     let f=Fixture::new();let plan=f.prepare();assert_eq!(plan["payload"]["backup"]["spool"]["terminalCaptures"],1);
     f.runner.raw.store(true,Ordering::SeqCst);
     assert!(f.approve("environment.archive.export",&plan).unwrap_err().contains("retenção"));
-    assert_eq!(f.calls("WSL archive stop source"),0);assert!(f.manager.archives.all().unwrap().is_empty());
+    assert_eq!(f.calls("WSL archive stop source"),0);assert!(f.manager.archives.page(None).unwrap().0.is_empty());
 }
 
 #[test]
@@ -214,6 +225,121 @@ fn tar_export_interrupted_while_source_is_running_requires_stop_inspection() {
     f.runner.export_loses_stop.store(true,Ordering::SeqCst);
     assert!(f.approve("environment.archive.export",&review).is_err());
     assert!(f.manager.has_unresolved_maintenance().unwrap());
-    assert_eq!(f.manager.archives.all().unwrap()[0].status,"stop_unknown");
+    assert_eq!(f.manager.archives.page(None).unwrap().0[0].status,"stop_unknown");
     assert_eq!(f.calls("WSL archive stop source"),1);
+}
+
+#[test]
+fn archived_attempts_are_pageable_and_do_not_displace_a_verified_restore() {
+    let f = Fixture::new();
+    let export = f.export();
+    let original = export["operation"]["backup"]["id"].as_str().unwrap();
+    let mut filler = export.clone();
+    filler["status"] = json!("incomplete_copy");
+    let db = f.manager.archives.db().unwrap();
+    for _ in 0..PAGE_SIZE {
+        let id = Uuid::new_v4().to_string();
+        filler["operation"]["backup"]["id"] = json!(id);
+        db.execute("INSERT INTO archive_ops(id,data) VALUES(?1,?2)", params![id,filler.to_string()]).unwrap();
+    }
+    drop(db);
+    let list = |args| f.manager.handle("environment.archive.list", args);
+    let first = list(json!({})).unwrap();
+    assert_eq!(first["records"].as_array().unwrap().len(), PAGE_SIZE);
+    let plan = f.import_plan(&export);
+    assert_eq!(f.approve("environment.archive.import", &plan).unwrap()["status"], "inactive");
+    let next = list(json!({"beforeId": first["nextBeforeId"]})).unwrap();
+    assert_eq!(next["records"].as_array().unwrap().len(), 1);
+    assert_eq!(next["records"][0]["operation"]["backup"]["id"], original);
+    assert!(next["nextBeforeId"].is_null());
+    assert!(list(json!({"beforeId":Uuid::new_v4().to_string()})).is_err());
+    assert!(list(json!({"beforeId":"invalid"})).is_err());
+    // An interrupted export older than the visible page still blocks another
+    // stop. Reopening the journal reconciles it without touching the source.
+    let mut interrupted = f.manager.archives.get(original).unwrap();
+    interrupted.status = "exporting_source".into();
+    f.manager.archives.save(&mut interrupted).unwrap();
+    let reopened = ArchiveStore::open(f.temp.path()).unwrap();
+    assert_eq!(reopened.get(original).unwrap().status, "stop_unknown");
+    assert!(reopened.stop_pending().unwrap());
+    assert!(f.manager.handle("environment.archive.exportPlan", json!({})).is_err());
+}
+
+#[test]
+fn switch_revalidates_the_clone_and_binds_executor_and_refuses_old_grants_after_restart() {
+    let f=Fixture::new();
+    let original=f.manager.state().unwrap();
+    let exported=f.export();let import=f.import_plan(&exported);
+    let clone=f.approve("environment.archive.import",&import).unwrap();
+    let id=clone["operation"]["restore"]["id"].as_str().unwrap();
+    let name=clone["registration"]["name"].as_str().unwrap();
+    let call_count=f.calls("probe");
+    let plan=f.manager.handle("environment.archive.activatePlan",json!({"id":id})).unwrap();
+    assert_eq!(call_count,f.calls("probe"));
+    assert_eq!(f.manager.launch_distribution(&original.id).unwrap(),DISTRO);
+    assert_eq!(plan["payload"]["targetDistribution"],name);
+    let activated=f.approve("environment.archive.activate",&plan).unwrap();
+    assert_eq!(activated["environmentId"],id);
+    assert!(f.approve("environment.archive.activate",&plan).is_err());
+    assert!(f.manager.launch_distribution(&original.id).is_err());
+    assert_eq!(f.manager.data_review_identity().unwrap(),id);
+    let reopened=EnvironmentManager::with_runner(f.temp.path().into(),f.runner.clone()).unwrap();
+    assert_eq!(reopened.launch_distribution(id).unwrap(),name);
+    assert!(reopened.launch_distribution(&original.id).is_err());
+    let status=reopened.handle("environment.diagnose",json!({})).unwrap();
+    assert_eq!(status["distro"],name);assert_eq!(status["environmentId"],id);assert_eq!(status["status"],"ready");
+    let calls=f.runner.calls.lock().unwrap();
+    assert!(calls.iter().rev().find(|(purpose,_)|purpose=="probe").unwrap().1.windows(2).any(|p|p==["--distribution",name]));
+    assert!(!calls.iter().any(|(_,a)|a.iter().any(|v|v=="--set-default"||v=="--unregister")));drop(calls);
+    let rows=reopened.handle("environment.archive.list",json!({})).unwrap();
+    assert!(rows["records"].as_array().unwrap().iter().any(|r|r["activationState"]=="active"));
+    assert_eq!(reopened.inventory().unwrap()[0],original.registration.unwrap());
+}
+
+#[test]
+fn a_different_clone_marker_blocks_switch_and_preserves_previous_executor() {
+    let f=Fixture::new();let original=f.manager.state().unwrap();
+    let exported=f.export();let restored=f.approve("environment.archive.import",&f.import_plan(&exported)).unwrap();
+    let id=restored["operation"]["restore"]["id"].as_str().unwrap();
+    let plan=f.manager.handle("environment.archive.activatePlan",json!({"id":id})).unwrap();
+    f.runner.wrong_marker.store(true,Ordering::SeqCst);
+    assert!(f.approve("environment.archive.activate",&plan).is_err());
+    assert_eq!(f.manager.launch_distribution(&original.id).unwrap(),DISTRO);
+    assert!(f.manager.launch_distribution(id).is_err());
+}
+
+#[test]
+fn activating_after_loss_uses_only_the_receipt_and_the_recovery_registration() {
+    let f=Fixture::new();let saved=f.export();
+    f.runner.remove_original_and_others.store(true,Ordering::SeqCst);f.runner.running.lock().unwrap().clear();
+    let mut source=f.manager.state().unwrap();source.phase="degraded".into();f.manager.save_state(&source).unwrap();
+    let restored=f.approve("environment.archive.import",&f.import_plan(&saved)).unwrap();
+    let id=restored["operation"]["restore"]["id"].as_str().unwrap();
+    let review=f.manager.handle("environment.archive.activatePlan",json!({"id":id})).unwrap();
+    assert_eq!(f.approve("environment.archive.activate",&review).unwrap()["environmentId"],id);
+    assert!(f.manager.launch_distribution(&source.id).is_err());
+}
+
+#[test]
+fn environment_migration_preserves_v0_state_and_rejects_unknown_versions_without_writing() {
+    let f=Fixture::new();let existing=f.manager.state().unwrap();
+    let dir=tempfile::tempdir().unwrap();let path=dir.path().join("environment.sqlite3");
+    let db=Connection::open(&path).unwrap();
+    db.execute_batch("CREATE TABLE environment_state(id INTEGER PRIMARY KEY CHECK(id=1), data TEXT NOT NULL);").unwrap();
+    db.execute("INSERT INTO environment_state VALUES(1,?1)",[serde_json::to_string(&existing).unwrap()]).unwrap();
+    drop(db);
+    let migrated=EnvironmentManager::with_runner(dir.path().into(),f.runner.clone()).unwrap();assert_eq!(migrated.state().unwrap().id,existing.id);drop(migrated);
+    let db=Connection::open(&path).unwrap();let version:i64=db.pragma_query_value(None,"user_version",|r|r.get(0)).unwrap();
+    assert_eq!(version,1);db.pragma_update(None,"user_version",2).unwrap();drop(db);
+    let before=fs::read(&path).unwrap();assert!(EnvironmentManager::with_runner(dir.path().into(),f.runner.clone()).is_err());
+    assert_eq!(before,fs::read(&path).unwrap());
+}
+
+
+#[test]
+fn unrelated_wsl_stderr_still_blocks_an_unprivileged_archive_response(){
+    let notice="wsl: Failed to start the systemd user session for 'openkoda'. See journalctl for more details.";
+    assert!(user_stderr_ok(notice));assert!(user_stderr_ok(""));
+    assert!(!user_stderr_ok(&format!("{notice}\naccess denied")));
+    assert!(!user_stderr_ok(&notice.replace("openkoda","root")));
 }

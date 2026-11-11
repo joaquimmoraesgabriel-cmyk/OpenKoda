@@ -1,4 +1,4 @@
-// OpenKoda 0.1.8 native IPC fixture. All application data and HTTP peers are owned
+// OpenKoda 0.1.9 native IPC fixture. All application data and HTTP peers are owned
 // by this run. The exact coordinator-reviewed custom-protocol binary is required.
 // No provider, credential, WSL, personal profile, or existing target is used.
 import { chromium, expect } from '@playwright/test';
@@ -15,21 +15,21 @@ import { authorizeData, reviewedBackup } from './data-fixture.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
-if (args.length !== 2 || args[0] !== '--expected-sha256' || !/^[a-f0-9]{64}$/.test(args[1])) throw new Error('Use --expected-sha256 <coordinator-reviewed 0.1.8 custom-protocol debug hash>.');
+if (args.length !== 2 || args[0] !== '--expected-sha256' || !/^[a-f0-9]{64}$/.test(args[1])) throw new Error('Use --expected-sha256 <coordinator-reviewed 0.1.9 custom-protocol debug hash>.');
 if (process.platform !== 'win32') throw new Error('This fixture requires native Windows WebView2.');
 const hash = value => createHash('sha256').update(value).digest('hex');
 const binary = join(root, 'src-tauri', 'target', 'debug', 'openkoda.exe');
 const binaryBytes = await readFile(binary);
 if (await realpath(binary) !== binary || hash(binaryBytes) !== args[1]) throw new Error('Debug binary differs from the reviewed artifact.');
-const legacyRelease = join(root, 'releases', '0.1.7-local-20261110');
+const legacyRelease = join(root, 'releases', '0.1.8-local-20261110');
 const legacyManifest = JSON.parse((await readFile(join(legacyRelease, 'release.json'), 'utf8')).replace(/^\uFEFF/, ''));
 const legacyBinary = join(legacyRelease, 'openkoda-debug.exe');
-if (legacyManifest.version !== '0.1.7' || legacyManifest.schema !== 8 || await realpath(legacyBinary) !== legacyBinary || hash(await readFile(legacyBinary)) !== legacyManifest.nativeTestBinarySha256) throw new Error('Preserved 0.1.7 artifact differs from its release manifest.');
+if (legacyManifest.version !== '0.1.8' || legacyManifest.schema !== 8 || await realpath(legacyBinary) !== legacyBinary || hash(await readFile(legacyBinary)) !== legacyManifest.nativeTestBinarySha256) throw new Error('Preserved 0.1.8 artifact differs from its release manifest.');
 const directory = join(root, '.local', `native-workflow-${randomUUID()}`);
 const dataDirectory = join(directory, 'data');
 await mkdir(directory, { recursive: true });
 if (await realpath(directory) !== directory) throw new Error('Fixture directory must not redirect.');
-const result = { passed: false, directory, artifact: { version: '0.1.8', binary, sha256: args[1], bytes: binaryBytes.length, scriptSha256: hash(await readFile(fileURLToPath(import.meta.url))) }, records: [], limits: [
+const result = { passed: false, directory, artifact: { version: '0.1.9', binary, sha256: args[1], bytes: binaryBytes.length, scriptSha256: hash(await readFile(fileURLToPath(import.meta.url))) }, records: [], limits: [
   'Mutations use public native IPC. Read-only SQLite is restricted to this run and checks actual journals, capture bytes and hashes; it injects no authority.',
   'Only the owned loopback HTTP fixture and WebView2 CDP endpoint are contacted. No credential, provider, WSL, personal TXT or pre-existing profile is accessed.',
   'The fixture releases held responses explicitly. Cancellation confirms local completion; it does not undo a HEAD already received by the peer.',
@@ -87,6 +87,34 @@ async function assertNoForeignApplications() {
   });
   const parsed = output.trim() ? JSON.parse(output) : [], entries = Array.isArray(parsed) ? parsed : [parsed];
   if (entries.length) throw new Error('A pre-existing OpenKoda process is running; it has been preserved. Close it explicitly before this fixture.');
+}
+// CloseMainWindow posts the same WM_CLOSE as the native title-bar X. Limit it to this exact owned PID and image.
+async function requestOwnedWindowClose() {
+  expect(child.exitCode).toBeNull(); expect(child.signalCode).toBeNull();
+  const command = [
+    "$ErrorActionPreference='Stop'",
+    "$app=Get-Process -Id ([int]$env:OPENKODA_FIXTURE_PID)",
+    "if($app.Path -ne $env:OPENKODA_FIXTURE_IMAGE -or $app.MainWindowHandle -eq 0){throw 'Unexpected process or window.'}",
+    "if(-not $app.CloseMainWindow()){throw 'WM_CLOSE request rejected.'}",
+  ].join(';');
+  await new Promise((ok,bad)=>{
+    const proc=spawn('powershell.exe',['-NoProfile','-NonInteractive','-Command',command],{
+      windowsHide:true,stdio:['ignore','ignore','pipe'],signal:AbortSignal.timeout(8000),
+      env:{...process.env,OPENKODA_FIXTURE_PID:String(child.pid),OPENKODA_FIXTURE_IMAGE:binary},
+    });
+    let err='';proc.stderr.on('data',chunk=>{err+=chunk;});
+    proc.once('error',bad);proc.once('exit',(code,signal)=>code===0&&!signal?ok():bad(new Error('Owned WM_CLOSE failed: '+err)));
+  });
+}
+async function checkBusyWindowClose(reviewQueue) {
+  await requestOwnedWindowClose();
+  const dialog=page.getByRole('dialog',{name:'Há uma operação em andamento'});
+  await expect(dialog).toBeVisible({timeout:5000});
+  await expect(dialog.getByRole('button',{name:'Manter aberto'})).toBeFocused();
+  await dialog.getByRole('button',{name:reviewQueue?'Revisar plano e fila':'Manter aberto'}).click();
+  await expect(dialog).toHaveCount(0);
+  if(reviewQueue)await expect(page.getByRole('button',{name:'Plano e fila',exact:true})).toHaveAttribute('aria-current','page');
+  expect(child.exitCode).toBeNull();expect(child.signalCode).toBeNull();
 }
 async function unusedPort() {
   const server = tcpServer(); await new Promise((ok, bad) => { server.once('error', bad); server.listen(0, '127.0.0.1', ok); });
@@ -155,7 +183,7 @@ try {
   await openApp(legacyBinary, legacyManifest.nativeTestBinarySha256);
   await gate('preserved-previous-release-creates-fixture', async () => {
     expect((await request('snapshot')).projects).toEqual([]);
-    legacyProject = await request('project.create', { name: 'Preserved 0.1.7 project', kind: 'web', target, description: 'Synthetic pre-upgrade metadata created through the preserved native IPC.' });
+    legacyProject = await request('project.create', { name: 'Preserved 0.1.8 project', kind: 'web', target, description: 'Synthetic pre-upgrade metadata created through the preserved native IPC.' });
     const db = new DatabaseSync(await plainOwned(join(dataDirectory, 'openkoda.sqlite3')), { readOnly: true });
     try {
       expect(db.prepare('PRAGMA user_version').get().user_version).toBe(8);
@@ -166,7 +194,7 @@ try {
     }
     finally { db.close(); }
     expect(traffic).toHaveLength(0);
-    return { version: '0.1.7', sha256: legacyManifest.nativeTestBinarySha256, schema: 8, projectId: legacyProject.id, coreSha256: legacyRawHash };
+    return { version: '0.1.8', sha256: legacyManifest.nativeTestBinarySha256, schema: 8, projectId: legacyProject.id, coreSha256: legacyRawHash };
   });
   await closeApp();
   await openApp();
@@ -179,7 +207,7 @@ try {
   await gate('native-dag-pure-plan-and-single-first-dispatch', async () => {
     expect((await request('snapshot')).projects).toEqual([legacyProject]);
     const project = await request('project.create', { name: 'Owned workflow fixture', kind: 'web', target, description: 'Loopback listener owned by native-workflow-smoke.mjs.' }); projectId = project.id;
-    assessmentId = (await reviewedAssessment(request, { projectId, title: 'Native workflow 0.1.8', kind: 'web', target, objective: 'Validate reviewed native DAG without provider or Linux.' }, ['http.headers.v1'])).id;
+    assessmentId = (await reviewedAssessment(request, { projectId, title: 'Native workflow 0.1.9', kind: 'web', target, objective: 'Validate reviewed native DAG without provider or Linux.' }, ['http.headers.v1'])).id;
     firstPlanCommit = await newPlan([native('a'), { key: 'b', existingNodeId: null, purpose: 'Review the observation identity.', expectedObservation: 'An explicit human decision.', dependsOnKeys: ['a'], intent: { kind: 'human_review', inputs: [{ kind: 'dependency_output', nodeKey: 'a', outputRole: 'evidence' }] } }, native('c', ['b'])]);
     expect(traffic).toHaveLength(0); expect((await audit()).state.executions).toEqual([]); expect((await plan()).jobs[1].canPrepare).toBe(false);
     const a = await prepare(0); expect(traffic).toHaveLength(0);
@@ -198,6 +226,8 @@ try {
     const input = { job: jobRef(human.result.value.job), revision: human.revision, review: human.result.value.review, inputDigest: human.result.value.inputDigest, decision: 'continue', note: 'Reviewed the owned synthetic observation, without validating a finding.', idempotencyKey: randomUUID(), acknowledgeReview: true };
     const recorded = await request('work.review.commit', input); expect((await request('work.review.commit', input)).replayed).toBe(true); expect(recorded.replayed).toBe(false); expect(traffic).toHaveLength(1);
     const c = await prepare(2); const queued = await enqueue(c); await expect.poll(() => held.has(2), { timeout: 15000 }).toBe(true); await awaitJob(c.result.value.job.id, 'running');
+    await checkBusyWindowClose(false);
+    expect((await plan()).jobs[2].state).toBe('running');
     const active = await plan(); await request('work.pause', { planId: active.id, expectedGeneration: active.generation, idempotencyKey: randomUUID(), acknowledgePause: true });
     const paused = await plan(); expect(paused.control).toBe('paused'); expect(paused.jobs[2].state).toBe('running'); held.get(2)(); await awaitJob(c.result.value.job.id, 'completed');
     expect((await plan()).control).toBe('paused'); expect((await plan()).outcome).toBe('completed'); expect(traffic).toHaveLength(2);
@@ -210,6 +240,8 @@ try {
     const previous = await plan(); const historical = previous.revision;
     await newPlan([native('cancel')], previous); const p = await prepare(0), q = await enqueue(p);
     await expect.poll(() => held.has(3), { timeout: 15000 }).toBe(true); const running = await awaitJob(p.result.value.job.id, 'running');
+    await checkBusyWindowClose(true);
+    expect((await plan()).jobs[0].state).toBe('running');
     const input = { job: jobRef(running), idempotencyKey: randomUUID(), acknowledgeCancel: true };
     const canceled = await request('work.cancel', input); expect(canceled.value.terminationConfirmed).toBe(false); expect(canceled.value.job.state).toBe('cancel_requested');
     held.get(3)(); await awaitJob(running.id, 'canceled'); expect((await request('work.cancel', input)).replayed).toBe(true); expect((await request('work.operation.enqueue', q.payload)).replayed).toBe(true); expect(traffic).toHaveLength(3);
@@ -272,6 +304,13 @@ try {
     const copy = await audit(await plainOwned(restored.path, dataDirectory)); expect(copy.schema).toBe(8); expect(copy.captures).toEqual(before.captures); expect(copy.revisions).toEqual(before.revisions); expect(copy.state.executions).toEqual(before.state.executions);
     expect(copy.heads.every(head => head.control === 'paused')).toBe(true); expect(copy.state.dataPolicies.every(policy => !policy.active)).toBe(true); expect(copy.leaseCount).toBe(0); expect(copy.requestCount).toBe(0); expect(copy.vaultCount).toBe(0); expect(traffic).toHaveLength(3);
     return { backupId: backup.backupId, restoredPath: restored.path, activated: false, exactCaptureHashes: copy.captures.map(item => item.sha256), policiesInactive: true, workPaused: true };
+  });
+  await gate('native-window-close-keeps-active-worker-and-exits-when-idle', async()=>{
+    // The two active WM_CLOSE paths above ran after enqueue had returned. Both effects completed through normal controls.
+    await requestOwnedWindowClose();
+    await expect.poll(()=>child.exitCode!==null||child.signalCode!==null,{timeout:15000}).toBe(true);
+    expect(child.exitCode).toBe(0);expect(child.signalCode).toBeNull();
+    return {activeCloseMethods:['keep-open','review-plan-and-queue'],idleClose:'WM_CLOSE',idleExitCode:child.exitCode};
   });
   expect(errors).toEqual([]); expect(traffic.every(item => item.method === 'HEAD' && item.url === '/fixture' && !item.authorization && !item.cookie)).toBe(true); result.passed = true;
 } catch (error) { failure = error; result.error = String(error); result.stack = error?.stack; }

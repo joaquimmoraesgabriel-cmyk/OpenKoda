@@ -84,6 +84,9 @@ impl KaliBridge {
         Ok(())
     }
     pub fn new(root:PathBuf)->Result<Self,String>{Self::with_launcher(root,Arc::new(SystemLauncher))}
+    pub(crate) fn with_environment(mut self,manager:Arc<crate::environment::EnvironmentManager>)->Self {
+        self.launcher=Arc::new(OwnedSystemLauncher(manager));self
+    }
     fn with_launcher(root:PathBuf,launcher:Arc<dyn Launcher>)->Result<Self,String>{
         fs::create_dir_all(&root).map_err(db_error)?;
         let db=Connection::open(root.join("kali-bridge.sqlite3")).map_err(db_error)?;
@@ -270,7 +273,13 @@ impl KaliBridge {
     }
 }
 
-trait Launcher:Send+Sync{fn launch(&self,run:&BridgeRun,cancel:&AtomicBool)->Result<Box<dyn Transport>,String>;}
+trait Launcher:Send+Sync {
+    fn launch(&self,run:&BridgeRun,cancel:&AtomicBool)->Result<Box<dyn Transport>,String>;
+    #[cfg(not(test))]
+    fn queued_scan_available(&self, environment_id:&str)->Result<bool,String>;
+    #[cfg(test)]
+    fn queued_scan_available(&self, _environment_id:&str)->Result<bool,String>{Ok(true)}
+}
 struct FinishOutcome {cleanup_confirmed:bool,tool_dispatched:bool,tool_reply:Option<Value>}
 #[derive(PartialEq,Eq)]
 enum ToolCallState {NotSent,Pending,Replied}
@@ -404,12 +413,33 @@ enum Frame{Message(Value),End,Error}
 type WriteTask=(Vec<u8>,mpsc::SyncSender<bool>);
 struct ProcessTransport{child:Child,writer:Option<mpsc::Sender<WriteTask>>,frames:mpsc::Receiver<Frame>,saw_closed:bool,tool_dispatched:bool}
 fn system_binary()->PathBuf{PathBuf::from(std::env::var_os("SystemRoot").unwrap_or_else(||"C:\\Windows".into())).join("System32/wsl.exe")}
-impl Launcher for SystemLauncher {
+struct OwnedSystemLauncher(Arc<crate::environment::EnvironmentManager>);
+impl Launcher for OwnedSystemLauncher {
+    fn queued_scan_available(&self, environment_id:&str)->Result<bool,String>{
+        self.0.queued_scan_available(environment_id)
+    }
     fn launch(&self,run:&BridgeRun,cancel:&AtomicBool)->Result<Box<dyn Transport>,String>{
+        let distribution=self.0.launch_distribution(&run.environment_id)?;
+        SystemLauncher::launch_in(&distribution,run,cancel)
+    }
+}
+
+impl Launcher for SystemLauncher {
+    #[cfg(not(test))]
+    fn queued_scan_available(&self, _environment_id:&str)->Result<bool,String>{
+        Err("O executor requer o vínculo gerido da instalação.".into())
+    }
+    fn launch(&self,run:&BridgeRun,cancel:&AtomicBool)->Result<Box<dyn Transport>,String>{
+        #[cfg(test)] {return Self::launch_in(crate::environment::DISTRO,run,cancel)}
+        #[cfg(not(test))] {let _=(run,cancel);Err("O executor requer o vínculo gerido da instalação.".into())}
+    }
+}
+impl SystemLauncher {
+    fn launch_in(distribution:&str,run:&BridgeRun,cancel:&AtomicBool)->Result<Box<dyn Transport>,String>{
         check_wait(Instant::now()+Duration::from_secs(1),cancel)?;
         let bootstrap=bootstrap(run)?;
         let mut command=Command::new(system_binary());
-        command.args(["--distribution","OpenKoda-Kali","--user","openkoda","--cd","/","--exec","/usr/bin/python3","-I","-c",BOOT,"--openkoda-session",&run.id,"--openkoda-deadline",&run.dispatch_before_unix_seconds.to_string()]).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).env_clear();
+        command.args(["--distribution",distribution,"--user","openkoda","--cd","/","--exec","/usr/bin/python3","-I","-c",BOOT,"--openkoda-session",&run.id,"--openkoda-deadline",&run.dispatch_before_unix_seconds.to_string()]).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).env_clear();
         for name in ["SystemRoot","WINDIR","USERPROFILE","LOCALAPPDATA","APPDATA","TEMP","TMP"]{if let Some(value)=std::env::var_os(name){command.env(name,value);}}
         command.env("PATH",system_binary().parent().ok_or("Caminho do WSL inválido.")?).env("WSLENV","");
         #[cfg(windows)]{use std::os::windows::process::CommandExt;command.creation_flags(0x08000000);}
