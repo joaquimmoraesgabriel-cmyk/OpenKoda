@@ -18,6 +18,7 @@ Settings: `{provider,endpoint,model,mode,theme,language,retentionDays,timeoutSec
 
 - `snapshot` -> Snapshot.
 - `project.create` payload `{name,kind,target,description}` -> Project; `project.archive` `{id}` -> `{ok:true}` (não perder histórico).
+- No aplicativo Windows, `project.pickTarget` recebe `{"selection":"folder"}` ou `{"selection":"file"}`. O diálogo pertence à janela principal e devolve o caminho escolhido, ou `null` ao cancelar. Registrar o caminho no projeto e autorizar a avaliação são ações posteriores.
 - `assessment.create` `{projectId,title,kind,target,objective}` -> Assessment draft. Escopo validado igual ao alvo do projeto nessa etapa.
 - `assessment.start` `{id}` -> bloqueado com motivo claro até executor pronto; nunca fingir execução.
 - `assessment.cancel` `{id}`, `assessment.pause` `{id}` -> Assessment; transições verificadas.

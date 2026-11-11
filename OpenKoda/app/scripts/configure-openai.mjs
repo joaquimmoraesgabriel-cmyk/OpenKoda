@@ -68,6 +68,7 @@ try {
   await page.reload();
   await expect(page.locator('main')).toHaveAttribute('aria-busy','false');
   await page.getByRole('button',{name:'Configurações',exact:true}).click();
+  await page.getByRole('button',{name:'IA e modelos',exact:true}).click();
   await expect(page.getByLabel('Modelo',{exact:true})).toHaveValue(model);
   await expect(page.getByText(/Conexão verificada/)).toBeVisible();
   await page.screenshot({path:join(directory,'connection-configured.png'),fullPage:true});

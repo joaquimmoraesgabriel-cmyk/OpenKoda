@@ -3,7 +3,7 @@ import type { ProjectTarget, ScopeTargetRef } from './combined-scope';
 import { dataReason } from './data-policy';
 import type { AssessmentScope, ScopeAdmission, ScopeReceipt, ScopeRef, ScopeRevision } from './scope';
 export type Kind = 'code' | 'web' | 'network' | 'files';
-export type View = 'assessments' | 'findings' | 'projects' | 'kali' | 'settings';
+export type View = 'overview' | 'assessments' | 'findings' | 'projects' | 'kali' | 'settings' | 'profile';
 export type AssessmentStatus = 'draft' | 'preparing' | 'planning' | 'awaiting_approval' | 'queued' | 'running' | 'pausing' | 'paused' | 'validating' | 'completed' | 'partial' | 'canceling' | 'canceled' | 'blocked' | 'failed' | 'unknown';
 export interface Project { additionalTargets?:ProjectTarget[]; id: string; name: string; kind: Kind; target: string; description: string; createdAt: string; archived?: boolean }
 export interface ActivityEvent { id: string; at: string; message: string; kind: string }

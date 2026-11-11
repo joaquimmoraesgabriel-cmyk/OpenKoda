@@ -2,7 +2,6 @@ import { Children, ReactElement, ReactNode, cloneElement, isValidElement, useId 
 import { ChevronDown, Search, ShieldCheck, Info, AlertTriangle } from 'lucide-react';
 import { AssessmentStatus, statusLabels } from '../types';
 
-export function Brand({small=false}:{small?:boolean}) {return <span className={`brand-mark ${small?'small':''}`} aria-hidden="true">K</span>;}
 export function SearchBox({value,onChange,label}:{value:string;onChange:(v:string)=>void;label:string}) {return <div className="search-box"><Search size={18}/><input type="search" aria-label={label} placeholder={label} value={value} onChange={e=>onChange(e.target.value)}/></div>;}
 export function Empty({title,description,action,icon}:{title:string;description:string;action?:ReactNode;icon?:ReactNode}) {return <div className="empty-state"><div className="empty-icon">{icon??<ShieldCheck size={30} strokeWidth={1.5}/>}</div><h2>{title}</h2><p>{description}</p>{action}</div>;}
 export function Notice({children,tone='info'}:{children:ReactNode;tone?:'info'|'warning'}) {return <div className={`notice ${tone}`}>{tone==='warning'?<AlertTriangle size={19}/>:<Info size={19}/>}<div>{children}</div></div>;}

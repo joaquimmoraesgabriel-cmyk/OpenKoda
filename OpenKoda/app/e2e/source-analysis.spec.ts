@@ -1,3 +1,4 @@
+import { openAssessmentList } from './navigation';
 import { installScopeFixture } from './scope-fixture';
 import { Page } from '@playwright/test';
 import { test, expect } from './fixtures';
@@ -40,7 +41,7 @@ async function fixture(page:Page,mode='success'){
       throw new Error('Ação não prevista no contrato de análise: '+action);
     }};
   },{mode});
-  await page.goto('/');await page.getByText('Análise local de contrato',{exact:true}).click();
+  await page.goto('/');await openAssessmentList(page);await page.getByText('Análise local de contrato',{exact:true}).click();
 }
 async function calls(page:Page,action:string){return page.evaluate(name=>(window as unknown as {__sourceCalls:{action:string;payload:Record<string,unknown>}[]}).__sourceCalls.filter(call=>call.action===name),action);}
 async function prepareAndRun(page:Page){

@@ -1,3 +1,4 @@
+import { openAssessmentList } from './navigation';
 import { chooseAiData, reviewKaliData } from './data-fixture';
 import { installScopeFixture } from './scope-fixture';
 import { Page } from '@playwright/test';
@@ -52,7 +53,7 @@ async function fixture(page:Page,mode='source'){
       throw new Error('Ação inesperada no contrato de sugestão: '+action);
     }};
   },{mode});
-  await page.goto('/');await page.getByText('Avaliação para sugestão',{exact:true}).click();await page.locator('.ai-operation-proposal>summary').click();
+  await page.goto('/');await openAssessmentList(page);await page.getByText('Avaliação para sugestão',{exact:true}).click();await page.locator('.ai-operation-proposal>summary').click();
 }
 async function calls(page:Page,action:string){return page.evaluate(name=>(window as unknown as {__proposalCalls:{action:string;payload:Record<string,unknown>}[]}).__proposalCalls.filter(call=>call.action===name),action);}
 const consent='Autorizo enviar este contexto, objetivo e opções ao modelo e provedor exibidos para receber uma sugestão sem execução.';
@@ -100,5 +101,5 @@ test('sugestão Kali exige evidência elegível e encaminha sem seleção ou tra
 });
 
 test('prévia da sugestão não oferece envio ao provedor ou preparação de operações',async({page})=>{
-  await page.goto('/');await page.evaluate(async()=>{const moduleUrl='/src/api.ts';const {request}=await import(moduleUrl);const p=await request('project.create',{name:'Prévia de sugestão',kind:'code',target:'D:/Fixture/preview',description:'Fixture'});await request('assessment.create',{projectId:p.id,title:'Sugestão indisponível na prévia',kind:p.kind,target:p.target,objective:'Verificar bloqueio.'});});await page.reload();await page.getByText('Sugestão indisponível na prévia',{exact:true}).click();await page.locator('.ai-operation-proposal>summary').click();await expect(page.locator('.ai-operation-proposal')).toContainText('A prévia não envia contexto à IA nem prepara operações');await expect(page.getByRole('button',{name:'Solicitar sugestão revisada',exact:true})).toHaveCount(0);
+  await page.goto('/');await page.evaluate(async()=>{const moduleUrl='/src/api.ts';const {request}=await import(moduleUrl);const p=await request('project.create',{name:'Prévia de sugestão',kind:'code',target:'D:/Fixture/preview',description:'Fixture'});await request('assessment.create',{projectId:p.id,title:'Sugestão indisponível na prévia',kind:p.kind,target:p.target,objective:'Verificar bloqueio.'});});await page.reload();await openAssessmentList(page);await page.getByText('Sugestão indisponível na prévia',{exact:true}).click();await page.locator('.ai-operation-proposal>summary').click();await expect(page.locator('.ai-operation-proposal')).toContainText('A prévia não envia contexto à IA nem prepara operações');await expect(page.getByRole('button',{name:'Solicitar sugestão revisada',exact:true})).toHaveCount(0);
 });

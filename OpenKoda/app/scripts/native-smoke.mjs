@@ -1,5 +1,6 @@
 import { chromium, expect } from '@playwright/test';
-import { spawn } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
+import { promisify } from 'node:util';
 import { createServer } from 'node:net';
 import { createReadStream } from 'node:fs';
 import { mkdir, readFile, writeFile, access, stat, rename } from 'node:fs/promises';
@@ -416,8 +417,27 @@ try {
     await page.getByRole('button', { name: 'Projetos', exact: true }).click();
     await page.getByRole('button', { name: 'Adicionar projeto', exact: true }).click();
     await page.getByLabel('Nome do projeto', { exact: true }).fill('Laboratório nativo isolado');
+    async function chooseTarget(selection, path) {
+      const label = selection === 'folder' ? 'Escolher pasta' : 'Escolher arquivo';
+      const args = ['-NoProfile', '-NonInteractive', '-STA', '-File', join(appRoot, 'scripts', 'test-project-picker-dialog.ps1'),
+        '-AppProcessId', String(child.pid), '-Selection', selection];
+      if (path) args.push('-FixturePath', path);
+      await Promise.all([
+        promisify(execFile)('powershell.exe', args, { windowsHide: true, timeout: 30_000 }),
+        page.getByRole('button', { name: label, exact: true }).click(),
+      ]);
+      await expect(page.getByLabel('Alvo', { exact: true })).toBeEnabled();
+    }
+    const pathField = page.getByLabel('Alvo', { exact: true });
+    const fixtureFile = join(fixtureDirectory, 'sample.ts');
+    await page.getByLabel('Modalidade', { exact: true }).selectOption('files');
+    await chooseTarget('file', fixtureFile);
+    await expect(pathField).toHaveValue(fixtureFile);
+    await chooseTarget('folder');
+    await expect(pathField).toHaveValue(fixtureFile);
     await page.getByLabel('Modalidade', { exact: true }).selectOption('code');
-    await page.getByLabel('Alvo', { exact: true }).fill(fixtureDirectory);
+    await chooseTarget('folder', fixtureDirectory);
+    await expect(pathField).toHaveValue(fixtureDirectory);
     await page.getByLabel('Descrição', { exact: true }).fill('Somente arquivos sintéticos criados por este teste.');
     await page.getByRole('button', { name: 'Criar projeto', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Laboratório nativo isolado', exact: true })).toBeVisible();
@@ -1183,6 +1203,7 @@ try {
     return { directory: folder, evidenceExported: true, partial: true };
   });
   await gate('E5-backup-recovery', 'Verified backup stages a separate valid SQLite copy without replacing live data', async () => {
+    await openProjectsAndWaitForIpc();
     backup = await fixtureBackup(); expect(backup.verified).toBe(true);
     baseline = await request('snapshot');
     expect((await request('backup.list')).backups.some(value => value.id === backup.id)).toBe(true);
@@ -1241,7 +1262,7 @@ try {
       }
     } finally { purgeDb.close(); }
     await page.getByRole('button', { name: 'Configurações', exact: true }).click();
-    await page.getByRole('button', { name: 'Dados e privacidade', exact: true }).click();
+    await page.getByRole('button', { name: 'Backup e recuperação', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Verificar backup', exact: true })).toBeVisible();
     await screenshot('07-native-backup.png');
     return { backupId: backup.id, restoredDirectory, activated: false };
@@ -1323,6 +1344,7 @@ try {
     const aiJournal = new DatabaseSync(join(dataDirectory, 'assistant.sqlite3'), { readOnly: true });
     try { expect(aiJournal.prepare('SELECT count(*) AS count FROM requests').get().count).toBe(0); }
     finally { aiJournal.close(); }
+    await page.getByRole('navigation', { name: 'Navegação principal' }).getByRole('button', { name: 'Avaliações', exact: true }).click();
     await page.getByText('Avaliação nativa integrada', { exact: true }).first().click();
     await expect(page.locator('.detail-heading .status')).toHaveText('Parcial');
     await screenshot('08-native-restarted.png'); expect(pageErrors).toEqual([]);

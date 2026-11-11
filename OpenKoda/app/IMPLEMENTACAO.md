@@ -1,5 +1,9 @@
 # Etapas e evidências da construção
 
+**0.1.13 local.** A Visão geral usa os projetos e as avaliações da instalação. A lateral fixa dá acesso ao Perfil e às Configurações durante a rolagem. O seletor do Windows devolve o alvo ao formulário e permite cancelar sem substituir o caminho anterior. O teste nativo escolheu um arquivo, cancelou outra seleção e criou o projeto a partir de uma pasta. [Como usar](README.md)
+
+Passaram 266 testes no Edge, 68 testes unitários da interface e 593 testes Rust, incluindo conectividade do Windows e execução no Kali dedicado. O instalador local x64 passou por instalação, substituição pela mesma versão, duas aberturas e desinstalação. O teste conferiu que os dados persistidos foram preservados.
+
 <!-- local-0.1.12 -->
 **0.1.12 local.** A criação de rascunhos e de avaliações com escopo revisado foi testada com perda de resposta, concorrência e reabertura. A atualização da 0.1.11 preservou o projeto sintético. [Resultados](docs/RETOMADA-0.1.12.md)
 

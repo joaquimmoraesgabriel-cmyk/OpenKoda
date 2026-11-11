@@ -78,7 +78,7 @@ async function retentionFixture(page:Page,mode='success'){
       throw new Error('Ação não prevista no contrato de retenção: '+action);
     }};
   },{mode});
-  await page.goto('/');await page.getByRole('button',{name:'Configurações',exact:true}).click();await page.getByRole('button',{name:'Dados e privacidade',exact:true}).click();
+  await page.goto('/');await page.getByRole('button',{name:'Configurações',exact:true}).click();await page.getByRole('button',{name:'Armazenamento',exact:true}).click();
   await expect(page.locator('.retention').getByText('Backup do laboratório',{exact:true})).toBeVisible();
 }
 async function calls(page:Page,action:string){return page.evaluate(name=>(window as unknown as {__retentionCalls:{action:string;payload:Record<string,unknown>}[]}).__retentionCalls.filter(call=>call.action===name),action);}

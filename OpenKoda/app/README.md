@@ -1,5 +1,11 @@
 # OpenKoda desktop
 
+**0.1.13 para Windows x64.** A Visão geral reúne a atividade das avaliações, as revisões pendentes e os projetos recentes. A barra lateral permanece acessível durante a rolagem. **Perfil** mostra os dados da área de trabalho deste dispositivo. [Instalador local sem assinatura](releases/0.1.13-local-20261111/OpenKoda_0.1.13_x64-setup.exe)
+
+Em **Projetos → Novo projeto**, use **Escolher pasta** para apontar para o código no computador. Projetos da modalidade **Arquivos** também permitem escolher um arquivo individual. A modalidade Web/API recebe uma URL e a de rede recebe o endereço autorizado.
+
+Em **Configurações → Aparência**, escolha o tema, o tamanho da interface, a densidade e o movimento. Use **Salvar alterações** para aplicar as escolhas. A conexão e a credencial ficam em **IA e modelos**. Os limites e o consumo ficam em **Uso e orçamento**. A área de trabalho tem páginas próprias para privacidade, armazenamento e recuperação.
+
 <!-- local-0.1.12 -->
 **0.1.12 local para Windows x64.** O reenvio de uma avaliação de um alvo recupera o mesmo registro. [Guia de uso](docs/GUIA-0.1.12.md) · [Instalador local](releases/0.1.12-local-20261111/OpenKoda_0.1.12_x64-setup.exe) · [Validação](docs/RETOMADA-0.1.12.md)
 

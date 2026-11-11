@@ -5,7 +5,7 @@ import { Field, Notice } from './shared';
 import AiBudgetReview, { useBudgetReview } from './AiBudgetReview';
 
 interface ProviderStatus {hasApiKey:boolean;verified:boolean;checkedAt?:string;model:string;endpoint:string}
-export default function AiConnection({draft,dirty,change,action,busy}:{draft:Settings;dirty:boolean;change:<K extends keyof Settings>(key:K,value:Settings[K])=>void;action:Action;busy:boolean}) {
+export default function AiConnection({draft,dirty,change,action,busy}:{draft:Settings;dirty:boolean;change:(key:'provider'|'endpoint'|'model',value:string)=>void;action:Action;busy:boolean}) {
   const [status,setStatus]=useState<ProviderStatus>();
   const [key,setKey]=useState(''); const [models,setModels]=useState<string[]>([]);
   const [message,setMessage]=useState(''); const [pending,setPending]=useState(false);

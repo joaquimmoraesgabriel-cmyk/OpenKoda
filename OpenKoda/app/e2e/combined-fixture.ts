@@ -1,3 +1,4 @@
+import { openAssessmentList } from './navigation';
 import type { Page } from '@playwright/test';
 import { installScopeFixture } from './scope-fixture';
 
@@ -71,6 +72,6 @@ export async function installCombinedFixture(page:Page,mode='normal'){
    throw new Error('Unplanned combined fixture action: '+action);
   }};
  },{mode});
- await page.goto('/');await page.getByText('Avaliação combinada',{exact:true}).click();
+ await page.goto('/');await openAssessmentList(page);await page.getByText('Avaliação combinada',{exact:true}).click();
 }
 export async function combinedCalls(page:Page,action:string){return page.evaluate(name=>(window as any).__combinedCalls.filter((c:any)=>c.action===name),action);}

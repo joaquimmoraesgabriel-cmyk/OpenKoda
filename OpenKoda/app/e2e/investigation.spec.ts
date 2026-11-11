@@ -1,3 +1,4 @@
+import { openAssessmentList } from './navigation';
 import { chooseAiData, reviewKaliData } from './data-fixture';
 import { installScopeFixture } from './scope-fixture';
 import { Page } from '@playwright/test';
@@ -52,7 +53,7 @@ async function fixture(page:Page,mode='success'){
       throw new Error('Ação não prevista na investigação de teste: '+action);
     }};
   },{mode});
-  await page.goto('/');await page.getByText('Investigação de contrato',{exact:true}).click();
+  await page.goto('/');await openAssessmentList(page);await page.getByText('Investigação de contrato',{exact:true}).click();
   await page.locator('summary').filter({hasText:/^Perspectivas independentes de IA$/}).click();
   await expect(page.locator('.ai-investigation')).toBeVisible();
 }
@@ -132,7 +133,7 @@ test('investigação com consumo desconhecido não repete chamada e exige reconc
 
 test('prévia da investigação não oferece envio de contexto ao provedor',async({page})=>{
   await page.goto('/');await page.evaluate(async()=>{const path='/src/api.ts';const {request}=await import(path);const project=await request('project.create',{name:'Projeto de prévia',kind:'files',target:'D:/Preview',description:''});await request('assessment.create',{projectId:project.id,title:'Perspectivas na prévia',kind:project.kind,target:project.target,objective:'Verificar limites.'});});
-  await page.reload();await page.getByText('Perspectivas na prévia',{exact:true}).click();await page.locator('summary').filter({hasText:/^Perspectivas independentes de IA$/}).click();
+  await page.reload();await openAssessmentList(page);await page.getByText('Perspectivas na prévia',{exact:true}).click();await page.locator('summary').filter({hasText:/^Perspectivas independentes de IA$/}).click();
   await expect(page.getByText('A investigação por perspectivas está disponível no aplicativo desktop. A prévia não envia contexto à IA nem executa ferramentas.',{exact:true})).toBeVisible();
   await expect(page.getByRole('button',{name:'Revisar contexto da investigação',exact:true})).toHaveCount(0);
 });

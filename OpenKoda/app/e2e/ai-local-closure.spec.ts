@@ -1,3 +1,4 @@
+import { openAssessmentList } from './navigation';
 import { test,expect } from './fixtures';
 import { installScopeFixture } from './scope-fixture';
 import { chooseAiData } from './data-fixture';
@@ -29,11 +30,11 @@ async function fixture(page:Page,mode='direct'){
    if(action==='work.aiLocalClosure.commit'){const prior=commands.get(p.idempotencyKey);if(prior){if(JSON.stringify(p)!==prior.payload)throw new Error('work_idempotency_conflict');return {...structuredClone(prior.result),replayed:true};}if(mode==='error')throw new Error('work_storage_unavailable');if(!prepared||p.review.id!==prepared.review.id||Date.parse(prepared.review.expiresAt)<=Date.now())throw new Error('work_review_expired');if(!p.acknowledgeRemoteUnknown||!p.acknowledgeNoReplay||!p.acknowledgeQueueInvalidation||!p.note.trim())throw new Error('work_approval_required');const value=makeValue();closures.push(value);plan.control='paused';plan.generation++;job.state='closed_locally';job.generation++;job.reasons=[{code:'work_remote_effect_unresolved',entityId:null}];attempt.state='closed_locally';investigation.localOwnershipClosed=true;const result={replayed:false,receipt:{id:crypto.randomUUID(),action,createdAt:now(),requestDigest:hash('2')},value};commands.set(p.idempotencyKey,{payload:JSON.stringify(p),result});if(w.__closureLoseReply){w.__closureLoseReply=false;throw new Error('Resposta perdida após encerramento local.');}return structuredClone(result);}
    throw new Error('Ação indisponível na fixture: '+action);
   }};
- },{mode});await page.goto('/');
+ },{mode});await page.goto('/');await openAssessmentList(page);
  if(mode==='queued'){await page.getByText('Avaliação com IA incerta',{exact:true}).click();await page.getByRole('navigation',{name:'Seções',exact:true}).getByRole('button',{name:'Plano e fila',exact:true}).click();}
  else if(mode==='conversation'){await page.getByText('Avaliação com IA incerta',{exact:true}).click();await page.getByText('Conversa com a IA',{exact:true}).click();}
  else if(mode==='investigation'){await page.getByText('Avaliação com IA incerta',{exact:true}).click();await page.getByText('Perspectivas independentes de IA',{exact:true}).click();}
- else await page.getByRole('button',{name:'Configurações',exact:true}).click();
+ else {await page.getByRole('button',{name:'Configurações',exact:true}).click();await page.getByRole('button',{name:'IA e modelos',exact:true}).click();}
 }
 const calls=(page:Page,action:string)=>page.evaluate(name=>(window as any).__closureCalls.filter((call:any)=>call.action===name),action);
 async function open(page:Page){const summary=page.locator('summary:visible').filter({hasText:/^Encerramento local de IA$/});await summary.click();return page.getByRole('region',{name:'Encerramento local de IA',exact:true});}

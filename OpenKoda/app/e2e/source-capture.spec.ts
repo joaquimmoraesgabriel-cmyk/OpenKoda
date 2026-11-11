@@ -1,3 +1,4 @@
+import { openAssessmentList } from './navigation';
 import { chooseAiData, reviewKaliData } from './data-fixture';
 import { installScopeFixture } from './scope-fixture';
 import { Page } from '@playwright/test';
@@ -36,7 +37,7 @@ async function fixture(page:Page,mode='normal'){
       throw new Error('Ação não prevista no contrato de captura: '+action);
     }};
   },{mode});
-  await page.goto('/');await page.getByText('Captura de fontes de contrato',{exact:true}).click();await page.locator('summary').filter({hasText:'Capturar fontes selecionadas'}).click();return page.locator('.source-capture');
+  await page.goto('/');await openAssessmentList(page);await page.getByText('Captura de fontes de contrato',{exact:true}).click();await page.locator('summary').filter({hasText:'Capturar fontes selecionadas'}).click();return page.locator('.source-capture');
 }
 async function calls(page:Page,action:string){return page.evaluate(name=>(window as unknown as {__captureCalls:{action:string;payload:Record<string,unknown>}[]}).__captureCalls.filter(call=>call.action===name),action);}
 const ack='Revisei todo o texto exibido e autorizo gravar esta cópia redigida como evidência local, sem envio à IA.';
@@ -66,5 +67,5 @@ for(const mode of ['approved','unknown'])test(`captura bloqueada em estado ${mod
 });
 
 test('prévia do navegador não lê fontes nem oferece captura nativa',async({page})=>{
-  await page.goto('/');await page.evaluate(async()=>{const moduleUrl='/src/api.ts';const {request}=await import(moduleUrl);const p=await request('project.create',{name:'Prévia de captura',kind:'files',target:'D:/Fixture/preview',description:'Fixture'});await request('assessment.create',{projectId:p.id,title:'Captura indisponível na prévia',kind:p.kind,target:p.target,objective:'Verificar bloqueio.'});});await page.reload();await page.getByText('Captura indisponível na prévia',{exact:true}).click();await page.locator('summary').filter({hasText:'Capturar fontes selecionadas'}).click();await expect(page.locator('.source-capture')).toContainText('A prévia do navegador não lê arquivos nem envia conteúdo à IA');await expect(page.getByRole('button',{name:'Revisar fontes selecionadas',exact:true})).toHaveCount(0);
+  await page.goto('/');await page.evaluate(async()=>{const moduleUrl='/src/api.ts';const {request}=await import(moduleUrl);const p=await request('project.create',{name:'Prévia de captura',kind:'files',target:'D:/Fixture/preview',description:'Fixture'});await request('assessment.create',{projectId:p.id,title:'Captura indisponível na prévia',kind:p.kind,target:p.target,objective:'Verificar bloqueio.'});});await page.reload();await openAssessmentList(page);await page.getByText('Captura indisponível na prévia',{exact:true}).click();await page.locator('summary').filter({hasText:'Capturar fontes selecionadas'}).click();await expect(page.locator('.source-capture')).toContainText('A prévia do navegador não lê arquivos nem envia conteúdo à IA');await expect(page.getByRole('button',{name:'Revisar fontes selecionadas',exact:true})).toHaveCount(0);
 });

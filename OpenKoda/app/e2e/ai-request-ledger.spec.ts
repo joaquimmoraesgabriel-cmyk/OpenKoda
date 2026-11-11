@@ -1,3 +1,4 @@
+import { openAssessmentList } from './navigation';
 import { chooseAiData, reviewKaliData } from './data-fixture';
 import { installScopeFixture } from './scope-fixture';
 import { Page } from '@playwright/test';
@@ -34,7 +35,7 @@ async function fixture(page:Page,mode='unknown'){
       throw new Error('Ação inesperada no contrato do histórico: '+action);
     }};
   },{mode});
-  await page.goto('/');await page.getByText('Avaliação do histórico de IA',{exact:true}).click();await page.locator('summary').filter({hasText:'Conversa com a IA'}).click();
+  await page.goto('/');await openAssessmentList(page);await page.getByText('Avaliação do histórico de IA',{exact:true}).click();await page.locator('summary').filter({hasText:'Conversa com a IA'}).click();
 }
 async function calls(page:Page,action:string){return page.evaluate(name=>(window as unknown as {__ledgerCalls:{action:string;payload:Record<string,unknown>}[]}).__ledgerCalls.filter(call=>call.action===name),action);}
 const acknowledgment='Reconheço que o resultado e o consumo desta solicitação continuam desconhecidos, inclusive a possível cobrança.';

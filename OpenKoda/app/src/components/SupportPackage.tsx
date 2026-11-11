@@ -69,7 +69,7 @@ export default function SupportPackage() {
     });
   }
   return <section className="content-section" aria-label="Pacote de suporte local">
-    <h2>Diagnóstico e suporte</h2>
+    <h3>Pacote de suporte</h3>
     <KeyValue label="Telemetria">Desativada</KeyValue>
     <p>O OpenKoda não envia diagnósticos automaticamente. O pacote local contém versões, plataforma e contagens de arquivos de banco de dados da instalação.</p>
     {native ? <button type="button" className="button" disabled={pending} onClick={()=>void prepare()}>Preparar prévia do pacote de suporte</button>

@@ -41,7 +41,7 @@ async function fixture(page:Page,mode='complete'){
       throw new Error('Ação inesperada no contrato do expurgo: '+action);
     }};
   },{mode});
-  await page.goto('/');await expect(page.getByRole('heading',{name:'Avaliações',exact:true})).toBeVisible();
+  await page.goto('/');await expect(page.getByRole('heading',{name:'Visão geral',exact:true})).toBeVisible();
   if(mode==='conflict')await page.getByRole('button',{name:'Revisar exclusão em Dados',exact:true}).click();
   else{await page.getByRole('button',{name:'Configurações',exact:true}).click();await page.getByRole('button',{name:'Dados e privacidade',exact:true}).click();}
   await expect(page.locator('.project-purge').getByRole('heading',{name:'Excluir projeto e histórico',exact:true})).toBeVisible();

@@ -1,3 +1,4 @@
+import { openAssessmentList } from './navigation';
 import type { Page } from '@playwright/test';
 import { installScopeFixture } from './scope-fixture';
 
@@ -69,7 +70,7 @@ export async function installWorkflowFixture(page:Page,mode='normal'){
    throw new Error('Ação indisponível na fixture de workflow: '+action);
   }};
  },{mode});
- await page.goto('/');await page.getByText('Avaliação da fila',{exact:true}).click();await page.getByRole('navigation',{name:'Seções',exact:true}).getByRole('button',{name:'Plano e fila',exact:true}).click();
+ await page.goto('/');await openAssessmentList(page);await page.getByText('Avaliação da fila',{exact:true}).click();await page.getByRole('navigation',{name:'Seções',exact:true}).getByRole('button',{name:'Plano e fila',exact:true}).click();
 }
 
 export const workflowCalls=(page:Page,action:string)=>page.evaluate(name=>(window as any).__workCalls.filter((call:any)=>call.action===name),action);

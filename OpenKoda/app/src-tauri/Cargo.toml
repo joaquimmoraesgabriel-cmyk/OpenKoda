@@ -1,6 +1,6 @@
 [package]
 name = "openkoda"
-version = "0.1.12"
+version = "0.1.13"
 description = "OpenKoda local cybersecurity desktop"
 edition = "2021"
 rust-version = "1.90"
@@ -30,6 +30,7 @@ base64 = "0.22"
 flate2 = "=1.1.10"
 
 [target.'cfg(windows)'.dependencies]
+windows = { version = "0.62", features = ["Win32_System_Com", "Win32_UI_Shell"] }
 windows-sys = { version = "0.61", features = ["Win32_Security_Cryptography", "Win32_Foundation", "Win32_Storage_FileSystem"] }
 
 [dev-dependencies]

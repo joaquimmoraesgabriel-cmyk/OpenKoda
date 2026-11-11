@@ -1,3 +1,4 @@
+import { openAssessmentList } from './navigation';
 import { chooseAiData, reviewKaliData } from './data-fixture';
 import { installScopeFixture } from './scope-fixture';
 import { Page } from '@playwright/test';
@@ -208,7 +209,7 @@ async function nativeFixture(page:Page, environmentReady=false, bridgeMode='succ
 async function calls(page:Page,action:string){return page.evaluate(name=>(window as unknown as {__contractCalls:{action:string;payload:Record<string,unknown>}[]}).__contractCalls.filter(call=>call.action===name),action);}
 
 test('plano exige revisão explícita e permite cancelar durante a operação',async({page})=>{
-  await nativeFixture(page);await page.goto('/');await page.getByText('Avaliação de contrato',{exact:true}).click();
+  await nativeFixture(page);await page.goto('/');await openAssessmentList(page);await page.getByText('Avaliação de contrato',{exact:true}).click();
   await expect(page.getByRole('button',{name:'Aprovar plano',exact:true})).toBeDisabled();
   expect(await calls(page,'plan.approve')).toEqual([]);expect(await calls(page,'plan.run')).toEqual([]);
   await page.getByRole('checkbox',{name:'Revisei o alvo, os efeitos e os limites deste plano e autorizo esta operação.'}).check();
@@ -236,7 +237,7 @@ test('ambiente preparado não é apresentado como executor disponível',async({p
 });
 
 test('revisão de avaliação desconhecida exige nota e reconhecimento sem repetir execução',async({page})=>{
-  await nativeFixture(page,false,'success','none','available','none','unknown');await page.goto('/');await page.getByText('Avaliação de contrato',{exact:true}).click();
+  await nativeFixture(page,false,'success','none','available','none','unknown');await page.goto('/');await openAssessmentList(page);await page.getByText('Avaliação de contrato',{exact:true}).click();
   const panel=page.locator('.assessment-reconciliation');
   await expect(panel).toContainText('Efeitos enviados antes da interrupção podem ter ocorrido e não são desfeitos.');
   await expect(panel.getByRole('button',{name:'Registrar revisão da interrupção',exact:true})).toBeDisabled();
@@ -251,7 +252,7 @@ test('revisão de avaliação desconhecida exige nota e reconhecimento sem repet
 });
 
 test('reconciliação recusada mantém estado desconhecido e pede nova confirmação',async({page})=>{
-  await nativeFixture(page,false,'success','none','available','none','unknown-refusal');await page.goto('/');await page.getByText('Avaliação de contrato',{exact:true}).click();
+  await nativeFixture(page,false,'success','none','available','none','unknown-refusal');await page.goto('/');await openAssessmentList(page);await page.getByText('Avaliação de contrato',{exact:true}).click();
   const panel=page.locator('.assessment-reconciliation');
   await panel.getByLabel('Nota sobre a interrupção',{exact:true}).fill('Revisão da interrupção local.');
   await panel.getByRole('checkbox',{name:'Entendo que efeitos já enviados não são desfeitos e que esta revisão não repete a operação.'}).check();
@@ -263,7 +264,7 @@ test('reconciliação recusada mantém estado desconhecido e pede nova confirma�
 });
 
 async function openEvidenceImport(page:Page,mode='import'){
-  await nativeFixture(page,false,'success','none','available','none',mode);await page.goto('/');await page.getByText('Avaliação de contrato',{exact:true}).click();
+  await nativeFixture(page,false,'success','none','available','none',mode);await page.goto('/');await openAssessmentList(page);await page.getByText('Avaliação de contrato',{exact:true}).click();
   await page.locator('summary').filter({hasText:/^Evidências$/}).click();await page.locator('summary').filter({hasText:/^Importar texto$/}).click();
   await page.getByLabel('Nome do texto importado',{exact:true}).fill('Trecho de log declarado');await page.getByLabel('Origem declarada',{exact:true}).fill('Texto copiado manualmente do laboratório.');
 }
@@ -293,7 +294,7 @@ test('importação mede bytes UTF-8 e conserva recusa do backend sem repetir',as
 });
 
 test('mensagem exige contexto visível e consentimento específico',async({page})=>{
-  await nativeFixture(page);await page.goto('/');await page.getByText('Avaliação de contrato',{exact:true}).click();
+  await nativeFixture(page);await page.goto('/');await openAssessmentList(page);await page.getByText('Avaliação de contrato',{exact:true}).click();
   await page.locator('summary').filter({hasText:'Conversa com a IA'}).click();
   await page.getByLabel('Sua mensagem',{exact:true}).fill('Analise os limites da observação.');
   await expect(page.getByRole('button',{name:'Enviar mensagem',exact:true})).toBeDisabled();
@@ -310,6 +311,7 @@ test('mensagem exige contexto visível e consentimento específico',async({page}
 
 test('credencial sai do campo após salvar e teste do provedor é uma ação separada',async({page})=>{
   await nativeFixture(page);await page.goto('/');await page.getByRole('button',{name:'Configurações',exact:true}).click();
+  await page.getByRole('button',{name:'IA e modelos',exact:true}).click();
   const input=page.getByLabel('Chave de API',{exact:true});await expect(input).toHaveAttribute('type','password');
   await input.fill('fixture-not-a-real-secret');await page.getByRole('button',{name:'Salvar credencial',exact:true}).click();
   await expect(input).toHaveValue('');expect(await calls(page,'ai.test')).toEqual([]);
@@ -402,7 +404,7 @@ async function openSupport(page: Page, mode?: string) {
   if(mode) await nativeFixture(page,true,'success','none',mode);
   await page.goto('/');
   await page.getByRole('button',{name:'Configurações',exact:true}).click();
-  await page.getByRole('button',{name:'Dados e privacidade',exact:true}).click();
+  await page.getByRole('button',{name:'Diagnóstico e suporte',exact:true}).click();
   return page.getByRole('region',{name:'Pacote de suporte local'});
 }
 test('pacote de suporte mostra os bytes exatos, exige confirmação e confere o recibo',async({page})=>{
@@ -646,7 +648,7 @@ test('recuperação Kali com erro preserva diagnóstico e impede reenviar o mesm
 
 async function openRecovery(page:Page,mode='success'){
   await nativeFixture(page,false,'success','none','available',mode);await page.goto('/');
-  await page.getByRole('button',{name:'Configurações',exact:true}).click();await page.getByRole('button',{name:'Dados e privacidade',exact:true}).click();
+  await page.getByRole('button',{name:'Configurações',exact:true}).click();await page.getByRole('button',{name:'Backup e recuperação',exact:true}).click();
   await expect(page.getByRole('heading',{name:'Ativação de uma cópia',exact:true})).toBeVisible();
 }
 async function stageAndReviewRecovery(page:Page){
@@ -727,7 +729,7 @@ test('candidato só é validado com revisão humana e evidência selecionada',as
 });
 
 test('registro manual conserva candidato separado de validação',async({page})=>{
-  await nativeFixture(page);await page.goto('/');await page.getByText('Avaliação de contrato',{exact:true}).click();
+  await nativeFixture(page);await page.goto('/');await openAssessmentList(page);await page.getByText('Avaliação de contrato',{exact:true}).click();
   await page.getByRole('navigation',{name:'Seções',exact:true}).getByRole('button',{name:'Achados',exact:true}).click();
   await page.getByRole('button',{name:'Registrar candidato',exact:true}).click();
   await page.getByLabel('Título do candidato',{exact:true}).fill('Observação para revisão');
@@ -741,7 +743,7 @@ test('registro manual conserva candidato separado de validação',async({page})=
 });
 
 test('bridge Kali limita a UI a diagnóstico e hash da evidência selecionada',async({page})=>{
-  await nativeFixture(page,true);await page.goto('/');await page.getByText('Avaliação de contrato',{exact:true}).click();
+  await nativeFixture(page,true);await page.goto('/');await openAssessmentList(page);await page.getByText('Avaliação de contrato',{exact:true}).click();
   await page.locator('summary').filter({hasText:'Kali: diagnóstico e integridade'}).click();
   const panel=page.locator('.kali-bridge');
   expect(await calls(page,'kali.mcp.diagnose')).toEqual([]);expect(await calls(page,'kali.mcp.hashEvidence')).toEqual([]);
@@ -758,7 +760,7 @@ test('bridge Kali limita a UI a diagnóstico e hash da evidência selecionada',a
 });
 
 test('falha do bridge fica visível e consultar estado não repete a operação',async({page})=>{
-  await nativeFixture(page,true,'failure');await page.goto('/');await page.getByText('Avaliação de contrato',{exact:true}).click();
+  await nativeFixture(page,true,'failure');await page.goto('/');await openAssessmentList(page);await page.getByText('Avaliação de contrato',{exact:true}).click();
   await page.locator('summary').filter({hasText:'Kali: diagnóstico e integridade'}).click();
   const panel=page.locator('.kali-bridge');
   await panel.getByRole('button',{name:'Diagnosticar Kali nesta avaliação',exact:true}).click();
@@ -771,7 +773,7 @@ test('falha do bridge fica visível e consultar estado não repete a operação'
 });
 
 test('limite do hash no Kali é medido em bytes UTF-8 antes do envio',async({page})=>{
-  await nativeFixture(page,true,'oversized');await page.goto('/');await page.getByText('Avaliação de contrato',{exact:true}).click();
+  await nativeFixture(page,true,'oversized');await page.goto('/');await openAssessmentList(page);await page.getByText('Avaliação de contrato',{exact:true}).click();
   await page.locator('summary').filter({hasText:'Kali: diagnóstico e integridade'}).click();
   const panel=page.locator('.kali-bridge');
   await panel.getByLabel('Evidência para verificar no Kali',{exact:true}).selectOption('evidence-fixture');
@@ -781,7 +783,7 @@ test('limite do hash no Kali é medido em bytes UTF-8 antes do envio',async({pag
 });
 
 test('cancelamento do bridge permanece solicitado até o processo confirmar término',async({page})=>{
-  await nativeFixture(page,true,'cancel');await page.goto('/');await page.getByText('Avaliação de contrato',{exact:true}).click();
+  await nativeFixture(page,true,'cancel');await page.goto('/');await openAssessmentList(page);await page.getByText('Avaliação de contrato',{exact:true}).click();
   await page.locator('summary').filter({hasText:'Kali: diagnóstico e integridade'}).click();
   const panel=page.locator('.kali-bridge');
   await panel.getByRole('button',{name:'Diagnosticar Kali nesta avaliação',exact:true}).click();
@@ -796,7 +798,7 @@ test('cancelamento do bridge permanece solicitado até o processo confirmar tér
 });
 
 test('sessão desconhecida só tenta reconciliação após ação explícita e preserva recusa',async({page})=>{
-  await nativeFixture(page,true,'unknown-error');await page.goto('/');await page.getByText('Avaliação de contrato',{exact:true}).click();
+  await nativeFixture(page,true,'unknown-error');await page.goto('/');await openAssessmentList(page);await page.getByText('Avaliação de contrato',{exact:true}).click();
   await page.locator('summary').filter({hasText:'Kali: diagnóstico e integridade'}).click();
   const panel=page.locator('.kali-bridge');
   await expect(panel.getByText('Efeito desconhecido',{exact:true})).toBeVisible();

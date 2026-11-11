@@ -1,3 +1,4 @@
+import { openAssessmentList } from './navigation';
 import type { Page } from '@playwright/test';
 import { test,expect } from './fixtures';
 import { installScopeFixture } from './scope-fixture';
@@ -41,7 +42,7 @@ async function fixture(page:Page,mode='unreviewed'){
    throw new Error('Unplanned scope fixture action: '+action);
   }};
  },{mode});
- await page.goto('/');await page.getByText('Avaliação de escopo',{exact:true}).click();
+ await page.goto('/');await openAssessmentList(page);await page.getByText('Avaliação de escopo',{exact:true}).click();
 }
 async function calls(page:Page,action:string){return page.evaluate(name=>(window as any).__scopeCalls.filter((c:any)=>c.action===name),action);}
 async function noWork(page:Page){for(const action of ['assessment.start','assessment.plan','assessment.sourcePlan','plan.approve','plan.run','ai.ask','ai.investigation.run','kali.mcp.scanEvidence'])expect(await calls(page,action)).toEqual([]);}

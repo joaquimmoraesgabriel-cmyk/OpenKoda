@@ -1,3 +1,4 @@
+import { openAssessmentList } from './navigation';
 import { test, expect } from './fixtures';
 
 test('as áreas principais abrem vazias e a prévia não simula Kali ou IA', async ({ page }) => {
@@ -16,11 +17,13 @@ test('as áreas principais abrem vazias e a prévia não simula Kali ou IA', asy
   await expect(page.getByRole('heading', { name: 'Configurações', exact: true })).toBeVisible();
   await expect(page.getByText('Conexão verificada', { exact: true })).toHaveCount(0);
   await page.screenshot({ path: test.info().outputPath('configuracoes.png'), fullPage: true });
-  await page.getByRole('button',{name:'Dados e privacidade',exact:true}).click();
+  await page.getByRole('button',{name:'Backup e recuperação',exact:true}).click();
   await expect(page.getByText('Backup e recuperação estão disponíveis no aplicativo desktop.',{exact:true})).toBeVisible();
   await expect(page.getByRole('button',{name:'Revisar ativação desta cópia',exact:true})).toHaveCount(0);
+  await page.getByRole('button',{name:'Armazenamento',exact:true}).click();
   await expect(page.getByText('A revisão e a exclusão de arquivos geridos estão disponíveis no aplicativo desktop.',{exact:true})).toBeVisible();
   await expect(page.getByRole('button',{name:'Revisar exclusão selecionada',exact:true})).toHaveCount(0);
+  await page.getByRole('button',{name:'Dados e privacidade',exact:true}).click();
   await expect(page.getByText('A exclusão revisada de projetos e histórico está disponível no aplicativo desktop.',{exact:true})).toBeVisible();
   await expect(page.getByRole('button',{name:'Preparar revisão do projeto arquivado',exact:true})).toHaveCount(0);
 });
@@ -47,6 +50,7 @@ test('cria projeto e rascunho e conserva ambos depois de recarregar', async ({ p
   await expect(page.getByRole('heading', { name: 'Avaliação de integração E2E', exact: true })).toBeVisible();
   await expect(page.getByText('Rascunho', { exact: true }).first()).toBeVisible();
   await page.reload();
+  await openAssessmentList(page);
   await expect(page.getByText('Avaliação de integração E2E', { exact: true }).first()).toBeVisible();
   await page.getByRole('button', { name: 'Projetos', exact: true }).click();
   await expect(page.getByText('Laboratório E2E', { exact: true }).first()).toBeVisible();
@@ -77,10 +81,12 @@ test('iniciar na prévia informa indisponibilidade e preserva o rascunho', async
     });
   });
   await page.reload();
+  await openAssessmentList(page);
   await page.getByText('Avaliação sem executor', { exact: true }).first().click();
   await page.getByRole('button', { name: 'Iniciar avaliação', exact: true }).click();
   await expect(page.getByRole('alert')).toContainText(/desktop|executor/i);
   await page.reload();
+  await openAssessmentList(page);
   await page.getByText('Avaliação sem executor', { exact: true }).first().click();
   await expect(page.getByText('Rascunho', { exact: true }).first()).toBeVisible();
   await expect(page.getByText('Em andamento', { exact: true })).toHaveCount(0);
@@ -112,12 +118,14 @@ test('salva configurações para a próxima avaliação sem testar conexão impl
   });
   await page.goto('/');
   await page.getByRole('button', { name: 'Configurações', exact: true }).click();
+  await page.getByRole('button',{name:'IA e modelos',exact:true}).click();
   await page.getByLabel('Endpoint', { exact: true }).fill('https://api.example.test/v1');
   await page.getByLabel('Modelo', { exact: true }).fill('modelo-e2e');
   await page.getByRole('button', { name: 'Salvar alterações', exact: true }).click();
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('openkoda.preview.v1') ?? '{}').settings?.model)).toBe('modelo-e2e');
   await page.reload();
   await page.getByRole('button', { name: 'Configurações', exact: true }).click();
+  await page.getByRole('button',{name:'IA e modelos',exact:true}).click();
   await expect(page.getByLabel('Endpoint', { exact: true })).toHaveValue('https://api.example.test/v1');
   await expect(page.getByLabel('Modelo', { exact: true })).toHaveValue('modelo-e2e');
   await expect(page.getByText('Conexão verificada', { exact: true })).toHaveCount(0);
@@ -127,10 +135,11 @@ test('salva configurações para a próxima avaliação sem testar conexão impl
 test('configurações e navegação continuam legíveis em janela estreita',async({page})=>{
   await page.setViewportSize({width:390,height:844});await page.goto('/');
   await page.getByRole('button',{name:'Configurações',exact:true}).click();
+  await page.getByRole('button',{name:'IA e modelos',exact:true}).click();
   await expect(page.getByLabel('Endpoint',{exact:true})).toBeVisible();
   await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
-  await page.getByRole('button',{name:'Geral',exact:true}).click();
-  await page.getByLabel('Tema',{exact:true}).selectOption('dark');
+  await page.getByRole('button',{name:'Aparência',exact:true}).click();
+  await page.getByRole('radio',{name:'Escuro',exact:true}).check();
   await page.getByRole('button',{name:'Salvar alterações',exact:true}).click();
   await expect(page.locator('html')).toHaveAttribute('data-theme','dark');
   await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);

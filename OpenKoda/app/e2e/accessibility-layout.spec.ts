@@ -20,7 +20,7 @@ async function checkLayoutAndLabels(page:Page){
 
 test('seis áreas mantêm reflow equivalente a 200%, rótulos e foco visível por teclado',async({page})=>{
   await page.setViewportSize({width:512,height:384});await page.goto('/');
-  await expect(page.getByRole('heading',{name:'Avaliações',exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'Visão geral',exact:true})).toBeVisible();
   await page.keyboard.press('Tab');await expect(page.getByRole('link',{name:'Ir para o conteúdo',exact:true})).toBeFocused();await page.keyboard.press('Enter');await expect(page.locator('#main-content')).toBeFocused();
   await page.evaluate(async()=>{const moduleUrl='/src/api.ts';const {request}=await import(moduleUrl);const project=await request('project.create',{name:'Projeto reflow',kind:'code',target:'D:/Fixture/reflow',description:'Fixture de interface sem leitura de disco.'});await request('assessment.create',{projectId:project.id,title:'Avaliação reflow',kind:'code',target:project.target,objective:'Verificar os controles em área reduzida.'});});
   await page.reload();await page.keyboard.press('Tab');
@@ -34,7 +34,7 @@ test('seis áreas mantêm reflow equivalente a 200%, rótulos e foco visível po
       await keyboardActivate(page,page.getByRole('button',{name:'Novo projeto',exact:true}));await expect(page.getByLabel('Nome do projeto',{exact:true})).toBeVisible();await checkLayoutAndLabels(page);
     }
     if(name==='Configurações'){
-      await expect(page.getByLabel('Endpoint',{exact:true})).toBeVisible();await keyboardActivate(page,page.getByRole('button',{name:'Dados e privacidade',exact:true}));await checkLayoutAndLabels(page);
+      await keyboardActivate(page,page.getByRole('button',{name:'IA e modelos',exact:true}));await expect(page.getByLabel('Endpoint',{exact:true})).toBeVisible();await keyboardActivate(page,page.getByRole('button',{name:'Dados e privacidade',exact:true}));await checkLayoutAndLabels(page);
       await page.screenshot({path:test.info().outputPath('reflow-200-configuracoes.png'),fullPage:true});
     }
   }

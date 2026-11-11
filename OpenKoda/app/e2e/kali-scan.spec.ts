@@ -1,3 +1,4 @@
+import { openAssessmentList } from './navigation';
 import { reviewKaliData } from './data-fixture';
 import { installScopeFixture } from './scope-fixture';
 import { Page } from '@playwright/test';
@@ -39,7 +40,7 @@ async function fixture(page:Page,mode='completed'){
       throw new Error('Ação inesperada no contrato de análise Kali: '+action);
     }};
   },{mode});
-  await page.goto('/');await page.getByText('Avaliação do analisador Kali',{exact:true}).click();await page.locator('summary').filter({hasText:'Kali: diagnóstico e integridade'}).click();await expect(page.getByRole('heading',{name:'Análise de padrões no Kali',exact:true})).toBeVisible();
+  await page.goto('/');await openAssessmentList(page);await page.getByText('Avaliação do analisador Kali',{exact:true}).click();await page.locator('summary').filter({hasText:'Kali: diagnóstico e integridade'}).click();await expect(page.getByRole('heading',{name:'Análise de padrões no Kali',exact:true})).toBeVisible();
 }
 async function calls(page:Page,action:string){return page.evaluate(name=>(window as unknown as {__scanCalls:{action:string;payload:Record<string,unknown>}[]}).__scanCalls.filter(call=>call.action===name),action);}
 const consent='Autorizo transferir somente esta evidência revisada ao Kali local para a operação exibida.';

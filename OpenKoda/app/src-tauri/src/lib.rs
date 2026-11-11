@@ -16,6 +16,7 @@ pub mod official_image;
 pub mod activation;
 pub mod retention;
 pub mod project_purge;
+mod project_picker;
 pub mod http_validation;
 pub mod scope;
 pub mod scope_targets;
@@ -74,6 +75,9 @@ async fn request(
         return Err("Janela não autorizada.".into());
     }
     let admission = services.close_gate.admit(close_guard::Activity::request(&request.action, &request.payload))?;
+    if request.action == "project.pickTarget" {
+        return project_picker::pick(window, request.payload).await;
+    }
     let store = state.inner().clone();
     let services = services.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {

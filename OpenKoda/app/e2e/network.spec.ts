@@ -1,3 +1,4 @@
+import { openAssessmentList } from './navigation';
 import { installScopeFixture } from './scope-fixture';
 import { Page } from '@playwright/test';
 import { test, expect } from './fixtures';
@@ -36,7 +37,7 @@ async function networkFixture(page:Page,mode='success'){
       throw new Error('Ação não prevista no contrato TCP: '+action);
     }};
   },{mode});
-  await page.goto('/');await page.getByText('Observação de rede de contrato',{exact:true}).click();
+  await page.goto('/');await openAssessmentList(page);await page.getByText('Observação de rede de contrato',{exact:true}).click();
 }
 async function calls(page:Page,action:string){return page.evaluate(name=>(window as unknown as {__networkCalls:{action:string;payload:Record<string,unknown>}[]}).__networkCalls.filter(call=>call.action===name),action);}
 
@@ -88,7 +89,7 @@ test('prévia de rede não apresenta controle que inicie conexões TCP',async({p
     const moduleUrl='/src/api.ts';const {request}=await import(moduleUrl);
     const project=await request('project.create',{name:'Rede de prévia',kind:'network',target:'192.0.2.1',description:'Dados isolados.'});
     await request('assessment.create',{projectId:project.id,title:'Rede sem executor',kind:project.kind,target:project.target,objective:'Verificar bloqueio na prévia.'});
-  });await page.reload();await page.getByText('Rede sem executor',{exact:true}).click();
+  });await page.reload();await openAssessmentList(page);await page.getByText('Rede sem executor',{exact:true}).click();
   await expect(page.locator('.network-plan')).toContainText('A prévia não inicia conexões de rede.');
   await expect(page.getByRole('button',{name:'Preparar plano TCP',exact:true})).toHaveCount(0);
 });
