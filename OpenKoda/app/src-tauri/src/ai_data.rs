@@ -66,6 +66,52 @@ mod tests {
         fn input(&self)->Value{self.ai.test_data_input(&self.store,"ask",self.raw_input())}
         fn requests(&self)->i64{self.ai.db.lock().unwrap().query_row("SELECT count(*) FROM requests",[],|r|r.get(0)).unwrap()}
     }
+    #[test]
+    fn chat_history_requires_matching_receipts_and_reopening_never_resends(){
+        let f=Fixture::new();
+        let credential=f.ai.test_data_authority(&f.store,&f.aid);
+        let preview=|ai:&AiService,text:&str|ai.handle("ai.context",json!({"assessmentId":f.aid,"operation":"ask","evidenceIds":[],"includeChatHistory":true,"categories":["human_text","target_metadata","execution_summary"],"credentialReferenceId":credential,"message":text,"messageSensitivity":"internal","packageSensitivity":"internal"}),&f.store).unwrap();
+        let first=preview(&f.ai,"Primeira pergunta sintética");
+        let ask=json!({"assessmentId":f.aid,"message":"Primeira pergunta sintética","contextDigest":first["digest"],"dataReview":first["dataReview"],"allowRemote":true,"evidenceIds":[]});
+        assert!(f.ai.handle("ai.ask",ask.clone(),&f.store).is_ok());
+        let next=preview(&f.ai,"Segunda pergunta sintética");
+        let packet:Value=serde_json::from_str(next["packetPreview"]["prompts"][0]["prompt"].as_str().unwrap()).unwrap();
+        assert_eq!(packet["conversationHistory"][0]["text"],"Primeira pergunta sintética");
+        assert_eq!(packet["conversationHistory"][1]["text"],"Synthetic bounded response");
+        assert!(f.ai.handle("ai.ask",ask.clone(),&f.store).is_err());
+        let reopened=AiService::with_provider(f._dir.path().into(),f.fake.clone()).unwrap();
+        assert!(reopened.handle("ai.ask",ask,&f.store).is_err());
+        assert_eq!(reopened.handle("ai.history",json!({"assessmentId":f.aid}),&f.store).unwrap()["messages"].as_array().unwrap().len(),2);
+        assert_eq!(f.fake.calls.load(Ordering::SeqCst),1);
+        assert!(reopened.handle("ai.context",json!({"assessmentId":f.aid,"operation":"ask","evidenceIds":[],"chatImage":"aW52YWxpZA==","categories":["human_text"],"credentialReferenceId":credential,"message":"foto","messageSensitivity":"internal","packageSensitivity":"internal"}),&f.store).is_err());
+    }
+    #[test]
+    fn chat_attachments_are_bound_to_one_send_and_never_replayed_as_history() {
+        use base64::Engine;
+        let f=Fixture::new();
+        let credential=f.ai.test_data_authority(&f.store,&f.aid);
+        let image=base64::engine::general_purpose::STANDARD.encode([0xff,0xd8,0xff,1,2,3,0xff,0xd9]);
+        let fields=json!({"assessmentId":f.aid,"operation":"ask","evidenceIds":[],"includeChatHistory":true,"categories":["human_text","target_metadata","execution_summary","source_excerpt"],"chatImage":image,"credentialReferenceId":credential,"message":"Arquivo sintético para uma única leitura.","messageSensitivity":"internal","packageSensitivity":"internal"});
+        let mut secret=fields.clone();
+        secret["message"]=json!(format!("Arquivo anexo: {KEY}"));
+        assert!(f.ai.handle("ai.context",secret,&f.store).unwrap_err().starts_with("data_secret_material"));
+        let first=f.ai.handle("ai.context",fields.clone(),&f.store).unwrap();
+        assert_eq!(first["canSend"],true);
+        let ask=json!({"assessmentId":f.aid,"message":fields["message"],"contextDigest":first["digest"],"dataReview":first["dataReview"],"allowRemote":true,"evidenceIds":[]});
+        f.ai.handle("ai.ask",ask.clone(),&f.store).unwrap();
+        assert!(f.ai.handle("ai.ask",ask,&f.store).is_err());
+        let sent:Value=serde_json::from_str(&f.fake.prompts.lock().unwrap()[0]).unwrap();
+        assert_eq!(sent["reviewedJpeg"],image);
+        let mut next=fields.clone();
+        next.as_object_mut().unwrap().remove("chatImage");
+        next["categories"]=json!(["human_text","target_metadata","execution_summary"]);
+        next["message"]=json!("Nova pergunta.");
+        let clean=f.ai.handle("ai.context",next,&f.store).unwrap();
+        let prompt=clean["packetPreview"]["prompts"][0]["prompt"].as_str().unwrap();
+        assert!(!prompt.contains(&image)&&!prompt.contains("única leitura")&&!prompt.contains(KEY));
+        assert!(!serde_json::to_string(&f.store.snapshot().unwrap()).unwrap().contains(&image));
+        assert_eq!(f.fake.calls.load(Ordering::SeqCst),1);
+    }
     #[test]fn legacy_consent_cannot_reserve_or_dispatch_project_data(){
         let f=Fixture::new();let before=f.store.snapshot().unwrap().data_use_receipts.len();
         let error=f.ai.handle("ai.ask",f.raw_input(),&f.store).unwrap_err();assert!(error.starts_with("data_review_required"));
@@ -134,6 +180,8 @@ mod tests {
 #[serde(rename_all="camelCase",deny_unknown_fields)]
 pub(super) struct AiDataOptions {
     pub operation:String,
+    #[serde(default,skip_serializing_if="Option::is_none")] pub chat_image:Option<String>,
+    #[serde(default,skip_serializing_if="std::ops::Not::not")] pub include_chat_history:bool,
     pub message_sensitivity:Sensitivity,
     pub package_sensitivity:Sensitivity,
     pub categories:Vec<DataCategory>,
@@ -285,6 +333,14 @@ impl AiService {
         let object=context["context"].as_object_mut().ok_or("Contexto inválido.")?;
         if !options.categories.contains(&DataCategory::TargetMetadata){for key in ["target","kind","targets"]{object.remove(key);}}
         if !options.categories.contains(&DataCategory::ExecutionSummary){for key in ["coverage","status"]{object.remove(key);}}
+        if options.include_chat_history && options.categories.contains(&DataCategory::ExecutionSummary){
+            let runs=state.executions.iter().rev().filter(|run|run.assessment_id==assessment.id).filter_map(|run|{
+                let plan=state.plans.iter().find(|plan|plan.id==run.plan_id)?;
+                if plan.target_ref.as_ref().is_some_and(|target|!target_refs.contains(target)) || (!target_refs.is_empty() && plan.target_ref.is_none()){return None;}
+                Some(json!({"method":plan.adapter,"status":run.status,"result":redactor.redact(&run.message).text,"evidenceRecorded":run.evidence_id.is_some()}))
+            }).take(4).collect::<Vec<_>>();
+            object.insert("recentExecutions".into(),json!(runs));
+        }
         // Hash only the selected projection, after all removals. Unselected
         // source metadata never returns through a later envelope field.
         context["digest"]=json!(digest(&context["context"].to_string()));
@@ -313,9 +369,54 @@ impl AiService {
                 options.perspectives.iter().map(|role|Ok((investigation::prompt(&context["context"],&projected.text),investigation::instructions(role)?,maximum))).collect::<Result<Vec<_>,String>>()?
             },_=>unreachable!(),
         };
+        if (options.chat_image.is_some() || options.include_chat_history) && operation!=DataOperation::AiAsk{return Err("Anexos e histórico pertencem à conversa.".into());}
+        if let Some(encoded)=&options.chat_image{
+            use base64::Engine;
+            if encoded.len()>81920 || encoded.len()<8 || !options.categories.contains(&DataCategory::SourceExcerpt){return Err("Anexo não autorizado ou acima de 60 KiB.".into());}
+            let bytes=base64::engine::general_purpose::STANDARD.decode(encoded).map_err(|_|"Imagem JPEG inválida.")?;
+            if !bytes.starts_with(&[0xff,0xd8,0xff]) || !bytes.ends_with(&[0xff,0xd9]){return Err("Imagem JPEG inválida.".into());}
+            spec.destination_context["chatImageSha256"]=json!(format!("{:x}",Sha256::digest(&bytes)));
+        }
+        let mut history=Vec::new();
+        if options.include_chat_history {
+            let policy=state.data_policies.iter().find(|p|p.project_id==assessment.project_id);
+            let binding=state.data_bindings.iter().find(|b|b.assessment_id==assessment.id);
+            let db=self.db.lock().map_err(failure)?;
+            let mut q=db.prepare("SELECT id,details FROM requests WHERE assessment=?1 ORDER BY rowid DESC LIMIT 4").map_err(failure)?;
+            let rows=q.query_map([&assessment.id],|r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?))).map_err(failure)?;
+            let mut used=0;
+            'turns:for row in rows {
+                let (request_id,details)=row.map_err(failure)?;
+                let details:Value=serde_json::from_str(&details).map_err(failure)?;
+                let Some(receipt)=state.data_use_receipts.iter().rev().find(|receipt|receipt.effect.kind=="request"&&receipt.effect.id==request_id)else{break;};
+                // Older rich packets may contain original evidence, sensitive files or
+                // a different target. Never silently replay them as a plain message.
+                if receipt.operation!=DataOperation::AiAsk || !receipt.policy_versions.first().is_some_and(|v|policy.is_some_and(|p|p.active&&p.generation==v.generation&&p.activation_generation==v.activation_generation)&&binding.is_some_and(|b|Some(b.generation)==v.binding_generation&&Some(&b.policy_ref)==v.policy_ref.as_ref()))
+                    || receipt.scope_ref!=spec.scope_ref || receipt.subjects!=spec.subjects
+                    || receipt.selection.origins!=spec.selection.origins || !receipt.selection.evidence_ids.is_empty()
+                    || receipt.selection.categories.iter().any(|c|!spec.selection.categories.contains(c)||matches!(c,DataCategory::EvidenceExcerpt|DataCategory::SourceExcerpt))
+                    || receipt.selection.package_sensitivity!=options.package_sensitivity
+                    || receipt.human_text.iter().any(|text|text.sensitivity!=options.message_sensitivity){break;}
+                let Some(ids)=details["chatMessageIds"].as_array().filter(|ids|ids.len()==2)else{break;};
+                let mut turn=Vec::new();
+                for id in ids.iter().rev(){
+                    let id=id.as_str().ok_or("Identidade de mensagem inválida.")?;
+                    let (role,text):(String,String)=db.query_row("SELECT role,text FROM messages WHERE assessment=?1 AND id=?2",params![assessment.id,id],|r|Ok((r.get(0)?,r.get(1)?))).map_err(failure)?;
+                    let projected=redactor.redact(&text);
+                    if projected.secret_material || used+projected.text.len()>12000{break 'turns;}
+                    used+=projected.text.len();
+                    turn.push(json!({"role":role,"text":projected.text}));
+                }
+                history.extend(turn);
+            }
+            history.reverse();
+        }
         let policy_refs=state.data_bindings.iter().find(|b|b.assessment_id==assessment.id).map(|b|vec![b.policy_ref.clone()]).unwrap_or_default();
         let prompts=raw_prompts.into_iter().enumerate().map(|(index,(payload,instructions,maximum))|{
-            let prompt=json!({"schema":"openkoda.reviewed-data.v1","policyRefs":policy_refs,"selection":spec.selection,"payload":payload}).to_string();
+            let mut envelope=json!({"schema":"openkoda.reviewed-data.v1","policyRefs":policy_refs,"selection":spec.selection,"payload":payload});
+            if !history.is_empty(){envelope["conversationHistory"]=json!(history);}
+            if let Some(image)=&options.chat_image{envelope["reviewedJpeg"]=json!(image);}
+            let prompt=envelope.to_string();
             spec.requests.push(RequestFingerprint{index:index as u8,input_sha256:digest(&payload),output_sha256:digest(&prompt),input_bytes:payload.len() as u64,output_bytes:prompt.len() as u64});
             (prompt,instructions,maximum)
         }).collect();

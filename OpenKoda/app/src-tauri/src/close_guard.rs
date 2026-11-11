@@ -21,7 +21,7 @@ impl Activity {
     pub fn request(action: &str, payload: &Value) -> Option<Self> {
         // Known observations cannot dispatch effects. Unknown/new actions default to tracked.
         if matches!(action, "snapshot" | "projectPurge.status" | "activation.status" | "activation.list"
-            | "environment.status" | "host.connectivity" | "kali.mcp.status" | "kali.mcp.assessmentEnvironments" | "ai.status" | "ai.context" | "ai.history"
+            | "environment.status" | "host.connectivity" | "kali.mcp.status" | "kali.mcp.assessmentEnvironments" | "ai.chat.status" | "ai.status" | "ai.context" | "ai.history"
             | "ai.budget.status" | "ai.budget.history" | "ai.investigation.list" | "data.session.select" | "data.policy.status"
             | "assessment.scopeStatus" | "assessment.scopeOptions" | "assessment.combinedOptions"
             | "project.targetOptions" | "work.plan.get" | "work.queue" | "work.events" | "work.aiLocalClosure.list"

@@ -12,6 +12,8 @@ use crate::scope_targets::{self, ScopeTargetRef};
 use crate::ai_provider::{ProviderId,AiSelection};
 const AI_METHOD:&str="ai.remote-review.v1";
 
+#[path = "ai_chat.rs"]
+mod chat;
 #[path = "investigation.rs"]
 mod investigation;
 #[path = "ai_planning.rs"]
@@ -42,7 +44,7 @@ const ENDPOINT: &str = "https://api.openai.com/v1";
 const MAX_RESPONSE: u64 = 2 * 1024 * 1024;
 const MAX_CONTEXT: usize = 48 * 1024;
 
-pub struct AiService { db: Mutex<Connection>, inference: Mutex<()>, provider:Arc<dyn Provider>, investigation_active:Mutex<Option<investigation::Active>>, budget:budget::Ledger, data_policy:Arc<crate::data_policy::DataPolicyService>, data_reviews:Mutex<std::collections::HashMap<String,data::PreparedAiData>>, local_closure_reviews:Mutex<std::collections::HashMap<String,local_closure::PreparedClosure>>, arbiter:Arc<crate::work_supervisor::WorkArbiter> }
+pub struct AiService { chat:chat::ChatControl, db: Mutex<Connection>, inference: Mutex<()>, provider:Arc<dyn Provider>, investigation_active:Mutex<Option<investigation::Active>>, budget:budget::Ledger, data_policy:Arc<crate::data_policy::DataPolicyService>, data_reviews:Mutex<std::collections::HashMap<String,data::PreparedAiData>>, local_closure_reviews:Mutex<std::collections::HashMap<String,local_closure::PreparedClosure>>, arbiter:Arc<crate::work_supervisor::WorkArbiter> }
 
 pub(crate) const VAULT_SCHEMA:&str="CREATE TABLE vault (id INTEGER PRIMARY KEY CHECK(id IN (1,2,3)), cipher BLOB NOT NULL, revision TEXT NOT NULL)";
 pub(crate) const CHECK_SCHEMA:&str="CREATE TABLE connection_check (id INTEGER PRIMARY KEY CHECK(id IN (1,2,3)), model TEXT NOT NULL, endpoint TEXT NOT NULL, revision TEXT NOT NULL, checked TEXT NOT NULL)";
@@ -71,6 +73,7 @@ fn authenticate(request:reqwest::blocking::RequestBuilder, provider:ProviderId, 
 
 trait Provider:Send+Sync {
     fn response(&self,provider:ProviderId,model:&str,key:&str,prompt:&str,instructions:&str,max_output_tokens:u32)->Result<Value,String>;
+    fn chat_response(&self,provider:ProviderId,model:&str,key:&str,prompt:&str,instructions:&str,maximum:u32,_stop:&std::sync::atomic::AtomicBool)->Result<Value,String>{self.response(provider,model,key,prompt,instructions,maximum)}
     fn models(&self,provider:ProviderId,key:&str)->Result<Vec<String>,String>{
         let client=client()?;
         let mut models=std::collections::BTreeSet::new();
@@ -101,6 +104,7 @@ trait Provider:Send+Sync {
 }
 struct HttpProvider;
 impl Provider for HttpProvider {
+    fn chat_response(&self,provider:ProviderId,model:&str,key:&str,prompt:&str,instructions:&str,maximum:u32,stop:&std::sync::atomic::AtomicBool)->Result<Value,String>{chat::http_chat(provider,model,key,prompt,instructions,maximum,stop)}
     fn response(&self,provider:ProviderId,model:&str,key:&str,prompt:&str,instructions:&str,max_output_tokens:u32)->Result<Value,String>{
         let body=provider.body(model,prompt,instructions,max_output_tokens);
         let response=authenticate(client()?.post(provider.inference_url()),provider,key).json(&body).send().map_err(network_error)?;
@@ -180,7 +184,7 @@ impl AiService {
         let details_column:i64=db.query_row("SELECT COUNT(*) FROM pragma_table_info('requests') WHERE name='details'",[],|r|r.get(0)).map_err(failure)?;
         if details_column==0 {db.execute("ALTER TABLE requests ADD COLUMN details TEXT NOT NULL DEFAULT '{}'",[]).map_err(failure)?;}
         db.execute("UPDATE requests SET details=json_set(details,'$.operationProposal.status','interrupted') WHERE json_type(details,'$.operationProposal')='object' AND json_extract(details,'$.operationProposal.status')='pending'",[]).map_err(failure)?;
-        let service=Self { db: Mutex::new(db), inference: Mutex::new(()), provider, investigation_active:Mutex::new(None), budget, data_policy:Arc::new(crate::data_policy::DataPolicyService::new()), data_reviews:Mutex::new(std::collections::HashMap::new()), local_closure_reviews:Mutex::new(std::collections::HashMap::new()), arbiter:Arc::new(crate::work_supervisor::WorkArbiter::default()) };
+        let service=Self { chat:chat::ChatControl::default(), db: Mutex::new(db), inference: Mutex::new(()), provider, investigation_active:Mutex::new(None), budget, data_policy:Arc::new(crate::data_policy::DataPolicyService::new()), data_reviews:Mutex::new(std::collections::HashMap::new()), local_closure_reviews:Mutex::new(std::collections::HashMap::new()), arbiter:Arc::new(crate::work_supervisor::WorkArbiter::default()) };
         service.recover_investigations()?;
         Ok(service)
     }
@@ -188,7 +192,7 @@ impl AiService {
     pub fn with_data_policy(mut self, service:Arc<crate::data_policy::DataPolicyService>)->Self { self.data_policy=service; self }
 
     pub fn supports(action: &str) -> bool {
-        matches!(action, "ai.selection.save"|"ai.provider.configure"|"ai.status"|"ai.key.save"|"ai.key.remove"|"ai.models"|"ai.test"|"ai.context"|"ai.ask"|"ai.history"|"ai.request.reconcile"|"candidate.record")||investigation::supports(action)||planning::supports(action)||budget::supports(action)
+        matches!(action, "ai.chat.stop"|"ai.chat.status"|"ai.selection.save"|"ai.provider.configure"|"ai.status"|"ai.key.save"|"ai.key.remove"|"ai.models"|"ai.test"|"ai.context"|"ai.ask"|"ai.history"|"ai.request.reconcile"|"candidate.record")||investigation::supports(action)||planning::supports(action)||budget::supports(action)
     }
 
     fn selected_provider(&self,requested:Option<ProviderId>,store:&Store)->Result<ProviderId,String>{
@@ -249,6 +253,7 @@ impl AiService {
         if planning::supports(action){return self.operation_propose(payload,store,work.ok_or("work_owned_operation")?);}
         if budget::supports(action){return self.budget_handle(action,payload,store);}
         match action {
+            "ai.chat.status"|"ai.chat.stop" => self.chat.inspect(payload,action=="ai.chat.stop"),
             "ai.key.save" => {
                 let _lease=self.inference.try_lock().map_err(|_|"Aguarde a solicitação em andamento antes de trocar a credencial.".to_string())?;
                 let input: KeyInput = decode(payload)?;
@@ -603,7 +608,9 @@ impl AiService {
             if let (Some((store,_,_)),Some(receipt))=(authority,receipt.as_ref()){self.data_policy.finish(store,receipt,crate::data_policy::DataUseOutcome::NotSent,vec![])?;}
             return Err(error);
         }
-        let raw_result=self.provider.response(provider,model,key,prompt,instructions,max_output_tokens);
+        let raw_result=if matches!(operation,"ask"|"operation_proposal"){
+            self.chat.start(assessment,&id).and_then(|live|self.provider.chat_response(provider,model,key,prompt,instructions,max_output_tokens,&live.token))
+        }else{self.provider.response(provider,model,key,prompt,instructions,max_output_tokens)};
         let result=self.commit_response(&id,assessment,key,history_message,raw_result);
         if let (Some((store,_,_)),Some(receipt))=(authority,receipt.as_ref()){
             let status:String=self.db.lock().map_err(failure)?.query_row("SELECT status FROM requests WHERE id=?1",[&id],|r|r.get(0)).map_err(failure)?;
@@ -637,9 +644,13 @@ impl AiService {
         tx.execute("UPDATE requests SET status=?1,input_tokens=?2,output_tokens=?3,details=?4 WHERE id=?5",params![status,input,output,details.to_string(),id]).map_err(failure)?;
         if let (Some(question),Ok(answer))=(history_message,&result) {
             let answer=answer["text"].as_str().ok_or("Resposta sem texto.")?;
+            let mut message_ids=Vec::new();
             for (role,text) in [("user",question),("assistant",answer)] {
-                tx.execute("INSERT INTO messages VALUES(?1,?2,?3,?4,?5)",params![model::id(),assessment,role,text,model::now()]).map_err(failure)?;
+                let message_id=model::id();
+                tx.execute("INSERT INTO messages VALUES(?1,?2,?3,?4,?5)",params![message_id,assessment,role,text,model::now()]).map_err(failure)?;
+                message_ids.push(message_id);
             }
+            tx.execute("UPDATE requests SET details=json_set(details,'$.chatMessageIds',json(?2)) WHERE id=?1",params![id,json!(message_ids).to_string()]).map_err(failure)?;
         }
         tx.commit().map_err(failure)?;
         let budget=accounting?;
