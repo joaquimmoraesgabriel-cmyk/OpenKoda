@@ -1,5 +1,21 @@
 # Etapas e evidências da construção
 
+**0.1.15 local.** O Histórico de uso reúne a atividade de IA do perfil por dia, modelo, provedor e avaliação. Inclui registros anteriores à configuração do orçamento e identifica medições parciais. O Perfil e Uso e orçamento dão acesso ao mesmo histórico. As estimativas em dólares usam as tarifas e os limites cadastrados na instalação. [Guia de uso](README.md)
+
+A análise estática pelo MCP REA consultou o renderer e as traduções da Cindy para identificar a navegação, os filtros e os controles de Geral, Aparência, Histórico de uso, Uso e faturamento e Provedores. O OpenKoda usa essas referências com seu próprio histórico SQLite, cofre de credenciais e fluxo de revisão. Geral compartilha o nome com o Perfil e permite escolher o atalho de envio e o comportamento da janela. Aparência aplica fontes, tamanhos, cores, densidade e papel de parede à área de trabalho.
+
+IA e modelos, a criação de avaliações e a revisão do envio oferecem os mesmos sete provedores. A primeira credencial Anthropic, Gemini, DeepSeek ou xAI amplia o cofre que já guardava as credenciais de OpenAI, OpenRouter e Groq. O guia descreve como voltar à versão anterior com um backup.
+
+Passaram 277 testes no Edge, 76 testes unitários da interface e 598 testes Rust, incluindo a conectividade do Windows e o fluxo no Kali dedicado. As suítes auxiliares passaram em 123 testes no Kali, 34 de ambiente no Windows e 21 de recuperação do instalador. A inspeção visual cobriu os temas claro e escuro em Geral, Aparência, Uso e orçamento, Histórico de uso e IA e modelos.
+
+Os sete roteiros nativos passaram em 79 grupos no executável de teste. A janela minimizou e foi restaurada com o mesmo processo. No perfil restaurado, o teste conferiu o cofre de versão 2, a separação das credenciais dos sete provedores e a persistência da seleção após reabrir. A verificação incluiu a escolha de pasta, os controles de escopo, o backup, a recuperação e a comparação de avaliações.
+
+O [instalador local x64](releases/0.1.15-local-20261111/OpenKoda_0.1.15_x64-setup.exe) tem 7.386.738 bytes e SHA-256 `9baabd69216665eda297fe9e9ddf4e655856878f95bdab36b69859c32787526f`. O arquivo está sem assinatura digital. O teste de integridade do NSIS passou. A extração confirmou a versão 0.1.15 do executável, os cinco arquivos da interface compilada e os oito recursos de licenças, avisos e recuperação.
+
+Na migração direta 0.1.14 → 0.1.15, o mesmo perfil de teste abriu duas vezes em cada versão. O reenvio devolveu o mesmo ID e manteve uma única avaliação. O histórico recuperou duas chamadas antigas, 21 tokens medidos e uma medição parcial. As credenciais sintéticas OpenAI e Groq sobreviveram à atualização do cofre e à adição de uma credencial Gemini. Em outro perfil temporário, o catálogo oficial da OpenAI retornou 96 modelos em uma consulta real. O teste removeu a chave e realizou zero inferências. Os demais serviços foram exercitados com dados de teste.
+
+Os instaladores compilados do commit `8b18112` abriram duas vezes nos três ambientes limpos. O mesmo projeto reapareceu na segunda abertura e o banco sobreviveu à desinstalação. O primeiro ensaio no Server 2022 esgotou o tempo de espera pelo botão Projetos. A repetição no mesmo commit passou. [Windows Server 2022 e 2025](https://github.com/joaquimmoraesgabriel-cmyk/OpenKoda/actions/runs/43088843440) · [Windows 11 ARM64 com o aplicativo x64](https://github.com/joaquimmoraesgabriel-cmyk/OpenKoda/actions/runs/43088843174)
+
 **0.1.14 local.** O Perfil reúne a atividade das avaliações. Uso e orçamento mostra o saldo local e as reservas em dólares. Em Análises, o filtro por provedor e modelo atualiza o gráfico de tokens e a tabela de custos. Os modelos de OpenAI, OpenRouter e Groq podem ser escolhidos ao preparar a avaliação ou revisar um envio. As listas de Configurações, Avaliações e Achados rolam independentemente do conteúdo. O K da barra lateral identifica o executável e o instalador. [Guia de uso](README.md)
 
 Passaram 273 testes no Edge, 71 testes unitários da interface e 596 testes Rust, incluindo os testes de integração com a conectividade do Windows e o Kali dedicado. A inspeção de Perfil, Uso e Análises cobriu os temas claro e escuro com dados sintéticos.

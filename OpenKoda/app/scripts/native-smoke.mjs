@@ -38,6 +38,7 @@ let child;
 let browser;
 let page;
 let artifact;
+const navigationButton = name => page.getByRole('navigation', { name: 'Navegação principal' }).getByRole('button', { name, exact: true });
 
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 async function fileHash(path) {
@@ -94,7 +95,7 @@ async function openApp() {
   page.on('pageerror', error => { pageErrors.push(error.message); diagnostics.push(`pageerror: ${error.message}`); });
   await page.waitForFunction(() => typeof window.__TAURI_INTERNALS__?.invoke === 'function');
   expect(new URL(page.url()).hostname, 'Run only the bundled native frontend').toBe('tauri.localhost');
-  await expect(page.getByRole('button', { name: 'Projetos', exact: true })).toBeVisible();
+  await expect(navigationButton('Projetos')).toBeVisible();
   await browser.contexts()[0].tracing.start({ screenshots: true, snapshots: true, sources: true });
   await expect(page.locator('#main-content')).toHaveAttribute('aria-busy', 'false', { timeout: 45_000 });
 }
@@ -146,7 +147,7 @@ async function screenshot(name) { await page.screenshot({ path: join(runDirector
 async function openProjectsAndWaitForIpc() {
   // Leaving the panel cancels its scheduled inventory reads. Let any requests
   // already in flight finish before the fixture starts another operation.
-  await page.getByRole('button', { name: 'Projetos', exact: true }).click();
+  await navigationButton('Projetos').click();
   await expect(page.getByRole('heading', { name: 'Projetos', exact: true })).toBeVisible();
   await expect.poll(() => pendingIpcRequests.size, {
     timeout: 45_000, message: 'Pending review-panel reads finish after opening Projects',
@@ -394,7 +395,7 @@ try {
     }
   });
   await gate('E1-host-connectivity', 'Windows connectivity has its own on-demand Settings observation', async () => {
-    await page.getByRole('button', { name: 'Configurações', exact: true }).click();
+    await navigationButton('Configurações').click();
     await page.getByRole('button', { name: 'Geral', exact: true }).click();
     const panel = page.getByRole('region', { name: 'Conectividade com a Internet' });
     const status = panel.getByRole('status');
@@ -441,7 +442,7 @@ try {
     return { refusals, externalOriginsOpened: 0, newWebviews: 0 };
   });
   await gate('E1-native-form', 'Native project and draft forms persist the selected local target', async () => {
-    await page.getByRole('button', { name: 'Projetos', exact: true }).click();
+    await navigationButton('Projetos').click();
     await page.getByRole('button', { name: 'Adicionar projeto', exact: true }).click();
     await page.getByLabel('Nome do projeto', { exact: true }).fill('Laboratório nativo isolado');
     async function chooseTarget(selection, path) {
@@ -470,7 +471,7 @@ try {
     await expect(page.getByRole('heading', { name: 'Laboratório nativo isolado', exact: true })).toBeVisible();
     const formProject = (await request('snapshot')).projects[0];
     const scopeOptions = await request('assessment.scopeOptions', { projectId: formProject.id });
-    await page.getByRole('button', { name: 'Nova avaliação', exact: true }).click();
+    await navigationButton('Nova avaliação').click();
     await page.getByLabel('Título', { exact: true }).fill('Avaliação nativa integrada');
     await page.getByLabel('Objetivo', { exact: true }).fill('Inventariar os arquivos sintéticos sem executar o código.');
     const formMethods = ['local.inventory.v1', 'ai.remote-review.v1', 'local.text-remediation.v1'];
@@ -889,7 +890,7 @@ try {
     await rejects('finding.update', { id: finding.id, status: 'fixed' });
     await page.reload();
     await expect(page.locator('#main-content')).toHaveAttribute('aria-busy', 'false', { timeout: 45_000 });
-    await page.getByRole('button', { name: 'Achados', exact: true }).click();
+    await navigationButton('Achados').click();
     await page.getByText(finding.title, { exact: true }).click();
     await page.getByRole('button', { name: 'Histórico', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Validação registrada', exact: true })).toBeVisible();
@@ -1288,7 +1289,7 @@ try {
         expect(restored).toEqual(purgeCanonicalReceipts.get(expected.id));
       }
     } finally { purgeDb.close(); }
-    await page.getByRole('button', { name: 'Configurações', exact: true }).click();
+    await navigationButton('Configurações').click();
     await page.getByRole('button', { name: 'Backup e recuperação', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Verificar backup', exact: true })).toBeVisible();
     await screenshot('07-native-backup.png');
@@ -1382,7 +1383,7 @@ try {
     const aiJournal = new DatabaseSync(join(dataDirectory, 'assistant.sqlite3'), { readOnly: true });
     try { expect(aiJournal.prepare('SELECT count(*) AS count FROM requests').get().count).toBe(0); }
     finally { aiJournal.close(); }
-    await page.getByRole('navigation', { name: 'Navegação principal' }).getByRole('button', { name: 'Avaliações', exact: true }).click();
+    await navigationButton('Avaliações').click();
     await page.getByText('Avaliação nativa integrada', { exact: true }).first().click();
     await expect(page.locator('.detail-heading .status')).toHaveText('Parcial');
     await screenshot('08-native-restarted.png'); expect(pageErrors).toEqual([]);
@@ -1567,9 +1568,14 @@ try {
       target: project.target, objective: 'Verificar seleção e reabertura sem inferência.',
       idempotencyKey: randomUUID(), aiSelection: { provider: 'openrouter', model: 'fixture/model' }
     };
-    for (const provider of ['groq', 'openrouter']) {
+    const additionalProviders = ['groq', 'openrouter', 'anthropic', 'gemini', 'deepseek', 'xai'];
+    for (const provider of additionalProviders) {
       await request('ai.key.save', {provider, key: 'OPENKODA_SYNTHETIC_' + provider + '_NEVER_SEND_0123456789'});
     }
+    const {currentProfile} = await request('activation.status');
+    const vaultPath = currentProfile.kind === 'base' ? 'assistant.sqlite3' : join('profiles', currentProfile.id, 'assistant.sqlite3');
+    const vaultVersion = fixtureDatabase(vaultPath, db => db.prepare('PRAGMA user_version').get().user_version);
+    expect(vaultVersion).toBe(2);
     const created = await request('assessment.create', input);
     expect(created.aiSelection).toEqual(input.aiSelection);
     await closeApp('before-provider-reopen.zip');
@@ -1579,15 +1585,15 @@ try {
     await rejects('assessment.create', {...input, aiSelection: other}, 'scope_idempotency_conflict');
     await request('ai.selection.save', {assessmentId:created.id, aiSelection:other});
     await request('ai.key.remove', {provider:'openrouter'});
-    const expectedKeys = {openai:initial.settings.hasApiKey, groq:true, openrouter:false};
-    for (const [provider,hasApiKey] of Object.entries(expectedKeys)) {
+    const expectedKeys = new Map([['openai',initial.settings.hasApiKey], ...additionalProviders.map(id => [id, id !== 'openrouter'])]);
+    for (const [provider,hasApiKey] of expectedKeys) {
       expect(await request('ai.status', {provider})).toMatchObject({provider,hasApiKey});
     }
     const after = await request('snapshot');
     expect(after.assessments).toHaveLength(initial.assessments.length + 1);
     expect(after.assessments.find(a => a.id === created.id).aiSelection).toEqual(other);
     expect(after.settings).toEqual(initial.settings);
-    return {providers:3, assessmentId:created.id, duplicatePrevented:true, providerChanged:true, modelInferences:0};
+    return {providers:expectedKeys.size, vaultVersion, assessmentId:created.id, duplicatePrevented:true, providerChanged:true, modelInferences:0};
   });
   succeeded = true;
 } catch (error) {

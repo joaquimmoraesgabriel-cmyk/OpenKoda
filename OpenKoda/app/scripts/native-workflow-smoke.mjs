@@ -335,7 +335,7 @@ try {
     expect(await request('kali.mcp.assessmentEnvironments', {projectId,assessmentIds:ids})).toEqual([]);
     await denied('kali.mcp.assessmentEnvironments',{projectId:legacyProject.id,assessmentIds:ids});
     await page.reload();
-    await expect(page.locator('#main-content')).toHaveAttribute('aria-busy','false');
+    await expect(page.locator('#main-content')).toHaveAttribute('aria-busy','false', { timeout: 45000 });
     await page.getByRole('button',{name:'Projetos',exact:true}).click();
     await page.getByRole('button',{name:/Owned workflow fixture/}).click();
     await page.getByRole('navigation',{name:'Seções'}).getByRole('button',{name:'Avaliações'}).click();
