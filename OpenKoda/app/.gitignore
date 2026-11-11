@@ -4,5 +4,6 @@ src-tauri/target/
 test-results/
 playwright-report/
 .local/
+.test-work/
 releases/
 *.log
