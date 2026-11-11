@@ -396,7 +396,17 @@ mod tests {
     }
     #[test]
     fn global_request_count_cannot_be_reset_by_erasing_profile_requests(){
-        let f=Fixture::new((0..100).map(|_|answer("bounded",1,1)).collect());let input=f.ask_input();for _ in 0..100{f.ask(f.ask_input(),None).unwrap();}f.ai.db.lock().unwrap().execute("DELETE FROM requests",[]).unwrap();assert!(f.ask(input,None).unwrap_err().contains("100 solicitações"));assert_eq!(f.fake.calls.load(Ordering::SeqCst),100);
+        let f = Fixture::new((0..100).map(|_| answer("bounded", 1, 1)).collect());
+        for _ in 0..100 {
+            f.ask(f.ask_input(), None).unwrap();
+        }
+        let deleted = f.ai.db.lock().unwrap().execute("DELETE FROM requests", []).unwrap();
+        assert_eq!(deleted, 100);
+
+        // Review the next request at dispatch time. Building the ledger may outlast a data review.
+        let error = f.ask(f.ask_input(), None).expect_err("the installation request limit must hold");
+        assert!(error.contains("100 solicitações"), "unexpected rejection: {error}");
+        assert_eq!(f.fake.calls.load(Ordering::SeqCst), 100);
     }
     #[test]
     fn first_enable_retains_priced_disabled_usage_and_unpriced_human_allocations(){
