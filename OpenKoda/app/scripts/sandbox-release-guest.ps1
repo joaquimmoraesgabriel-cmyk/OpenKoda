@@ -21,6 +21,34 @@ function Assert-CleanInstallState {
     }
     if (Get-Process -Name 'openkoda','openkoda-debug' -ErrorAction SilentlyContinue) { throw 'Unexpected running OpenKoda process.' }
 }
+function Read-LocalTargets([int]$Port) {
+    # The browser and the probe share a loopback port on this guest. A system proxy
+    # must never handle these requests or supply the response to the smoke.
+    $request = [Net.HttpWebRequest]::Create("http://127.0.0.1:$Port/json/list")
+    $request.Proxy = $null
+    $request.Timeout = 1500
+    $response = $request.GetResponse()
+    try {
+        $reader = [IO.StreamReader]::new($response.GetResponseStream())
+        try { $reader.ReadToEnd() | ConvertFrom-Json } finally { $reader.Dispose() }
+    } finally { $response.Dispose() }
+}
+function Get-StartupDiagnostics($App,[int]$Port,[string]$Cache,[string]$Profile,$Observations) {
+    $App.Refresh()
+    $children = @(Get-CimInstance Win32_Process -Filter "Name = 'msedgewebview2.exe'" -ErrorAction SilentlyContinue |
+        Where-Object { $_.ParentProcessId -eq $App.Id -or ($_.CommandLine -and $_.CommandLine.Contains($Cache)) })
+    return [ordered]@{
+        appSession = $App.SessionId
+        runnerSession = (Get-Process -Id $PID).SessionId
+        appHasWindow = $App.MainWindowHandle -ne [IntPtr]::Zero
+        appWindowTitle = $App.MainWindowTitle
+        databaseCreated = Test-Path -LiteralPath (Join-Path $Profile 'openkoda.sqlite3')
+        browserCacheCreated = Test-Path -LiteralPath $Cache
+        browserProcesses = $children.Count
+        browserWithDebugPort = @($children | Where-Object { $_.CommandLine -like "*--remote-debugging-port=$Port*" }).Count
+        discovery = $Observations
+    }
+}
 function Read-Renderer([string]$Expression) {
     $token = [Threading.CancellationTokenSource]::new(15000)
     try {
@@ -90,6 +118,8 @@ try {
         $result.differingBytes = $proof.differingBytes
     } elseif ($result.payloadSha256 -ne $manifest.payloadSha256) { throw 'Installed payload hash mismatch.' }
     $result.stage = 'launch'
+    $cacheRoot = if ($GitHubHosted) { $runnerTemp } else { $env:TEMP }
+    $browserCache = Join-Path $cacheRoot ('openkoda-webview-'+[guid]::NewGuid())
     $probe = @'
 (async () => {
   const main = document.querySelector('main');
@@ -102,16 +132,33 @@ try {
     foreach ($iteration in 1,2) {
         $server = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback,0)
         $server.Start(); $port = $server.LocalEndpoint.Port; $server.Stop()
-        $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = "--remote-debugging-address=127.0.0.1 --remote-debugging-port=$port"
-        $app = Start-Process -FilePath $exe -WindowStyle Hidden -PassThru
+        $launch = [Diagnostics.ProcessStartInfo]::new()
+        $launch.FileName = $exe
+        $launch.WorkingDirectory = $destination
+        $launch.UseShellExecute = $false
+        $launch.EnvironmentVariables['WEBVIEW2_USER_DATA_FOLDER'] = $browserCache
+        $launch.EnvironmentVariables['WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS'] = "--remote-debugging-address=127.0.0.1 --remote-debugging-port=$port"
+        $app = [Diagnostics.Process]::Start($launch)
         $deadline = [DateTime]::UtcNow.AddSeconds(75)
         $tab = $null
+        $observed = [ordered]@{available=$false;targets=@();failure=$null}
         do {
             if ($app.HasExited) { throw 'Release executable exited during startup.' }
-            try { $tab = @(Invoke-RestMethod -Uri "http://127.0.0.1:$port/json/list" -TimeoutSec 2 | ForEach-Object { $_ } | Where-Object { $_.type -eq 'page' -and $_.url -match '^https?://tauri\.localhost/' })[0] } catch {}
+            try {
+                $targets = @(Read-LocalTargets $port)
+                $observed.available = $true
+                $observed.targets = @($targets | ForEach-Object {
+                    $url = [Uri]$_.url
+                    @{type=$_.type;scheme=$url.Scheme;host=$url.Host}
+                })
+                $tab = $targets | Where-Object { $_.type -eq 'page' -and ([Uri]$_.url).Host -eq 'tauri.localhost' } | Select-Object -First 1
+            } catch { $observed.failure = $_.Exception.GetBaseException().GetType().Name }
             if (-not $tab) { Start-Sleep -Milliseconds 250 }
         } until ($tab -or [DateTime]::UtcNow -gt $deadline)
-        if (-not $tab) { throw 'Installed WebView did not reach the local application origin.' }
+        if (-not $tab) {
+            $result.diagnostics = Get-StartupDiagnostics $app $port $browserCache $profileRoot $observed
+            throw 'Installed WebView did not reach the local application origin.'
+        }
         $client = [Net.WebSockets.ClientWebSocket]::new()
         $connect = [Threading.CancellationTokenSource]::new(10000)
         try { $client.ConnectAsync([Uri]$tab.webSocketDebuggerUrl,$connect.Token).GetAwaiter().GetResult() } finally { $connect.Dispose() }
