@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Boxes, CircleDollarSign, Database, HardDriveDownload, History, Layers, LifeBuoy, Monitor, RefreshCw, Search, Settings2, ShieldCheck, SlidersHorizontal } from 'lucide-react';
 import { version } from '../../package.json';
+import { native } from '../api';
 import { appearanceFrom, appearanceKeys, saveAppearance, useDeviceAppearance, type DeviceAppearance } from '../appearance';
 import { Action, Assessment, Project, Settings as SettingsModel, errorMessage } from '../types';
 import { Field, Notice, KeyValue } from './shared';
@@ -146,7 +147,9 @@ export default function Settings({settings, projects, action, busy, dataRequest=
         </form>}
         {section === 'Geral' && <GeneralSettings windowOptions={<WindowBehaviorSettings/>}/>}
         {section === 'IA e modelos' && <>
-          <form onSubmit={save}><AiConnection saved={settings} draft={draft} dirty={dirty} change={change} action={action} busy={busy}/>{saveActions}</form>
+          {native
+            ? <AiConnection saved={settings} draft={draft} change={change} action={action} busy={busy}/>
+            : <form onSubmit={save}><AiConnection saved={settings} draft={draft} change={change} action={action} busy={busy}/>{saveActions}</form>}
           <AiLocalClosure action={action} busy={busy}/>
         </>}
         {section === 'Uso e orçamento' && <AiBudgetSettings action={action} busy={busy} onUsageHistory={()=>navigate('Histórico de uso')}/>}

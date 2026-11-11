@@ -1,6 +1,26 @@
 use serde_json::{json, Value};
 use std::{fs, io, path::{Path, PathBuf}, sync::Mutex};
 
+#[cfg(windows)]
+pub(crate) fn set_taskbar_icon(window: &tauri::WebviewWindow) {
+    use windows_sys::Win32::{
+        System::LibraryLoader::GetModuleHandleW,
+        UI::WindowsAndMessaging::{LoadIconW, SendMessageW, ICON_BIG, WM_SETICON},
+    };
+    let Ok(hwnd) = window.hwnd() else { return };
+    // Tauri sets the small title-bar icon. Windows requests ICON_BIG separately for task switching.
+    // LoadIconW returns a shared icon from our own module, valid until the application exits.
+    unsafe {
+        let module = GetModuleHandleW(std::ptr::null());
+        if module.is_null() { return; }
+        let resource = tauri::utils::platform::WINDOWS_APP_ICON_RESOURCE_ID as usize as *const u16;
+        let icon = LoadIconW(module, resource);
+        if !icon.is_null() {
+            SendMessageW(hwnd.0, WM_SETICON, ICON_BIG as usize, icon as isize);
+        }
+    }
+}
+
 pub(crate) struct WindowBehavior {
     marker: PathBuf,
     minimize: Mutex<bool>,

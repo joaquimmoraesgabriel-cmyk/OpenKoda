@@ -1,0 +1,52 @@
+.provider-connection-actions, .provider-model-heading, .provider-default-model,
+.provider-setup-footer, .provider-setup-footer > div, .provider-endpoint {
+  display: flex; align-items: center; gap: .65rem; flex-wrap: wrap;
+}
+.provider-host, .provider-model-heading > span, .provider-endpoint small { color: var(--muted); font-size: .82rem; }
+.provider-host { flex: 1; overflow-wrap: anywhere; }
+.provider-selected-summary, .provider-test { border-top: 1px solid var(--line); padding-top: 1rem; margin-top: 1.1rem; }
+.provider-selected-summary h3, .provider-model-heading h4 { margin: 0; font-weight: 650; }
+.provider-selected-summary p, .provider-setup-body p, .provider-test p { font-size: .88rem; line-height: 1.45; }
+.provider-default-model { font-size: .82rem; color: var(--muted); }
+.provider-default-model strong { color: var(--text); overflow-wrap: anywhere; }
+.provider-enabled-list { padding: 0; margin: .9rem 0 0; list-style: none; max-height: 12rem; overflow: auto; }
+.provider-enabled-list li { border-top: 1px solid var(--line); padding: .55rem 0; font-size: .84rem; overflow-wrap: anywhere; }
+.provider-setup-dialog { width: min(38rem, calc(100vw - 1.5rem)); max-height: min(84dvh, 42rem); }
+.provider-setup-dialog .provider-dialog-content { display: flex; flex-direction: column; max-height: inherit; padding: 0; }
+.provider-setup-dialog .provider-setup-heading { margin: 0; padding: .85rem 1.15rem; gap: .75rem; }
+.provider-setup-heading h3 { font-size: 1.12rem; }
+.provider-setup-heading h3:focus { outline: 0; }
+.provider-setup-heading .button { min-height: 2rem; width: 2rem; padding: .25rem; }
+.provider-steps { display: flex; gap: .85rem; flex-wrap: wrap; padding: 0 1.15rem .65rem; margin: 0; list-style: none; }
+.provider-steps li { display: flex; align-items: center; gap: .22rem; font-size: .75rem; color: var(--muted); }
+.provider-steps li[aria-current="step"] { font-weight: 650; color: var(--text); }
+.provider-setup-body { overflow: auto; min-height: 0; scrollbar-width: thin; border-block: 1px solid var(--line); padding: 1.15rem; }
+.provider-setup-body form { display: grid; gap: .6rem; }
+.provider-setup-body form label { font-weight: 600; font-size: .9rem; }
+.provider-setup-body .provider-options button { width: 100%; }
+.provider-endpoint { margin-bottom: .6rem; }
+.provider-endpoint img { padding: .18rem; background: white; border: 1px solid var(--line); border-radius: .4rem; }
+.provider-endpoint strong, .provider-endpoint small { display: block; overflow-wrap: anywhere; }
+.provider-key-input { display: flex; align-items: center; padding-inline-end: .3rem; border-radius: .7rem; border: 1px solid var(--line); background: var(--subtle); }
+.provider-key-input input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--text); padding: .75rem; border-radius: inherit; }
+.provider-key-input .button { min-height: 1.9rem; height: 1.9rem; border: 0; padding: .35rem; }
+.provider-model-heading { justify-content: space-between; }
+.provider-setup-body .provider-search { margin: .6rem 0; }
+.provider-checklist { border: 1px solid var(--line); border-radius: .65rem; max-height: min(33vh, 17rem); overflow-y: auto; scrollbar-width: thin; }
+.provider-checklist label, .provider-default-choice > label { display: flex; align-items: center; gap: .65rem; cursor: pointer; }
+.provider-checklist label { padding: .65rem .75rem; overflow-wrap: anywhere; font-size: .88rem; }
+.provider-checklist label + label { border-top: 1px solid var(--line); }
+.provider-checklist label:hover { background: var(--subtle); }
+.provider-checklist input, .provider-default-choice input { width: 1rem; height: 1rem; flex: none; accent-color: var(--text); margin: 0; }
+.provider-checklist p { margin: .75rem; color: var(--muted); }
+.provider-default-choice { margin-top: 1rem; display: grid; gap: .5rem; }
+.provider-default-choice > span, .provider-default-choice > label { font-size: .85rem; font-weight: 600; }
+.provider-default-choice .field { display: grid; grid-template-columns: minmax(0,1fr); gap: .3rem; }
+.provider-default-choice select { max-width: 100%; }
+.provider-setup-footer { padding: .8rem 1.1rem; justify-content: flex-end; }
+.provider-setup-footer > div { margin-inline-start: auto; justify-content: flex-end; }
+.provider-setup-error { margin-block-start: .8rem; }
+@media (max-width: 480px) {
+  .provider-setup-footer { padding: .7rem; gap: .4rem; }
+  .provider-setup-footer .button { padding-inline: .65rem; font-size: .8rem; }
+}

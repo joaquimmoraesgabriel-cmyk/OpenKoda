@@ -106,8 +106,9 @@ export default function App() {
     busyRef.current = true; setBusy(true); setError(''); setNotice('');
     try {
       const result = await request<T>(name, payload);
-      if(['settings.save','ai.key.save','ai.key.remove','ai.budget.configure','ai.budget.resolveUnknown'].includes(name))budgetChanged();
-      if(name.startsWith('data.')||name.startsWith('credential.reference.')||['settings.save','ai.key.save','ai.key.remove'].includes(name))dataChanged();
+      const connectionChanged = ['settings.save','ai.provider.configure','ai.key.save','ai.key.remove'].includes(name);
+      if(connectionChanged || ['ai.budget.configure','ai.budget.resolveUnknown'].includes(name))budgetChanged();
+      if(connectionChanged || name.startsWith('data.') || name.startsWith('credential.reference.'))dataChanged();
       await refresh();
       // environment.status probes Linux and would restart a just-stopped backup source.
       if ((name.startsWith('environment.') && !name.startsWith('environment.archive.')) || name.startsWith('packages.')) {

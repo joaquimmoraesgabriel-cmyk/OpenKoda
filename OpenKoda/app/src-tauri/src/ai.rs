@@ -123,8 +123,16 @@ struct AskInput { assessment_id: String, evidence_ids: Vec<String>, context_dige
 #[derive(Deserialize)]#[serde(rename_all="camelCase",deny_unknown_fields)]
 struct TestInput {#[serde(default)]budget_review:Option<budget::Consent>}
 #[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct KeyInput { key: String, provider:Option<ProviderId> }
+#[serde(rename_all="camelCase", deny_unknown_fields)]
+struct KeyInput { key: String, provider:Option<ProviderId>, #[serde(default)] prepare_activation: bool }
+#[derive(Deserialize)]
+#[serde(rename_all="camelCase", deny_unknown_fields)]
+struct ConfigureProvider {
+    provider: ProviderId,
+    credential_revision: String,
+    models: std::collections::BTreeSet<String>,
+    default_model: Option<String>,
+}
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ProviderInput { provider:Option<ProviderId> }
@@ -180,7 +188,7 @@ impl AiService {
     pub fn with_data_policy(mut self, service:Arc<crate::data_policy::DataPolicyService>)->Self { self.data_policy=service; self }
 
     pub fn supports(action: &str) -> bool {
-        matches!(action, "ai.selection.save"|"ai.status"|"ai.key.save"|"ai.key.remove"|"ai.models"|"ai.test"|"ai.context"|"ai.ask"|"ai.history"|"ai.request.reconcile"|"candidate.record")||investigation::supports(action)||planning::supports(action)||budget::supports(action)
+        matches!(action, "ai.selection.save"|"ai.provider.configure"|"ai.status"|"ai.key.save"|"ai.key.remove"|"ai.models"|"ai.test"|"ai.context"|"ai.ask"|"ai.history"|"ai.request.reconcile"|"candidate.record")||investigation::supports(action)||planning::supports(action)||budget::supports(action)
     }
 
     fn selected_provider(&self,requested:Option<ProviderId>,store:&Store)->Result<ProviderId,String>{
@@ -245,10 +253,22 @@ impl AiService {
                 let _lease=self.inference.try_lock().map_err(|_|"Aguarde a solicitação em andamento antes de trocar a credencial.".to_string())?;
                 let input: KeyInput = decode(payload)?;
                 let provider=self.selected_provider(input.provider,store)?;
-                let key = Zeroizing::new(input.key);
+                let pasted = Zeroizing::new(input.key);
+                let key = pasted.trim();
                 if key.len() < 16 || key.len() > 512 || !key.bytes().all(|c| c.is_ascii_graphic()) { return Err("Informe uma chave de API válida, sem espaços.".into()); }
                 let cipher = protect(key.as_bytes(), false)?;
                 crate::credential_refs::ensure_provider_slot(store,provider)?;
+                if input.prepare_activation {
+                    // Install the guard first: if the vault write fails or the process stops,
+                    // the old key keeps its exact behavior. A new revision starts pending.
+                    let previous = self.revision(provider)?;
+                    store.mutate(|state| {
+                        state.provider_models.entry(provider).or_insert(crate::ai_provider::ProviderModelPreference {
+                            credential_revision: previous, models: None,
+                        });
+                        Ok(())
+                    })?;
+                }
                 let mut db = self.db.lock().map_err(failure)?;
                 let tx = db.transaction().map_err(failure)?;
                 if provider!=ProviderId::OpenAI {expand_provider_slots(&tx,provider)?;}
@@ -268,11 +288,42 @@ impl AiService {
                 tx.commit().map_err(failure)?;
                 Ok(json!({"hasApiKey":false,"verified":false}))
             }
+            "ai.provider.configure" => {
+                let _lease = self.inference.try_lock().map_err(|_| "Aguarde a solicitação em andamento antes de ativar os modelos.".to_string())?;
+                let input: ConfigureProvider = decode(payload)?;
+                let provider = input.provider;
+                if self.revision(provider)?.as_deref() != Some(input.credential_revision.as_str()) {
+                    return Err("A chave mudou. Consulte os modelos novamente antes de ativar o provedor.".into());
+                }
+                if input.models.is_empty() || input.models.iter().any(|id| !crate::ai_provider::valid_model(id)) {
+                    return Err("Selecione pelo menos um modelo válido.".into());
+                }
+                if input.default_model.as_ref().is_some_and(|id| !input.models.contains(id)) {
+                    return Err("Escolha o modelo padrão entre os modelos selecionados.".into());
+                }
+                store.mutate(|state| {
+                    if let Some(id) = input.default_model {
+                        state.settings.provider = provider.id().into();
+                        state.settings.endpoint = provider.endpoint().into();
+                        state.settings.model = id;
+                    } else if state.settings.provider == provider.id() && !input.models.contains(&state.settings.model) {
+                        return Err("Escolha um modelo padrão entre os selecionados para este provedor.".into());
+                    }
+                    state.provider_models.insert(provider, crate::ai_provider::ProviderModelPreference {
+                        credential_revision: Some(input.credential_revision), models: Some(input.models),
+                    });
+                    Ok(())
+                })?;
+                self.provider_status(store, Some(provider))
+            }
             "ai.selection.save"=>{
                 let _lease=self.inference.try_lock().map_err(|_|"Aguarde a solicitação de IA antes de alterar o modelo.")?;
                 if payload.get("aiSelection").is_none(){return Err("Escolha um modelo ou o padrão da instalação.".into());}
                 let input:AssessmentSelection=decode(payload)?;
-                if let Some(selection)=&input.ai_selection {selection.validate()?;}
+                if let Some(selection)=&input.ai_selection {
+                    selection.validate()?;
+                    self.require_enabled_model(&store.snapshot()?, selection.provider, &selection.model)?;
+                }
                 store.mutate(|state|{
                     let a=state.assessments.iter_mut().find(|a|a.id==input.assessment_id).ok_or("Avaliação não encontrada.")?;
                     if !state.projects.iter().any(|p|p.id==a.project_id&&!p.archived){return Err("Projeto arquivado.".into());}
@@ -285,9 +336,9 @@ impl AiService {
                 let input:ProviderInput=decode(payload)?;
                 let provider=self.selected_provider(input.provider,store)?;
                 let _work=work.as_ref().ok_or("work_owned_operation")?;
-                let (key,_) = self.provider_credential(provider)?;
+                let (key,revision) = self.provider_credential(provider)?;
                 let models=self.provider.models(provider,&key)?;
-                Ok(json!({"provider":provider,"models":models,"note":"O catálogo inclui os modelos disponíveis para a chave. O teste de conexão verifica a geração de texto pelo modelo selecionado."}))
+                Ok(json!({"provider":provider,"models":models,"credentialRevision":revision,"note":"O catálogo inclui os modelos disponíveis para a chave. O teste de conexão verifica a geração de texto pelo modelo selecionado."}))
             }
             "ai.test" => {
                 let input:TestInput=decode(payload)?;
@@ -373,7 +424,20 @@ impl AiService {
     fn credential(&self)->Result<(Zeroizing<String>,String),String>{ self.provider_credential(ProviderId::OpenAI) }
 
     fn config_for(&self,store:&Store,assessment:Option<&str>,require_model:bool)->Result<model::Settings,String>{
-        Self::config_in(&store.snapshot()?,assessment,require_model)
+        let state = store.snapshot()?;
+        let settings = Self::config_in(&state,assessment,require_model)?;
+        if require_model {
+            self.require_enabled_model(&state, ProviderId::parse(&settings.provider)?, &settings.model)?;
+        }
+        Ok(settings)
+    }
+    fn require_enabled_model(&self, state: &model::Snapshot, provider: ProviderId, model: &str) -> Result<(), String> {
+        if let Some(preference) = state.provider_models.get(&provider) {
+            if !preference.permits(self.revision(provider)?.as_deref(), model) {
+                return Err("O modelo escolhido está desativado para esta chave. Ative-o em IA e modelos ou selecione outro para a avaliação.".into());
+            }
+        }
+        Ok(())
     }
     fn config_in(state:&model::Snapshot,assessment:Option<&str>,require_model:bool)->Result<model::Settings,String>{
         let mut cfg=state.settings.clone();
@@ -393,14 +457,16 @@ impl AiService {
         Ok(cfg)
     }
     fn provider_status(&self,store:&Store,requested:Option<ProviderId>)->Result<Value,String>{
-        let cfg=store.snapshot()?.settings;
+        let state=store.snapshot()?;
+        let cfg=&state.settings;
         let provider=match requested{Some(p)=>p,None=>ProviderId::parse(&cfg.provider)?};
         let selected_model=if cfg.provider==provider.id(){cfg.model.as_str()}else{""};
         let revision=self.revision(provider)?;
+        let enabled = state.provider_models.get(&provider).map(|pref| pref.enabled_models(revision.as_deref()));
         let db=self.db.lock().map_err(failure)?;
         let checked:Option<String>=db.query_row("SELECT checked FROM connection_check WHERE id=?1 AND model=?2 AND endpoint=?3 AND revision=?4",
             params![provider.slot(),selected_model,provider.endpoint(),revision.as_deref().unwrap_or("")],|r|r.get(0)).optional().map_err(failure)?;
-        Ok(json!({"provider":provider,"hasApiKey":revision.is_some(),"verified":checked.is_some(),"checkedAt":checked,"endpoint":provider.endpoint(),"model":selected_model,"capability":"text","vault":"Windows DPAPI (usuário atual)","maxOutputTokens":2048,"maxRequestsPerAssessment":100}))
+        Ok(json!({"provider":provider,"hasApiKey":revision.is_some(),"credentialRevision":revision,"enabledModels":enabled,"verified":checked.is_some(),"checkedAt":checked,"endpoint":provider.endpoint(),"model":selected_model,"capability":"text","vault":"Windows DPAPI (usuário atual)","maxOutputTokens":2048,"maxRequestsPerAssessment":100}))
     }
     #[cfg(test)]
     pub(crate) fn test_context_projection(&self,store:&Store,payload:Value)->Result<Value,String>{

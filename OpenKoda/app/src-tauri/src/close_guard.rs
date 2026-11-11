@@ -35,7 +35,7 @@ impl Activity {
             else if action.starts_with("assessment.") || action.starts_with("plan.") || action.starts_with("kali.mcp.")
                 || matches!(action,"ai.ask"|"ai.operation.propose"|"ai.investigation.run") { Area::Assessment }
             else if action.starts_with("support.") || action.starts_with("settings.") || action.starts_with("backup.")
-                || matches!(action, "ai.test"|"ai.models"|"ai.key.save"|"ai.key.remove") { Area::Settings }
+                || matches!(action, "ai.test"|"ai.models"|"ai.provider.configure"|"ai.key.save"|"ai.key.remove") { Area::Settings }
             else { Area::Current };
         Some(Self { area, assessment_id: payload.get("assessmentId").and_then(Value::as_str).and_then(|s| Uuid::parse_str(s).ok()) })
     }

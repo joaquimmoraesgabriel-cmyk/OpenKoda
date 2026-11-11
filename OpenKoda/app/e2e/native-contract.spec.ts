@@ -38,7 +38,14 @@ async function nativeFixture(page:Page, environmentReady=false, bridgeMode='succ
     if(assessmentMode.startsWith('unknown')){assessment.status='unknown';plan.status='unknown';}
     if(assessmentMode.startsWith('import'))assessment.status='draft';
     if(bridgeMode==='oversized')state.assessments[0].evidence[0].content='é'.repeat(17000);
-    const providerKeys=new Set<string>();let verified=false;
+    const providerKeys=new Set<string>();
+    const revisions=new Map<string,string>();
+    const enabledModels=new Map<string,string[]>();
+    const providerEndpoints:Record<string,string>={openai:'https://api.openai.com/v1',openrouter:'https://openrouter.ai/api/v1',gemini:'https://generativelanguage.googleapis.com/v1beta/openai'};
+    let catalogAttempts=0, verified=false;
+    if (assessmentMode==='legacy-provider'){
+      state.settings.model='';state.settings.hasApiKey=true;providerKeys.add('openai');revisions.set('openai','legacy-revision');
+    }
     const catalogs:Record<string,string[]>={openai:['fixture-model'],openrouter:['example/model-a','example/model-b',...Array.from({length:24},(_,i)=>'fixture/model-'+i)],groq:['example-chat'],gemini:['gemini-fixture']};
     let finishRun:((result:unknown)=>void)|undefined;
     const messages:{id:string;role:string;text:string;createdAt:string}[]=[];
@@ -169,13 +176,27 @@ async function nativeFixture(page:Page, environmentReady=false, bridgeMode='succ
       if(action==='settings.save'){Object.assign(state.settings,payload);state.settings.hasApiKey=providerKeys.has(state.settings.provider);verified=false;return state.settings;}
       if(action==='ai.selection.save'){Object.assign(assessment,{aiSelection:payload.aiSelection});return {ok:true};}
       const provider=String(payload.provider??state.settings.provider);
-      if(action==='ai.status')return {provider,hasApiKey:providerKeys.has(provider),verified,checkedAt:verified?now:null,model:state.settings.model,endpoint:state.settings.endpoint};
-      if(action==='ai.key.save'){providerKeys.add(provider);state.settings.hasApiKey=providerKeys.has(state.settings.provider);return {saved:true};}
-      if(action==='ai.key.remove'){providerKeys.delete(provider);state.settings.hasApiKey=providerKeys.has(state.settings.provider);return {removed:true};}
+      const providerStatus=()=>({provider,hasApiKey:providerKeys.has(provider),credentialRevision:revisions.get(provider)??null,enabledModels:enabledModels.get(provider)??null,verified,checkedAt:verified?now:null,model:state.settings.model,endpoint:providerEndpoints[provider]??state.settings.endpoint});
+      if(action==='ai.status')return providerStatus();
+      if(action==='ai.key.save'){
+        providerKeys.add(provider);revisions.set(provider,crypto.randomUUID());
+        if(payload.prepareActivation)enabledModels.set(provider,[]);
+        state.settings.hasApiKey=providerKeys.has(state.settings.provider);return {saved:true};
+      }
+      if(action==='ai.key.remove'){providerKeys.delete(provider);revisions.delete(provider);enabledModels.delete(provider);state.settings.hasApiKey=providerKeys.has(state.settings.provider);return {removed:true};}
+      if(action==='ai.provider.configure'){
+        if (!providerKeys.has(provider) || !revisions.get(provider) || revisions.get(provider)!==payload.credentialRevision)throw new Error('Credencial alterada.');
+        const models=payload.models as string[];
+        if(!models?.length||models.some(m=>!catalogs[provider]?.includes(m)))throw new Error('Seleção de modelos inválida.');
+        enabledModels.set(provider,[...models]);
+        if(typeof payload.defaultModel==='string')Object.assign(state.settings,{provider,model:payload.defaultModel,endpoint:providerEndpoints[provider],hasApiKey:true});
+        return providerStatus();
+      }
       if(action==='ai.test'){verified=true;return {verified:true,capability:'text'};}
       if(action==='ai.models'){
         if(!providerKeys.has(provider))throw new Error('Credencial indisponível para este provedor.');
-        return {models:catalogs[provider]??[]};
+        if(assessmentMode==='catalog-transient' && catalogAttempts++===0)throw new Error('Não foi possível consultar o provedor.');
+        return {models:catalogs[provider]??[],provider,credentialRevision:revisions.get(provider)};
       }
       if(action==='ai.context')return {context:{objective:assessment.objective,target:assessment.target,evidence:[]},digest:'context-fixture-digest',bytes:156,notice:'Fixture: conteúdo destinado ao provedor configurado.'};
       if(action==='ai.history')return {messages:structuredClone(messages)};
@@ -317,46 +338,69 @@ test('mensagem exige contexto visível e consentimento específico',async({page}
   await expect(page.getByRole('button',{name:'Enviar mensagem',exact:true})).toBeDisabled();
 });
 
-test('credencial sai do campo após salvar e teste do provedor é uma ação separada',async({page})=>{
-  await nativeFixture(page);await page.goto('/');await page.getByRole('button',{name:'Configurações',exact:true}).click();
+async function openProviderSettings(page:Page) {
+  await page.getByRole('navigation',{name:'Navegação principal'}).getByRole('button',{name:'Configurações',exact:true}).click();
   await page.getByRole('button',{name:'IA e modelos',exact:true}).click();
-  const input=page.getByLabel('Chave de API',{exact:true});await expect(input).toHaveAttribute('type','password');
-  await input.fill('fixture-not-a-real-secret');await page.getByRole('button',{name:'Salvar credencial',exact:true}).click();
-  await expect(input).toHaveValue('');expect(await calls(page,'ai.test')).toEqual([]);
+}
+async function beginProvider(page:Page, name:string) {
+  await page.getByRole('button',{name:'Adicionar provedor',exact:true}).click();
+  const wizard=page.getByRole('dialog',{name:'Adicionar provedor'});
+  await wizard.getByRole('searchbox',{name:'Pesquisar provedores'}).fill(name);
+  await wizard.getByRole('button',{name:new RegExp(name)}).click();
+}
+async function saveKey(page:Page, value:string) {
+  const wizard=page.getByRole('dialog');
+  const input=wizard.getByLabel('Chave de API',{exact:true});
+  await expect(input).toHaveAttribute('type','password');
+  await input.fill(value);
+  await wizard.getByRole('button',{name:'Salvar chave e buscar modelos'}).click();
+}
+test('credencial chega ao cofre e ativação e teste de conexão são ações distintas',async({page})=>{
+  await nativeFixture(page);await page.goto('/');await openProviderSettings(page);
+  await page.getByRole('button',{name:'Conectar com chave de API'}).click();
+  await saveKey(page,'fixture-not-a-real-secret');
+  const wizard=page.getByRole('dialog');
+  await expect(wizard.getByRole('checkbox',{name:'fixture-model',exact:true})).toBeChecked();
+  expect(await calls(page,'ai.test')).toEqual([]);
+  expect(await calls(page,'ai.provider.configure')).toEqual([]);
   expect(await page.evaluate(()=>JSON.stringify(localStorage))).not.toContain('fixture-not-a-real-secret');
+  await wizard.getByRole('button',{name:'Ativar provedor'}).click();
+  await expect(wizard).toHaveCount(0);
   await page.getByRole('button',{name:'Testar conexão',exact:true}).click();
-  await expect(page.getByText(/Conexão verificada/)).toBeVisible();expect(await calls(page,'ai.test')).toHaveLength(1);
+  await expect(page.getByText(/Conexão verificada/)).toBeVisible();
+  expect(await calls(page,'ai.test')).toHaveLength(1);
 });
 
-test('catálogo da chave alimenta configurações, rascunhos e modelo usado em uma avaliação',async({page})=>{
-  await nativeFixture(page);await page.goto('/');
-  await page.getByRole('button',{name:'Configurações',exact:true}).click();
-  await page.getByRole('button',{name:'IA e modelos',exact:true}).click();
-  await page.getByRole('button',{name:'Adicionar provedor',exact:true}).click();
-  const providers=page.getByRole('dialog',{name:'Adicionar provedor'});
-  await providers.getByRole('searchbox',{name:'Pesquisar provedores'}).fill('router');
-  await expect(providers.getByRole('button',{name:/Anthropic/})).toHaveCount(0);
-  await providers.getByRole('button',{name:/OpenRouter/}).click();
-  await expect(page.getByLabel('Endpoint',{exact:true})).toHaveValue('https://openrouter.ai/api/v1');
-  await expect(page.getByLabel('Modelo',{exact:true})).toBeDisabled();
-  await page.getByLabel('Chave de API',{exact:true}).fill('synthetic-not-a-key');
-  await page.getByRole('button',{name:'Salvar credencial',exact:true}).click();
-  const model=page.getByLabel('Modelo',{exact:true});
-  await expect(model).toBeEnabled();
-  const filter=page.getByLabel('Filtrar modelos',{exact:true});
+test('catálogo e modelos ativados alimentam configurações, rascunhos e avaliação existente',async({page})=>{
+  await nativeFixture(page);await page.goto('/');await openProviderSettings(page);
+  await beginProvider(page,'OpenRouter');
+  await expect(page.getByRole('dialog')).toContainText('https://openrouter.ai/api/v1');
+  await saveKey(page,'synthetic-not-a-key');
+  const wizard=page.getByRole('dialog');
+  const filter=wizard.getByRole('searchbox',{name:'Buscar modelos'});
   await filter.fill('nenhum-modelo-existe');
-  await expect(page.getByRole('status').filter({hasText:'Nenhum modelo corresponde ao filtro.'})).toBeVisible();
+  await expect(wizard.getByRole('status')).toHaveText('Nenhum modelo corresponde ao filtro.');
   await filter.fill('example/');
-  await expect(model.locator('option')).toHaveCount(3);
-  await model.selectOption('example/model-a');
-  await page.getByRole('button',{name:'Salvar alterações',exact:true}).click();
-  expect((await calls(page,'ai.key.save'))[0].payload.provider).toBe('openrouter');
+  const list=wizard.getByRole('group',{name:'Modelos do provedor'});
+  await expect(list.getByRole('checkbox')).toHaveCount(2);
+  await list.getByRole('checkbox',{name:'example/model-a',exact:true}).check();
+  await list.getByRole('checkbox',{name:'example/model-b',exact:true}).check();
+  await expect(wizard.getByLabel('Usar como padrão da instalação')).toBeChecked();
+  await wizard.getByLabel('Modelo padrão').selectOption('example/model-a');
+  await page.screenshot({path:test.info().outputPath('selecao-de-modelos.png')});
+  await wizard.getByRole('button',{name:'Ativar provedor'}).click();
+  await expect(wizard).toHaveCount(0);
+  await page.screenshot({path:test.info().outputPath('provedor-ativado.png')});
+  expect((await calls(page,'ai.key.save'))[0].payload).toMatchObject({provider:'openrouter',prepareActivation:true});
   expect((await calls(page,'ai.models')).every(call=>call.payload.provider==='openrouter')).toBe(true);
+  expect((await calls(page,'ai.provider.configure'))[0].payload).toMatchObject({provider:'openrouter',models:['example/model-a','example/model-b'],defaultModel:'example/model-a'});
   expect(await calls(page,'ai.test')).toEqual([]);
   await page.getByRole('button',{name:'Nova avaliação',exact:true}).click();
   await page.getByLabel('Modelo da avaliação',{exact:true}).selectOption('custom');
+  const model=page.getByLabel('Modelo',{exact:true});
   await expect(model).toHaveValue('example/model-a');
   await model.selectOption('example/model-b');
+  await expect(model.locator('option').filter({hasText:'fixture/model-'})).toHaveCount(0);
   await page.getByRole('button',{name:'Combinar fontes e alvos',exact:true}).click();
   await page.getByLabel('Modelo da avaliação',{exact:true}).selectOption('custom');
   await model.selectOption('example/model-b');
@@ -374,43 +418,88 @@ test('catálogo da chave alimenta configurações, rascunhos e modelo usado em u
   expect(await calls(page,'ai.ask')).toEqual([]);
 });
 
-test('novos provedores aparecem com seu destino e o modelo Gemini pode ser o padrão',async({page})=>{
-  await nativeFixture(page);await page.goto('/');
-  await page.getByRole('button',{name:'Configurações',exact:true}).click();
-  await page.getByRole('button',{name:'IA e modelos',exact:true}).click();
+test('provedor salvo sem modelo na versão anterior pode ser ativado sem redigitar a chave', async({page})=>{
+  await nativeFixture(page,false,'success','none','available','none','legacy-provider');
+  await page.goto('/');await openProviderSettings(page);
+  await page.getByRole('button',{name:'Escolher modelos e ativar'}).click();
+  const wizard=page.getByRole('dialog');
+  await expect(wizard.getByRole('checkbox',{name:'fixture-model'})).toBeChecked();
+  await wizard.getByRole('button',{name:'Ativar provedor'}).click();
+  await expect(page.getByRole('list',{name:'Modelos selecionados'})).toContainText('fixture-model');
+  expect(await calls(page,'ai.key.save')).toHaveLength(0);
+  expect((await calls(page,'ai.provider.configure'))[0].payload).toMatchObject({defaultModel:'fixture-model',provider:'openai'});
+});
+
+test('novos provedores admitem consulta repetida e retomada após salvar a chave',async({page})=>{
+  await nativeFixture(page,false,'success','none','available','none','catalog-transient');
+  await page.goto('/');await openProviderSettings(page);
   await page.getByRole('button',{name:'Adicionar provedor'}).click();
-  const chooser=page.getByRole('dialog',{name:'Adicionar provedor'});
-  for (const domain of ['api.anthropic.com','generativelanguage.googleapis.com','api.deepseek.com','api.x.ai']) {
-    await expect(chooser.getByText(domain,{exact:true})).toBeVisible();
-  }
-  await chooser.getByRole('button',{name:/Google Gemini/}).click();
-  await expect(page.getByLabel('Endpoint',{exact:true})).toHaveValue('https://generativelanguage.googleapis.com/v1beta/openai');
-  await page.getByLabel('Chave de API',{exact:true}).fill('synthetic-gemini-fixture');
-  await page.getByRole('button',{name:'Salvar credencial'}).click();
-  await page.getByLabel('Modelo',{exact:true}).selectOption('gemini-fixture');
-  await page.getByRole('button',{name:'Salvar alterações',exact:true}).click();
-  expect((await calls(page,'settings.save')).at(-1)?.payload).toMatchObject({provider:'gemini',model:'gemini-fixture'});
+  const wizard=page.getByRole('dialog');
+  for(const domain of ['api.anthropic.com','generativelanguage.googleapis.com','api.deepseek.com','api.x.ai'])await expect(wizard.getByText(domain,{exact:true})).toBeVisible();
+  await wizard.getByRole('button',{name:/Google Gemini/}).click();
+  await saveKey(page,'synthetic-gemini-fixture');
+  await expect(wizard.getByRole('alert')).toContainText('Não foi possível consultar o provedor.');
+  await wizard.getByRole('button',{name:'Tentar novamente'}).click();
+  await expect(wizard.getByLabel('gemini-fixture',{exact:true})).toBeChecked();
+  await wizard.getByRole('button',{name:'Cancelar'}).click();
+  await expect(page.getByRole('button',{name:'Escolher modelos e ativar'})).toBeVisible();
+  await expect(page.getByText('Aguardando ativação').first()).toBeVisible();
+  await page.getByRole('button',{name:'Escolher modelos e ativar'}).click();
+  await wizard.getByRole('button',{name:'Ativar provedor'}).click();
+  await expect(wizard).toHaveCount(0);
+  expect(await calls(page,'ai.key.save')).toHaveLength(1);
+  expect((await calls(page,'ai.provider.configure'))[0].payload).toMatchObject({provider:'gemini',defaultModel:'gemini-fixture'});
   expect(await calls(page,'ai.test')).toEqual([]);
 });
 
-test('trocar o provedor e descartar a escolha limpam a chave ainda não salva',async({page})=>{
-  await nativeFixture(page);await page.goto('/');
-  await page.getByRole('button',{name:'Configurações',exact:true}).click();
-  await page.getByRole('button',{name:'IA e modelos',exact:true}).click();
-  const credential=page.getByLabel('Chave de API',{exact:true});
+test('voltar ou cancelar descarta a chave não salva e conserva o padrão',async({page})=>{
+  await nativeFixture(page);await page.goto('/');await openProviderSettings(page);
+  await beginProvider(page,'OpenAI');
+  const wizard=page.getByRole('dialog');
+  const credential=wizard.getByLabel('Chave de API',{exact:true});
   await credential.fill('synthetic-openai-entry');
-  await page.getByRole('button',{name:'Adicionar provedor',exact:true}).click();
-  await page.getByRole('dialog').getByRole('button',{name:/Groq/}).click();
+  await wizard.getByRole('button',{name:'Voltar'}).click();
+  await wizard.getByRole('button',{name:/Groq/}).click();
   await expect(credential).toHaveValue('');
-  await expect(page.getByRole('button',{name:'Salvar credencial'})).toBeDisabled();
+  await expect(wizard.getByRole('button',{name:'Salvar chave e buscar modelos'})).toBeDisabled();
   await credential.fill('synthetic-groq-entry');
-  await page.getByRole('button',{name:'Descartar',exact:true}).click();
+  await wizard.getByRole('button',{name:'Cancelar'}).click();
   await expect(page.getByRole('complementary',{name:'Provedores configurados'}).getByRole('button',{name:/OpenAI/})).toHaveAttribute('aria-pressed','true');
-  await expect(credential).toHaveValue('');
   expect(await calls(page,'ai.key.save')).toEqual([]);
   expect(await calls(page,'ai.models')).toEqual([]);
 });
 
+test('ativar um segundo provedor conserva o padrão até a troca explícita',async({page})=>{
+  await nativeFixture(page);await page.goto('/');await openProviderSettings(page);
+  await beginProvider(page,'OpenAI');await saveKey(page,'first-provider-fixture');
+  const wizard=page.getByRole('dialog');
+  await wizard.getByRole('button',{name:'Ativar provedor'}).click();
+  await beginProvider(page,'Groq');await saveKey(page,'second-provider-fixture');
+  await expect(wizard.getByLabel('Usar como padrão da instalação')).not.toBeChecked();
+  await wizard.getByRole('button',{name:'Ativar provedor'}).click();
+  await expect(wizard).toHaveCount(0);
+  expect((await calls(page,'ai.provider.configure')).at(-1)?.payload.defaultModel).toBe(null);
+  await page.getByRole('button',{name:'Definir como padrão'}).click();
+  await expect(wizard.getByLabel('Usar como padrão da instalação')).toBeChecked();
+  await wizard.getByRole('button',{name:'Salvar modelos'}).click();
+  await expect(wizard).toHaveCount(0);
+  expect((await calls(page,'ai.provider.configure')).at(-1)?.payload).toMatchObject({provider:'groq',defaultModel:'example-chat'});
+  await expect(page.getByRole('complementary',{name:'Provedores configurados'}).getByRole('button',{name:/Groq/})).toContainText('Padrão da instalação');
+});
+
+test('nenhum modelo no catálogo mantém a credencial pendente e permite voltar sem redigitá-la',async({page})=>{
+  await nativeFixture(page);await page.goto('/');await openProviderSettings(page);
+  await beginProvider(page,'Anthropic');await saveKey(page,'empty-catalog-fixture');
+  const wizard=page.getByRole('dialog');
+  await expect(wizard.getByRole('status')).toContainText('O provedor não retornou modelos');
+  await expect(wizard.getByRole('button',{name:'Ativar provedor'})).toBeDisabled();
+  await wizard.getByRole('button',{name:'Voltar'}).click();
+  await wizard.getByRole('button',{name:'Usar a chave já salva'}).click();
+  await expect(wizard.getByRole('status')).toContainText('O provedor não retornou modelos');
+  expect(await calls(page,'ai.provider.configure')).toEqual([]);
+  expect(await calls(page,'ai.key.save')).toHaveLength(1);
+  expect(await calls(page,'ai.test')).toEqual([]);
+});
 test('cópias do Kali mantêm a origem parada após inspeção, exportação e restauração',async({page})=>{
   await nativeFixture(page,true);await page.goto('/');
   await page.getByRole('button',{name:'Kali e ferramentas',exact:true}).click();

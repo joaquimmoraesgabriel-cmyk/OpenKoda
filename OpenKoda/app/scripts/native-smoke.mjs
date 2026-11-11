@@ -379,7 +379,12 @@ try {
         if ($handle -eq 0) {throw 'Missing task-owned window'}
         Add-Type -Name NativeWindow -Namespace OpenKodaTests -MemberDefinition '
           [System.Runtime.InteropServices.DllImport("user32.dll")] public static extern bool IsIconic(System.IntPtr h);
+          [System.Runtime.InteropServices.DllImport("user32.dll")] public static extern System.IntPtr SendMessageW(System.IntPtr h, uint msg, System.IntPtr wParam, System.IntPtr lParam);
           [System.Runtime.InteropServices.DllImport("user32.dll")] public static extern bool ShowWindowAsync(System.IntPtr h, int command);'
+        foreach ($size in 0,1) {
+          $icon = [OpenKodaTests.NativeWindow]::SendMessageW($handle,127,[IntPtr]$size,[IntPtr]::Zero)
+          if ($icon -eq [IntPtr]::Zero) {throw "Missing window icon (WM_GETICON $size)"}
+        }
         if (!$app.CloseMainWindow()) {throw 'Could not request close'}
         $deadline=[DateTime]::UtcNow.AddSeconds(10)
         while (![OpenKodaTests.NativeWindow]::IsIconic($handle) -and [DateTime]::UtcNow -lt $deadline) {Start-Sleep -Milliseconds 100}

@@ -544,6 +544,14 @@ pub fn validate_target(kind:&str,target:&str)->Result<String,String>{
 
 pub fn validate_snapshot(s:&Snapshot)->Result<(),String>{
     crate::data_policy::validate_snapshot(s)?;
+    for preference in s.provider_models.values() {
+        if let Some(revision) = &preference.credential_revision { valid_id(revision)?; }
+        if let Some(models) = &preference.models {
+            if preference.credential_revision.is_none() || models.is_empty() || models.iter().any(|id| !crate::ai_provider::valid_model(id)) {
+                return Err("A seleção de modelos do provedor é inválida.".into());
+            }
+        }
+    }
     let mut ids=std::collections::HashSet::new();
     for p in &s.projects {
         valid_id(&p.id)?;

@@ -106,6 +106,8 @@ pub struct Snapshot {
     pub assessments: Vec<Assessment>,
     pub findings: Vec<Finding>,
     pub settings: Settings,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub provider_models: std::collections::BTreeMap<crate::ai_provider::ProviderId, crate::ai_provider::ProviderModelPreference>,
     #[serde(default)]
     pub plans: Vec<ExecutionPlan>,
     #[serde(default)]

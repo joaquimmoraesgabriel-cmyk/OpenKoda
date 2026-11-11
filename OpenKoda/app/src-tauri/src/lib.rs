@@ -380,6 +380,10 @@ pub fn run() {
             }
         })
         .setup(|app| {
+            #[cfg(windows)]
+            if let Some(window) = app.get_webview_window("main") {
+                window_behavior::set_taskbar_icon(&window);
+            }
             let legacy = app.path().app_data_dir()?;
             #[cfg(debug_assertions)]
             let override_root = std::env::var_os("OPENKODA_DATA_DIR").map(std::path::PathBuf::from);

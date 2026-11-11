@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ProviderId { OpenAI, OpenRouter, Groq, Anthropic, Gemini, DeepSeek, Xai }
 
@@ -111,6 +111,30 @@ impl ProviderId {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct AiSelection { pub provider: ProviderId, pub model: String }
+
+/// A missing selection for a matching, older key preserves its original catalog behavior.
+/// A newer key must complete setup before it can use any of the previous key's models.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProviderModelPreference {
+    pub credential_revision: Option<String>,
+    pub models: Option<std::collections::BTreeSet<String>>,
+}
+
+impl ProviderModelPreference {
+    pub fn permits(&self, revision: Option<&str>, model: &str) -> bool {
+        revision.is_some() && self.credential_revision.as_deref() == revision
+            && self.models.as_ref().is_none_or(|enabled| enabled.contains(model))
+    }
+
+    pub fn enabled_models(&self, revision: Option<&str>) -> Value {
+        if revision.is_some() && self.credential_revision.as_deref() == revision {
+            json!(self.models)
+        } else {
+            json!([])
+        }
+    }
+}
 impl AiSelection {
     pub fn validate(&self) -> Result<(), String> {
         if !valid_model(&self.model) { return Err("Identificador de modelo inválido.".into()); }

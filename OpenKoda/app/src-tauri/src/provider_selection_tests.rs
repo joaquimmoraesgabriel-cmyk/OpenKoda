@@ -92,6 +92,53 @@ fn catalog_does_not_truncate_and_chat_usage_is_normalized(){
         assert!(parse_completion(body,"key").is_err());
     }
 }
+
+#[test]
+fn activating_models_binds_the_catalog_to_the_key_and_keeps_legacy_selections_working() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::open(dir.path().into()).unwrap();
+    let transport = Arc::new(Transport { calls: Mutex::default() });
+    let ai = AiService::with_provider(dir.path().into(), transport.clone()).unwrap();
+    let status = || ai.handle("ai.status", json!({"provider":"openai"}), &store).unwrap();
+    ai.handle("ai.key.save", json!({"provider":"openai","key":KEYS[0]}), &store).unwrap();
+    ai.save_settings(json!({"model":"shared-model"}), &store).unwrap();
+    let legacy_revision = status()["credentialRevision"].clone();
+    assert!(status()["enabledModels"].is_null());
+    assert!(ai.config_for(&store, None, true).is_ok());
+
+    let pasted = format!(" {}\r\n", KEYS[0]);
+    ai.handle("ai.key.save", json!({"provider":"openai","key":pasted,"prepareActivation":true}), &store).unwrap();
+    let catalog = ai.handle("ai.models", json!({"provider":"openai"}), &store).unwrap();
+    let revision = &catalog["credentialRevision"];
+    assert_eq!(revision, &status()["credentialRevision"]);
+    assert_ne!(revision, &legacy_revision);
+    assert_eq!(status()["enabledModels"], json!([]));
+    assert!(ai.config_for(&store, None, true).is_err());
+    let configure = |revision: &Value, models: Value, default_model: Value| ai.handle("ai.provider.configure",
+        json!({"provider":"openai","credentialRevision":revision,"models":models,"defaultModel":default_model}), &store);
+    let enabled = json!(["openai-model","shared-model"]);
+    assert!(configure(&legacy_revision, enabled.clone(), json!("openai-model")).is_err());
+    assert!(configure(revision, json!([]), json!(null)).is_err());
+    assert!(configure(revision, enabled.clone(), json!("outside")).is_err());
+    for _ in 0..2 {
+        assert_eq!(configure(revision, enabled.clone(), json!("openai-model")).unwrap()["enabledModels"], enabled);
+    }
+    assert_eq!(ai.config_for(&store, None, true).unwrap().model, "openai-model");
+    let restarted = AiService::with_provider(dir.path().into(),transport.clone()).unwrap();
+    assert_eq!(restarted.handle("ai.status",json!({"provider":"openai"}),&store).unwrap()["enabledModels"], enabled);
+    assert!(configure(revision, json!(["shared-model"]), json!(null)).is_err());
+    assert_eq!(configure(revision, json!(["shared-model"]), json!("shared-model")).unwrap()["model"], "shared-model");
+    assert!(ai.require_enabled_model(&store.snapshot().unwrap(), ProviderId::OpenAI, "openai-model").is_err());
+    assert!(crate::data_host::project_response("snapshot", json!({"settings":{"hasApiKey":true}}), &store, &ai.data_redactor())
+        .unwrap().get("providerModels").is_none());
+    ai.handle("ai.key.remove", json!({"provider":"openai"}), &store).unwrap();
+    assert_eq!(status()["enabledModels"], json!([]));
+    assert!(configure(revision,enabled.clone(),json!("shared-model")).is_err());
+    ai.handle("ai.key.save", json!({"provider":"openai","key":KEYS[0]}), &store).unwrap();
+    assert_eq!(status()["enabledModels"], json!([]));
+    assert!(ai.config_for(&store, None, true).is_err());
+    assert!(transport.calls.lock().unwrap().is_empty());
+}
 #[test]
 fn budget_distinguishes_identically_named_models_on_different_providers(){
     let dir=tempfile::tempdir().unwrap();
@@ -112,4 +159,37 @@ fn budget_distinguishes_identically_named_models_on_different_providers(){
         if p==ProviderId::OpenRouter{assert!(quote().is_err());}
         else {let current=quote().unwrap();assert_eq!(current["review"]["endpoint"],p.endpoint());assert_eq!(current["review"]["rates"]["inputUsdPerMillion"],"10.000000");}
     }
+}
+
+#[test]
+fn restored_model_preferences_cannot_activate_another_profiles_credential() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::open(dir.path().into()).unwrap();
+    let transport = Arc::new(Transport { calls: Mutex::default() });
+    let ai = AiService::with_provider(dir.path().into(), transport.clone()).unwrap();
+    store.handle(Request {action:"project.create".into(), payload:json!({"name":"Fixture","kind":"web","target":"https://example.invalid"})}).unwrap();
+    let params = json!({"provider":"groq"});
+    let key = json!({"provider":"groq","key":KEYS[2],"prepareActivation":true});
+    ai.handle("ai.key.save", key.clone(), &store).unwrap();
+    let catalog = ai.handle("ai.models", params.clone(), &store).unwrap();
+    let activation = json!({"provider":"groq","models":["groq-model"],"defaultModel":"groq-model","credentialRevision":catalog["credentialRevision"]});
+    ai.handle("ai.provider.configure", activation.clone(), &store).unwrap();
+
+    let recovery = crate::recovery::RecoveryService::new(dir.path().into()).unwrap();
+    let backup = crate::recovery::test_support::backup(&recovery,&store).unwrap();
+    let restored = recovery.handle("backup.restore",json!({"id":backup["id"]}),&store).unwrap();
+    let root = PathBuf::from(restored["path"].as_str().unwrap());
+    let copy = Store::open(root.clone()).unwrap();
+    let other = AiService::with_provider(root,transport).unwrap();
+    let status = other.handle("ai.status",params.clone(),&copy).unwrap();
+    assert_eq!(status["hasApiKey"], false);
+    assert_eq!(status["enabledModels"], json!([]));
+    assert_eq!(copy.snapshot().unwrap().settings.model, "groq-model");
+    other.handle("ai.key.save",key,&copy).unwrap();
+    assert!(other.handle("ai.provider.configure",activation,&copy).is_err());
+    assert!(other.config_for(&copy,None,true).is_err());
+    let fresh = other.handle("ai.models",params.clone(),&copy).unwrap();
+    other.handle("ai.provider.configure",json!({"provider":"groq","models":["shared-model"],"defaultModel":"shared-model","credentialRevision":fresh["credentialRevision"]}),&copy).unwrap();
+    assert_eq!(other.config_for(&copy,None,true).unwrap().model, "shared-model");
+    assert_eq!(ai.handle("ai.status", params, &store).unwrap()["enabledModels"], json!(["groq-model"]));
 }

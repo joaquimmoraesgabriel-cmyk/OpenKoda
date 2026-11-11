@@ -1,5 +1,11 @@
 # OpenKoda desktop
 
+**0.1.16 para Windows x64.** Em **Configurações → IA e modelos → Adicionar provedor**, escolha o serviço e use **Salvar chave e buscar modelos**. Marque os modelos que deseja usar nas avaliações e clique em **Ativar provedor**. Você também pode escolher o modelo padrão da instalação. O cadastro consulta o catálogo diretamente no provedor. O botão **Testar conexão** envia uma mensagem ao modelo mediante revisão do custo. [Instalador local](releases/0.1.16-local-20261111/OpenKoda_0.1.16_x64-setup.exe)
+
+Se a chave já estiver salva, abra o provedor na lista para escolher ou gerenciar os modelos. Em **Nova avaliação**, o campo **Modelo da avaliação** permite usar o padrão ou escolher outro modelo habilitado. Em uma avaliação existente, use **Alterar modelo** antes de revisar o envio.
+
+Para voltar à 0.1.15 após configurar modelos na 0.1.16, restaure um backup criado na 0.1.15.
+
 **0.1.15 para Windows x64.** As Configurações abrem em **Geral**. Pesquise uma categoria na lateral ou abra **Histórico de uso** diretamente pelo Perfil. O histórico reúne os tokens registrados no perfil ativo e permite consultar dias, modelos, provedores e avaliações. Em **Uso e orçamento**, consulte o saldo estimado da instalação, suas reservas e as tarifas usadas nos cálculos. [Instalador local](releases/0.1.15-local-20261111/OpenKoda_0.1.15_x64-setup.exe)
 
 **Geral** compartilha o nome de exibição com o Perfil. A preferência de fechamento permite minimizar o aplicativo na barra de tarefas, e o atalho do compositor segue o fluxo de revisão da avaliação. **Aparência** aplica as escolhas de fontes, painéis, listas e papel de parede à área de trabalho.

@@ -22,6 +22,8 @@ export type AiSelection = {provider: ProviderId; model: string};
 export type ProviderStatus = {
   provider?: ProviderId; hasApiKey: boolean; verified: boolean;
   checkedAt?: string; model: string; endpoint: string;
+  credentialRevision?: string | null;
+  enabledModels?: string[] | null;
 };
 
 export function knownProvider(value: string): value is ProviderId {
