@@ -1,5 +1,7 @@
 //! Versioned, prospective assessment scope. A scope is a ceiling, never a grant.
 //! Historical validation is pure; expiry/revocation only guard new work.
+#[path = "project_launch.rs"]
+pub(crate) mod project_launch;
 use crate::{core::{self,Store},model::{self,Assessment,Snapshot}};
 use serde::{Deserialize,Serialize};
 use serde_json::{json,Value};

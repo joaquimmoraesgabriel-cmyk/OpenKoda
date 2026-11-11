@@ -206,6 +206,7 @@ impl Store {
         match request.action.as_str() {
             "snapshot" => { empty(&request.payload)?; encode(self.snapshot()?) }
             "project.create" => self.create_project(decode(request.payload)?),
+            "project.launch" => crate::scope::project_launch::create(self, request.payload),
             "project.archive" => self.archive_project(decode(request.payload)?),
             "assessment.create" => self.create_assessment(request.payload),
             "evidence.import" => self.import_evidence(decode(request.payload)?),
@@ -497,7 +498,7 @@ impl Store {
 }
 
 fn empty(payload: &Value) -> Result<(),String> { if payload.as_object().is_some_and(|o| o.is_empty()) { Ok(()) } else { Err("Esta ação não recebe campos.".into()) } }
-fn text(value:&str, field:&str, max:usize, required:bool) -> Result<String,String> {
+pub(crate) fn text(value:&str, field:&str, max:usize, required:bool) -> Result<String,String> {
     let value=value.trim();
     if (required && value.is_empty()) || value.chars().count()>max || value.chars().any(|c| c=='\0' || (c.is_control() && c!='\n' && c!='\t')) { return Err(format!("{field} inválido ou excede {max} caracteres.")); }
     Ok(value.into())

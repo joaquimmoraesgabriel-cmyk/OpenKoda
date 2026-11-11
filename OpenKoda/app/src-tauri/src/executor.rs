@@ -28,6 +28,14 @@ struct NetworkInput { id:String, ports:Vec<u16> }
 struct TargetPlanInput {assessment_id:String,scope_ref:crate::scope::ScopeRef,target_ref:crate::scope_targets::ScopeTargetRef,adapter:String,ports:Option<Vec<u16>>}
 #[derive(Deserialize)]
 #[serde(rename_all="camelCase",deny_unknown_fields)]
+struct LaunchPlanInput {
+    assessment_id:String,
+    scope_ref:crate::scope::ScopeRef,
+    target_ref:Option<crate::scope_targets::ScopeTargetRef>,
+    ports:Option<Vec<u16>>,
+}
+#[derive(Deserialize)]
+#[serde(rename_all="camelCase",deny_unknown_fields)]
 struct ReconcileInput { id:String, note:String, acknowledge_unknown_effects:bool }
 
 /// Host-only inputs: the workflow resolves these from an immutable action node.
@@ -67,7 +75,7 @@ pub fn plan_digest(p: &ExecutionPlan) -> String {
     core::hash(&contents.to_string())
 }
 pub fn supports(action:&str)->bool {
-    matches!(action,"assessment.start"|"assessment.plan"|"assessment.networkPlan"|"assessment.sourcePlan"|"assessment.targetPlan"|"assessment.cancel"|"assessment.reconcile"|"plan.approve"|"plan.revoke"|"plan.run")
+    matches!(action,"assessment.start"|"assessment.plan"|"assessment.networkPlan"|"assessment.sourcePlan"|"assessment.targetPlan"|"assessment.launchPlan"|"assessment.cancel"|"assessment.reconcile"|"plan.approve"|"plan.revoke"|"plan.run")
 }
 
 pub fn validate_state(s:&Snapshot)->Result<(),String>{
@@ -190,6 +198,7 @@ impl Executor {
     pub fn handle(&self, action:&str, payload:Value, store:&Store)->Result<Value,String> {
         if !payload.is_object() || payload.to_string().len()>4096 {return Err("Solicitação de operação inválida.".into());}
         match action {
+            "assessment.launchPlan"=>self.prepare_launch(store,decode(payload)?),
             "assessment.start"|"assessment.plan"=>self.prepare(store,decode::<IdInput>(payload)?.id),
             "assessment.networkPlan"=>{let input:NetworkInput=decode(payload)?;self.prepare_with_options(store,input.id,Some(input.ports),false)},
             "assessment.sourcePlan"=>self.prepare_with_options(store,decode::<IdInput>(payload)?.id,None,true),
@@ -231,6 +240,38 @@ impl Executor {
 
     fn prepare(&self,store:&Store,assessment_id:String)->Result<Value,String> {
         self.prepare_with_options(store,assessment_id,None,false)
+    }
+
+    fn prepare_launch(&self,store:&Store,input:LaunchPlanInput)->Result<Value,String>{
+        let state=store.snapshot()?;
+        let aid=&input.assessment_id;
+        let assessment=state.assessments.iter().find(|a| &a.id==aid).ok_or("Conversa não encontrada.")?;
+        if !state.scope_receipts.iter().any(|r|r.action=="project.launch" && &r.assessment_id==aid)
+            || assessment.status!="draft" {
+            return Err("A análise inicial desta conversa já foi iniciada ou interrompida.".into());
+        }
+        let source=matches!(assessment.kind.as_str(),"code"|"files");
+        let plan_id=crate::scope_targets::derived_id("openkoda.project-launch.plan.v1",&[aid]);
+        let compiled=self.compile_options(store,aid,input.ports,source,input.target_ref,Some(input.scope_ref),None,&plan_id);
+        match compiled {
+            Ok(Some(plan))=>store.mutate(|s|{
+                if !s.assessments.iter().any(|a|&a.id==aid && a.status=="draft"){return Err("A análise inicial mudou durante a preparação.".into());}
+                value(persist_prepared_locked(s,&plan)?)
+            }),
+            error=>{
+                let reason=error.err().unwrap_or_else(||"Informe as portas TCP nas opções avançadas.".into());
+                store.mutate(|s|{
+                    if let Some(a)=s.assessments.iter_mut().find(|a|&a.id==aid && a.status=="draft"){
+                        a.status="blocked".into();
+                        a.summary=format!("A análise inicial não pôde começar. {reason}");
+                        a.events.push(event(a.summary.clone(),"warning"));
+                        a.updated_at=now();
+                    }
+                    Ok(())
+                })?;
+                Err(reason)
+            }
+        }
     }
     fn prepare_with_options(&self,store:&Store,assessment_id:String,ports:Option<Vec<u16>>,source:bool)->Result<Value,String> {
         self.prepare_selected(store,assessment_id,ports,source,None,None,None)
