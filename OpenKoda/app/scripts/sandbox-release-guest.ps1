@@ -1,9 +1,26 @@
-# This script runs inside a fresh Windows Sandbox. Its only writable host
-# folder is C:\KodaResult, where it records the outcome of this run.
+# Run in a fresh Windows Sandbox or in the hosted Windows release workflow.
+param([switch]$GitHubHosted)
 $ErrorActionPreference = 'Stop'
-$result = [ordered]@{ passed = $false; stage = 'guest'; starts = @() }
+$result = [ordered]@{ passed = $false; stage = 'preflight'; starts = @() }
+$receiptPath = $null
 $app = $null
 $client = $null
+$uninstallKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\OpenKoda'
+$locationKey = 'HKCU:\Software\openkoda\OpenKoda'
+function Database-Fingerprint([string]$Root) {
+    $files = @(Get-ChildItem -LiteralPath $Root -File | Where-Object { $_.Name -match '\.sqlite3(-wal|-shm)?$|^active-profile\.json$' } | Sort-Object Name)
+    if ($files.Name -notcontains 'openkoda.sqlite3') { throw 'Missing persisted application database.' }
+    return ($files | ForEach-Object { $_.Name + ' ' + (Get-FileHash -LiteralPath $_.FullName).Hash }) -join "`n"
+}
+function Assert-CleanInstallState {
+    foreach ($key in @($uninstallKey,$locationKey,'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\OpenKoda','HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\OpenKoda','HKLM:\Software\openkoda\OpenKoda')) {
+        if (Test-Path -LiteralPath $key) { throw 'Unexpected OpenKoda installation registration.' }
+    }
+    foreach ($folder in 'Desktop','CommonDesktopDirectory','Programs','CommonPrograms') {
+        if (Test-Path -LiteralPath (Join-Path ([Environment]::GetFolderPath($folder)) 'OpenKoda.lnk')) { throw 'Unexpected OpenKoda shortcut.' }
+    }
+    if (Get-Process -Name 'openkoda','openkoda-debug' -ErrorAction SilentlyContinue) { throw 'Unexpected running OpenKoda process.' }
+}
 function Read-Renderer([string]$Expression) {
     $token = [Threading.CancellationTokenSource]::new(15000)
     try {
@@ -27,19 +44,51 @@ function Read-Renderer([string]$Expression) {
     } finally { $token.Dispose() }
 }
 try {
-    if ($env:USERNAME -ne 'WDAGUtilityAccount' -or -not (Test-Path -LiteralPath 'C:\KodaInput\release.json')) { throw 'Fresh Windows Sandbox is required.' }
-    $manifest = Get-Content -Raw -LiteralPath 'C:\KodaInput\release.json' | ConvertFrom-Json
+    if ($GitHubHosted) {
+        if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted' -or $env:RUNNER_OS -ne 'Windows' -or !$env:GITHUB_WORKSPACE -or !$env:RUNNER_TEMP) { throw 'A disposable GitHub-hosted Windows runner is required.' }
+        $workspace = (Get-Item -LiteralPath $env:GITHUB_WORKSPACE).FullName
+        $runnerTemp = (Get-Item -LiteralPath $env:RUNNER_TEMP).FullName
+        $appRoot = Join-Path $workspace 'OpenKoda\app'
+        if ($PSScriptRoot -ne (Join-Path $appRoot 'scripts') -or $runnerTemp -eq $workspace -or $runnerTemp.StartsWith($workspace+'\',[StringComparison]::OrdinalIgnoreCase) -or $runnerTemp -eq [IO.Path]::GetPathRoot($runnerTemp)) { throw 'Unexpected workflow workspace or temporary directory.' }
+        $receiptPath = Join-Path $runnerTemp 'openkoda-release-smoke.json'
+        $manifest = Get-Content -Raw -LiteralPath (Join-Path $appRoot '.local\package-windows.json') | ConvertFrom-Json
+        if ($manifest.profile -ne 'release' -or $manifest.version -notmatch '^\d+\.\d+\.\d+$' -or @($manifest.files).Count -ne 1) { throw 'Expected one packaged release.' }
+        $releaseRoot = Join-Path $appRoot 'src-tauri\target\release'
+        $installer = Join-Path $releaseRoot ('bundle\nsis\OpenKoda_'+$manifest.version+'_x64-setup.exe')
+        if ($manifest.files[0].path -ne $installer) { throw 'Unexpected installer path in build receipt.' }
+        $installerSha = $manifest.files[0].sha256
+        $destination = Join-Path $runnerTemp ('openkoda-installed-'+[guid]::NewGuid())
+    } else {
+        if ($env:USERNAME -ne 'WDAGUtilityAccount' -or -not (Test-Path -LiteralPath 'C:\KodaInput\release.json') -or -not (Test-Path -LiteralPath 'C:\KodaResult' -PathType Container)) { throw 'Fresh Windows Sandbox is required.' }
+        $receiptPath = 'C:\KodaResult\result.json'
+        $manifest = Get-Content -Raw -LiteralPath 'C:\KodaInput\release.json' | ConvertFrom-Json
+        $installer = 'C:\KodaInput\setup.exe'
+        $installerSha = $manifest.installerSha256
+        $destination = Join-Path $env:LOCALAPPDATA 'OpenKodaFixture'
+    }
     $result.version = $manifest.version
-    $result.installerSha256 = (Get-FileHash -LiteralPath 'C:\KodaInput\setup.exe').Hash.ToLowerInvariant()
-    if ($result.installerSha256 -ne $manifest.installerSha256) { throw 'Installer does not match the selected release.' }
+    $result.installerSha256 = (Get-FileHash -LiteralPath $installer).Hash.ToLowerInvariant()
+    if ($result.installerSha256 -ne $installerSha) { throw 'Installer does not match the selected release.' }
     $profileRoot = Join-Path ([Environment]::GetFolderPath('UserProfile')) '.openkoda'
-    if (Test-Path -LiteralPath $profileRoot) { throw 'The disposable profile must be empty.' }
+    if ((Test-Path -LiteralPath $profileRoot) -or (Test-Path -LiteralPath (Join-Path $env:APPDATA 'com.openkoda.desktop\openkoda.sqlite3'))) { throw 'The disposable profile must be empty.' }
+    if (Test-Path -LiteralPath $destination) { throw 'Destination must be new.' }
+    Assert-CleanInstallState
     $result.stage = 'install'
-    $destination = Join-Path $env:LOCALAPPDATA 'OpenKodaFixture'
-    $setup = Start-Process -FilePath 'C:\KodaInput\setup.exe' -ArgumentList @('/S','/NS',('/D='+$destination)) -WindowStyle Hidden -PassThru
+    $setup = Start-Process -FilePath $installer -ArgumentList @('/S','/NS',('/D='+$destination)) -WindowStyle Hidden -PassThru
     if (-not $setup.WaitForExit(180000) -or $setup.ExitCode -ne 0) { throw 'Installation did not complete successfully.' }
     $exe = Join-Path $destination 'openkoda.exe'
-    if ((Get-FileHash -LiteralPath $exe).Hash.ToLowerInvariant() -ne $manifest.payloadSha256) { throw 'Installed payload hash mismatch.' }
+    $uninstaller = Join-Path $destination 'uninstall.exe'
+    $registration = Get-ItemProperty -LiteralPath $uninstallKey
+    if ($registration.InstallLocation.Trim('"') -ne $destination -or $registration.UninstallString -ne ('"'+$uninstaller+'"') -or !(Test-Path -LiteralPath $uninstaller -PathType Leaf)) { throw 'Installation registration does not match the disposable destination.' }
+    $result.payloadSha256 = (Get-FileHash -LiteralPath $exe).Hash.ToLowerInvariant()
+    if ($GitHubHosted) {
+        $verification = & python (Join-Path $PSScriptRoot 'verify-bundled-binary.py') (Join-Path $releaseRoot 'openkoda.exe') $exe
+        if ($LASTEXITCODE -ne 0) { throw 'Installed executable differs beyond the NSIS bundle marker.' }
+        $proof = $verification | ConvertFrom-Json
+        if (!$proof.verified -or $result.payloadSha256 -ne $proof.sha256) { throw 'Installed payload hash mismatch.' }
+        $result.sourceSha256 = $proof.sourceSha256
+        $result.differingBytes = $proof.differingBytes
+    } elseif ($result.payloadSha256 -ne $manifest.payloadSha256) { throw 'Installed payload hash mismatch.' }
     $result.stage = 'launch'
     $probe = @'
 (async () => {
@@ -77,18 +126,46 @@ try {
             $projectId = [guid]::Empty
             if (-not ([guid]::TryParse($project,[ref]$projectId))) { throw 'Native project creation failed.' }
         } elseif (@($state.projects).Count -ne 1 -or $state.projects[0].id -ne $project -or $state.projects[0].name -ne 'Startup fixture') { throw 'Saved project did not survive release restart.' }
-        $result.starts += @{iteration=$iteration;heading=$state.heading;pid=$app.Id}
+        $result.starts += @{iteration=$iteration;heading=$state.heading;projects=@($state.projects).Count}
         $client.Dispose(); $client = $null
         $app.Kill(); if (-not $app.WaitForExit(10000)) { throw 'Owned process failed to exit.' }; $app.Dispose(); $app = $null
     }
+    $result.projectReopened = $true
+    $result.stage = 'uninstall'
+    $beforeRemoval = Database-Fingerprint $profileRoot
+    $remove = Start-Process -FilePath $uninstaller -ArgumentList '/S' -WindowStyle Hidden -PassThru
+    if (!$remove.WaitForExit(120000) -or $remove.ExitCode -ne 0) { throw 'Uninstallation did not exit successfully.' }
+    $deadline = [DateTime]::UtcNow.AddSeconds(30)
+    while ((Test-Path -LiteralPath $exe) -or (Test-Path -LiteralPath $uninstaller) -or (Test-Path -LiteralPath $uninstallKey)) {
+        if ([DateTime]::UtcNow -ge $deadline) { throw 'Uninstallation left a registered package or executable.' }
+        Start-Sleep -Milliseconds 200
+    }
+    # NSIS may retain its install-location preference. It was absent at preflight.
+    if (Test-Path -LiteralPath $locationKey) {
+        $key = Get-Item -LiteralPath $locationKey
+        if ($key.GetValue('') -ne $destination -or $key.GetSubKeyNames().Count -or @($key.GetValueNames() | Where-Object { $_ -notin @('','Installer Language') }).Count) { throw 'Unexpected residual registration.' }
+        Remove-Item -LiteralPath $locationKey
+    }
+    Assert-CleanInstallState
+    if ((Database-Fingerprint $profileRoot) -cne $beforeRemoval) { throw 'Uninstallation changed the saved profile.' }
+    $result.uninstalled = $true
+    $result.databasePreserved = $true
     $result.stage = 'completed'
     $result.passed = $true
-} catch { $result.error = $_.Exception.Message }
+} catch {
+    $result.error = $_.Exception.Message
+    if ($GitHubHosted) {
+        foreach ($directory in @($env:USERPROFILE,$env:GITHUB_WORKSPACE,$env:RUNNER_TEMP)) {
+            if ($directory) { $result.error = $result.error.Replace($directory,'[runner]') }
+        }
+    }
+}
 finally {
     if ($client) { $client.Dispose() }
     if ($app -and -not $app.HasExited) { $app.Kill() }
-    if ($env:USERNAME -eq 'WDAGUtilityAccount' -and (Test-Path -LiteralPath 'C:\KodaResult')) {
+    if ($receiptPath) {
         $result.generatedAt = [DateTime]::UtcNow.ToString('o')
-        $result | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath 'C:\KodaResult\result.json' -Encoding UTF8
+        $result | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $receiptPath -Encoding UTF8
     }
 }
+if (!$result.passed) { throw $result.error }

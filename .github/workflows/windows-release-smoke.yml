@@ -1,0 +1,62 @@
+name: Windows release startup
+
+on:
+  push:
+    branches: [codex/openkoda-0.1.9, main]
+    paths:
+      - '.github/workflows/windows-release-smoke.yml'
+      - 'OpenKoda/app/src/**'
+      - 'OpenKoda/app/src-tauri/**'
+      - 'OpenKoda/app/scripts/package-windows.ps1'
+      - 'OpenKoda/app/scripts/sandbox-release-guest.ps1'
+      - 'OpenKoda/app/scripts/verify-bundled-binary.py'
+      - 'OpenKoda/app/scripts/windows_release_recovery.py'
+      - 'OpenKoda/app/docs/avisos/**'
+      - 'OpenKoda/app/docs/RECUPERACAO-WINDOWS.md'
+      - 'OpenKoda/app/index.html'
+      - 'OpenKoda/app/package*.json'
+      - 'OpenKoda/app/tsconfig.json'
+      - 'OpenKoda/app/vite.config.ts'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  installed-release:
+    runs-on: windows-2025
+    timeout-minutes: 75
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: OpenKoda/app
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install locked frontend dependencies
+        run: npm ci
+      - name: Build the unsigned Windows installer
+        run: ./scripts/package-windows.ps1 -Jobs 4
+      - name: Install, start twice, and uninstall
+        run: ./scripts/sandbox-release-guest.ps1 -GitHubHosted
+      - name: Record installation receipt
+        if: always()
+        run: |
+          $receipt = Join-Path $env:RUNNER_TEMP 'openkoda-release-smoke.json'
+          if (Test-Path -LiteralPath $receipt) {
+            Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value '~~~json'
+            Get-Content -LiteralPath $receipt | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
+            Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value '~~~'
+          }
+      - name: Retain the JSON receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-release-smoke
+          path: ${{ runner.temp }}/openkoda-release-smoke.json
+          if-no-files-found: ignore
+          retention-days: 14
