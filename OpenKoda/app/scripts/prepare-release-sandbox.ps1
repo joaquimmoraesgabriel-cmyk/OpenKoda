@@ -4,10 +4,17 @@
 param([Parameter(Mandatory)][string]$ReleaseManifest)
 $ErrorActionPreference='Stop'
 $root=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
-$release=Get-Content -Raw -LiteralPath $ReleaseManifest | ConvertFrom-Json
-$inputInstaller=Get-Item -LiteralPath $release.installer
+$manifest=Get-Item -LiteralPath $ReleaseManifest
+$release=Get-Content -Raw -LiteralPath $manifest.FullName | ConvertFrom-Json
+if ($release.version -notmatch '^\d+\.\d+\.\d+$') { throw 'Invalid desktop release version.' }
+# Read the artifacts beside this manifest, including when the release was copied to another Windows machine.
+$installerName="OpenKoda_$($release.version)_x64-setup.exe"
+if ([IO.Path]::GetFileName($release.installer) -ne $installerName) { throw 'Unexpected installer in release manifest.' }
+$inputInstaller=Get-Item -LiteralPath (Join-Path $manifest.DirectoryName $installerName)
 if ((Get-FileHash -LiteralPath $inputInstaller.FullName).Hash.ToLowerInvariant() -ne $release.sha256) { throw 'Installer hash differs from the release manifest.' }
-$extract=Get-Content -Raw -LiteralPath $release.receipts.packageExtraction.path | ConvertFrom-Json
+$receiptPath=Join-Path $manifest.DirectoryName 'receipts/packageExtraction.json'
+if ((Get-FileHash -LiteralPath $receiptPath).Hash.ToLowerInvariant() -ne $release.receipts.packageExtraction.sha256) { throw 'Extraction receipt hash differs from the release manifest.' }
+$extract=Get-Content -Raw -LiteralPath $receiptPath | ConvertFrom-Json
 if (-not $extract.passed -or $extract.mode -ne 'ExtractOnly' -or $extract.newRelease.installerSha256 -ne $release.sha256 -or -not $extract.newPayload.verification.verified -or $extract.newPayload.verification.sourceSha256 -ne $release.sourceBinarySha256) { throw 'Extraction receipt differs from the selected release.' }
 $directory=Join-Path $root ('.local/release-sandbox-'+[guid]::NewGuid())
 $in=Join-Path $directory 'input'; $out=Join-Path $directory 'result'

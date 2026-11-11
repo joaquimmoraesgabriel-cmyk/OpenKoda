@@ -1,8 +1,8 @@
-# Artifact/installer rehearsal for 0.1.9. NEVER starts an application binary.
+# Artifact/installer rehearsal for 0.1.10. NEVER starts an application binary.
 # Release builds ignore OPENKODA_DATA_DIR; schema migration is separate debug evidence.
 [CmdletBinding()]
 param(
-    [string]$OldReleaseManifest = (Join-Path $PSScriptRoot '../releases/0.1.8-local-20261110/release.json'),
+    [string]$OldReleaseManifest = (Join-Path $PSScriptRoot '../releases/0.1.9-local-20261111/release.json'),
     [string]$NewReleaseManifest = (Join-Path $PSScriptRoot '../.local/package-windows.json'),
     [string]$NewSourceBinary,
     [string]$NativeMigrationReceipt,
@@ -57,7 +57,7 @@ function Read-Release([string]$Path,[string]$Override,[string]$ExpectedVersion){
 function Read-Migration([string]$Path,[string]$ExpectedHash,$Old){
     if($ExpectedHash -notmatch '^[a-f0-9]{64}$'){throw 'An exact reviewed debug SHA-256 is required.'}
     $file=Plain-Owned $Path;Hold $file;$receipt=Read-Json $file
-    if(-not $receipt.passed -or -not $receipt.ownedProcessClosed -or $receipt.artifact.version -ne '0.1.9' -or $receipt.artifact.sha256 -ne $ExpectedHash){throw 'Native compatibility receipt is not a completed matching debug rehearsal.'}
+    if(-not $receipt.passed -or -not $receipt.ownedProcessClosed -or $receipt.artifact.version -ne '0.1.10' -or $receipt.artifact.sha256 -ne $ExpectedHash){throw 'Native compatibility receipt is not a completed matching debug rehearsal.'}
     $binary=Plain-Owned $receipt.artifact.binary;Hold $binary;if((Sha $binary) -ne $ExpectedHash){throw 'Reviewed debug binary changed.'}
     if((Sha (Join-Path $PSScriptRoot 'native-workflow-smoke.mjs')) -ne $receipt.artifact.scriptSha256){throw 'Migration harness differs from the receipt.'}
     $ids=@('preserved-previous-release-creates-fixture','new-release-preserves-exact-project-history','reviewed-backup-restore-keeps-capture-bytes-and-pauses-work')
@@ -65,7 +65,7 @@ function Read-Migration([string]$Path,[string]$ExpectedHash,$Old){
     $seed=@($receipt.records|Where-Object{$_.id -eq $ids[0]})[0].detail
     $migration=@($receipt.records|Where-Object{$_.id -eq $ids[1]})[0].detail
     $oldManifest=Read-Json $Old.manifest
-    if($seed.version -ne '0.1.8' -or $seed.schema -ne 8 -or $seed.sha256 -ne $oldManifest.nativeTestBinarySha256 -or ($migration.schema -join ',') -ne '8,8' -or -not $migration.exactJsonPreserved -or -not $migration.noAutomaticDispatch){throw 'Compatibility was not the reviewed 0.1.8-to-0.1.9 schema-eight transition.'}
+    if($seed.version -ne '0.1.9' -or $seed.schema -ne 8 -or $seed.sha256 -ne $oldManifest.nativeTestBinarySha256 -or ($migration.schema -join ',') -ne '8,8' -or -not $migration.exactJsonPreserved -or -not $migration.noAutomaticDispatch){throw 'Compatibility was not the reviewed 0.1.9-to-0.1.10 schema-eight transition.'}
     $oldDebug=Plain-Owned $oldManifest.nativeTestBinary;Hold $oldDebug;if((Sha $oldDebug) -ne $seed.sha256){throw 'Preserved old debug artifact changed.'}
     $directory=Plain-Owned $receipt.directory -Directory
     if((Split-Path -Leaf $directory) -notmatch '^native-workflow-[a-f0-9-]{36}$'){throw 'Expected an explicitly owned native-workflow fixture.'}
@@ -165,7 +165,7 @@ function Test-BundleResources([string]$Destination, [string]$Installer, [string]
 
 if($SelfTest){
     $checks=0
-    if((Version '0.1.9') -le (Version '0.1.8')){throw 'Version comparison failed.'};$checks++
+    if((Version '0.1.10') -le (Version '0.1.9')){throw 'Version comparison failed.'};$checks++
     foreach($bad in @('..\openkoda.exe','/openkoda.exe','C:\openkoda.exe','-openkoda.exe','a:stream/openkoda.exe','x[1]/openkoda.exe')){$failed=$false;try{$null=Extract-Entry ("Path = "+$bad)}catch{$failed=$true};if(-not $failed){throw 'Unsafe archive path accepted.'};$checks++}
     if((Extract-Entry 'Path = $INSTDIR\openkoda.exe') -ne '$INSTDIR\openkoda.exe'){throw 'Valid archive entry refused.'};$checks++
     $failed=$false;try{$null=Extract-Entry "Path = openkoda.exe`nPath = a/openkoda.exe"}catch{$failed=$true};if(-not $failed){throw 'Duplicate payload accepted.'};$checks++
@@ -176,7 +176,7 @@ if($SelfTest){
 }
 $result=$null
 try{
-    $old=Read-Release $OldReleaseManifest '' '0.1.8';$new=Read-Release $NewReleaseManifest $NewSourceBinary '0.1.9'
+    $old=Read-Release $OldReleaseManifest '' '0.1.9';$new=Read-Release $NewReleaseManifest $NewSourceBinary '0.1.10'
     $migration=Read-Migration $NativeMigrationReceipt $ExpectedNativeSha256 $old
     Assert-NoApp;$before=Shared-State
     if($ValidateOnly){[ordered]@{validated=$true;mode=$Mode;old=$old;new=$new;migration=$migration;sharedState=$before;installationBlocked=(@($before.registration.Values|Where-Object{$_}).Count -gt 0 -or @($before.shortcuts.Values|Where-Object{$_}).Count -gt 0 -or $before.autostart);processesStarted=0;profileRead=$false}|ConvertTo-Json -Depth 10;return}
@@ -193,7 +193,7 @@ try{
     }
     $null=Plain-Owned (Join-Path $appRoot '.local') -Directory
     $directory=Join-Path $appRoot ('.local/installer-workflow-'+[guid]::NewGuid().ToString());New-Item -ItemType Directory -Path $directory|Out-Null
-    $result=[ordered]@{passed=$false;directory=$directory;mode=$Mode;oldRelease=$old;newRelease=$new;migrationEvidence=$migration;sharedStateBefore=$before;installedReleaseExecuted=$false;personalProfileOpened=$false;stage='preflight';limitations=@('No release application is launched: OPENKODA_DATA_DIR is debug-only.','Schema-eight compatibility from 0.1.8 to 0.1.9 and backup/restore are separate immutable debug receipts, not installed-release startup proof.','ExtractOnly verifies package payloads; it does not execute installer, replacement, registry writes, WebView2 install or uninstaller.','Install mode refuses any existing registration/shortcut/autostart and uses /UPDATE to preserve jump lists; it is one positive local rehearsal, not clean Windows, interruption or rollback.','Failure preserves this fixture and any owned installation; no automatic kill, recursive delete or removal of an existing installation.')}
+    $result=[ordered]@{passed=$false;directory=$directory;mode=$Mode;oldRelease=$old;newRelease=$new;migrationEvidence=$migration;sharedStateBefore=$before;installedReleaseExecuted=$false;personalProfileOpened=$false;stage='preflight';limitations=@('No release application is launched: OPENKODA_DATA_DIR is debug-only.','Schema-eight compatibility from 0.1.9 to 0.1.10 and backup/restore are separate immutable debug receipts, not installed-release startup proof.','ExtractOnly verifies package payloads; it does not execute installer, replacement, registry writes, WebView2 install or uninstaller.','Install mode refuses any existing registration/shortcut/autostart and uses /UPDATE to preserve jump lists; it is one positive local rehearsal, not clean Windows, interruption or rollback.','Failure preserves this fixture and any owned installation; no automatic kill, recursive delete or removal of an existing installation.')}
     $fingerprint=Synthetic-Fingerprint $migration.dataDirectory;$fingerprint|Set-Content -LiteralPath (Join-Path $directory 'synthetic-data-before.json') -Encoding utf8
     if($Mode -eq 'ExtractOnly'){
         $result.extractor=[ordered]@{path=$extractor;sha256=$ExpectedExtractorSha256;library=$extractorLibrary;librarySha256=$ExpectedExtractorLibrarySha256};$result.stage='extract-old';$result.oldPayload=Extract-Payload $old (Join-Path $directory 'old') $extractor
