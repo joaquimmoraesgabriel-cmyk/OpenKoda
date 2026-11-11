@@ -1,5 +1,8 @@
 # Etapas e evidências da construção
 
+<!-- local-0.1.10 -->
+**0.1.10 local.** Passaram 582 testes Rust no Windows, um teste adicional no Kali gerido, 66 unitários da interface, 249 de navegador e 74 grupos nativos. A atualização da 0.1.9 foi testada neste PC. Cada imagem Windows do CI abriu o aplicativo instalado duas vezes e confirmou a persistência do projeto. [Validação da versão](docs/RETOMADA-0.1.10.md)
+
 <!-- local-0.1.9 -->
 **0.1.9 local.** Passaram 575 testes Rust no Windows, mais um no Kali gerido, 66 testes unitários da interface, 246 de navegador e 72 grupos nativos. As cópias recuperadas podem assumir o papel de executor após revisão. A ferramenta de recuperação da instalação, a revisão do fechamento e a exportação local de suporte têm percursos próprios. [Resultados e trabalho pendente](docs/RETOMADA-0.1.9.md) · [Instalador e hashes](releases/0.1.9-local-20261111/release.json)
 

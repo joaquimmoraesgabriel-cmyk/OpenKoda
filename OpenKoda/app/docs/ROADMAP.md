@@ -1,5 +1,8 @@
 # OpenKoda — roadmap de capacidades e validação
 
+<!-- local-0.1.10 -->
+**Situação após a 0.1.10.** Preparação do Windows com reentrada, retirada guiada do Kali e abertura do aplicativo instalado em dois Windows Server têm evidência de teste. A validação em Windows cliente sem WebView2, o reinício durante manutenção e a falha de disco em uma operação de pacotes permanecem como cenários de plataforma. As extensões condicionais continuam descritas no planejamento. [Validação da versão](RETOMADA-0.1.10.md)
+
 <!-- local-0.1.9 -->
 **Situação após a 0.1.9.** O histórico de cópias do Kali tem paginação, e o executor pode ser trocado para uma cópia revalidada. A recuperação do programa no Windows foi exercitada com dois instaladores reais. O diagnóstico de suporte admite exportação local revisada e a janela protege trabalho ativo durante o fechamento. No Windows Server 2025 do GitHub Actions, o executável instalado abriu duas vezes. O projeto criado pela interface conservou o mesmo UUID após a reabertura. A matriz de plataforma, falhas de reboot/disco e cobertura adicional de acessibilidade continuam documentadas abaixo. [Resultados e limites atuais](RETOMADA-0.1.9.md)
 

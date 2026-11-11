@@ -1,5 +1,8 @@
 # OpenKoda desktop
 
+<!-- local-0.1.10 -->
+A 0.1.10 orienta a preparação do Windows para WSL, retoma a verificação ao reabrir e oferece a retirada guiada do executor Kali. Para gerar o instalador a partir do repositório, use `npm ci` e `.\scripts\package-windows.ps1` nesta pasta. Neste checkout, a cópia conferida está em [OpenKoda_0.1.10_x64-setup.exe](releases/0.1.10-local-20261111/OpenKoda_0.1.10_x64-setup.exe). [Guia da 0.1.10](docs/GUIA-0.1.10.md) · [Resultados e limites](docs/RETOMADA-0.1.10.md)
+
 <!-- local-0.1.9 -->
 Baixe o [instalador local OpenKoda 0.1.9 para Windows x64](releases/0.1.9-local-20261111/OpenKoda_0.1.9_x64-setup.exe). A versão permite ativar uma cópia recuperada do Kali, consultar todo o histórico de cópias, rever trabalho em curso antes de fechar a janela e salvar um diagnóstico local para suporte. A atualização da 0.1.8 preservou os dados de teste. [Guia](docs/GUIA-0.1.9.md) · [Recuperação do Windows](docs/RECUPERACAO-WINDOWS.md) · [Testes e limites](docs/RETOMADA-0.1.9.md)
 
