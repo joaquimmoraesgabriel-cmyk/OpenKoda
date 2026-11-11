@@ -1,0 +1,42 @@
+%% ofk 1
+flowchart down
+title: OpenKoda - Tauri escolhido e arquitetura proposta
+icons: off
+group Windows {
+  Painel [browser, blue, label: Painel Tauri WebView2]
+  Nucleo [component, blue, label: Nucleo nativo - Rust proposto]
+  CoordenadorIA [component, violet]
+  Politica [diamond, orange]
+  GatewayMCP [component, teal]
+  BrokerHost [component, orange]
+  Vault [cylinder, orange]
+  BancoLocal [cylinder, green]
+  Evidencias [cylinder, green]
+  Parser [component, green]
+}
+group KaliWSL {
+  Executor [component, teal]
+  PerfilVerificado [diamond, orange]
+  Ferramenta [component, teal]
+  Spool [cylinder, green]
+}
+Modelo [cloud, violet]
+AlvoAutorizado [rect, gray]
+Painel <-> Nucleo : commands e eventos IPC restritos
+Nucleo <-> BancoLocal : estado e eventos
+Nucleo <-> CoordenadorIA : objetivo e cobertura
+CoordenadorIA <-> Modelo : API e contexto selecionado
+CoordenadorIA -> GatewayMCP : proposta de ferramenta
+GatewayMCP <-> Politica : decidir autoridade
+Politica -> BrokerHost : grant interno
+BrokerHost <-> Vault : referencias opacas
+BrokerHost -> Executor : ambiente e delegacao
+GatewayMCP <-> Executor : MCP stdio supervisionado
+Executor -> PerfilVerificado : revalidar antes de iniciar
+PerfilVerificado -> Ferramenta : capacidade permitida
+Ferramenta <-> AlvoAutorizado : acesso sob controles
+Ferramenta -> Spool : bytes e artefatos
+Spool -> BrokerHost : copiar e verificar
+BrokerHost -> Evidencias : promover com hash
+Evidencias -> Parser : bruto como dados
+Parser -> Nucleo : observacao com origem

@@ -1,0 +1,2012 @@
+{
+  "format": "openflowkit.scene",
+  "schemaVersion": 1,
+  "id": "4d2419fc-4e8a-4c53-b180-1fe6d39c61c2",
+  "name": "01-visao-produto - proposta OpenKoda",
+  "createdAt": "2026-11-07T20:43:38.617Z",
+  "updatedAt": "2026-11-07T20:43:38.617Z",
+  "pages": [
+    {
+      "id": "4d2419fc-4e8a-4c53-b180-1fe6d39c61c2:page-1",
+      "name": "Page 1",
+      "diagramKind": "mindmap",
+      "layers": [
+        {
+          "id": "default",
+          "name": "Default",
+          "visible": true,
+          "locked": false
+        }
+      ],
+      "nodes": [
+        {
+          "id": "dsl-t1hhi5",
+          "kind": "frame",
+          "parentId": null,
+          "layerId": "default",
+          "zIndex": 0,
+          "transform": {
+            "translation": {
+              "x": 160,
+              "y": 80
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 1414.5,
+            "height": 1976
+          },
+          "content": {
+            "label": "OpenKoda - mapa do produto proposto"
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "family": "mindmap",
+              "version": 1,
+              "source": "%% ofk 1\nmindmap\ntitle: OpenKoda - mapa do produto proposto\nicons: off\ncentral: OpenKoda\n  - Trabalho\n    - Projetos e alvos\n    - Avaliacoes e planos\n    - Escopo e cobertura\n  - IA\n    - Conversa contextual\n    - Investigadores\n    - Orcamento e contexto\n  - Kali e execucao\n    - WSL gerido\n    - Catalogo e pacotes\n    - Adaptadores e terminal\n    - Processos e recuperacao\n  - Modalidades\n    - Codigo\n    - Web e API\n    - Rede autorizada\n    - Evidencias offline\n  - Resultados\n    - Bruto e observacoes\n    - Candidatos e achados\n    - Correcao e reteste\n    - Relatorios\n  - Autoridade\n    - Politicas e aprovacoes\n    - Cofre de credenciais\n    - Perfis demonstrados\n    - Retencao e auditoria",
+              "hash": "vq37j1",
+              "title": "OpenKoda - mapa do produto proposto",
+              "icons": "off"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "openkoda",
+          "kind": "mindmap",
+          "parentId": "dsl-t1hhi5",
+          "layerId": "default",
+          "zIndex": 1,
+          "transform": {
+            "translation": {
+              "x": 646,
+              "y": 951
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 113,
+            "height": 56
+          },
+          "content": {
+            "label": "OpenKoda",
+            "mindmapDepth": 0,
+            "mindmapSide": "right",
+            "color": "slate",
+            "colorMode": "filled"
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "openkoda",
+              "line": 5,
+              "mindmap": true
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "trabalho",
+          "kind": "mindmap",
+          "parentId": "dsl-t1hhi5",
+          "layerId": "default",
+          "zIndex": 1,
+          "transform": {
+            "translation": {
+              "x": 951,
+              "y": 180
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 103,
+            "height": 44
+          },
+          "content": {
+            "label": "Trabalho",
+            "mindmapDepth": 1,
+            "mindmapParentId": "openkoda",
+            "mindmapSide": "right"
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "trabalho",
+              "line": 6,
+              "mindmap": true
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "projetos-e-alvos",
+          "kind": "mindmap",
+          "parentId": "dsl-t1hhi5",
+          "layerId": "default",
+          "zIndex": 1,
+          "transform": {
+            "translation": {
+              "x": 1147.5,
+              "y": 96
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 158,
+            "height": 44
+          },
+          "content": {
+            "label": "Projetos e alvos",
+            "mindmapDepth": 2,
+            "mindmapParentId": "trabalho",
+            "mindmapSide": "right"
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "projetos-e-alvos",
+              "line": 7,
+              "mindmap": true
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "avaliacoes-e-planos",
+          "kind": "mindmap",
+          "parentId": "dsl-t1hhi5",
+          "layerId": "default",
+          "zIndex": 1,
+          "transform": {
+            "translation": {
+              "x": 1139.5,
+              "y": 180
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 174,
+            "height": 44
+          },
+          "content": {
+            "label": "Avaliacoes e planos",
+            "mindmapDepth": 2,
+            "mindmapParentId": "trabalho",
+            "mindmapSide": "right"
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "avaliacoes-e-planos",
+              "line": 8,
+              "mindmap": true
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "escopo-e-cobertura",
+          "kind": "mindmap",
+          "parentId": "dsl-t1hhi5",
+          "layerId": "default",
+          "zIndex": 1,
+          "transform": {
+            "translation": {
+              "x": 1138,
+              "y": 264
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 177,
+            "height": 44
+          },
+          "content": {
+            "label": "Escopo e cobertura",
+            "mindmapDepth": 2,
+            "mindmapParentId": "trabalho",
+            "mindmapSide": "right"
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "escopo-e-cobertura",
+              "line": 9,
+              "mindmap": true
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "ia",
+          "kind": "mindmap",
+          "parentId": "dsl-t1hhi5",
+          "layerId": "default",
+          "zIndex": 1,
+          "transform": {
+            "translation": {
+              "x": 974.5,
+              "y": 432
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 56,
+            "height": 44
+          },
+          "content": {
+            "label": "IA",
+            "mindmapDepth": 1,
+            "mindmapParentId": "openkoda",
+            "mindmapSide": "right"
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "ia",
+              "line": 10,
+              "mindmap": true
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "conversa-contextual",
+          "kind": "mindmap",
+          "parentId": "dsl-t1hhi5",
+          "layerId": "default",
+          "zIndex": 1,
+          "transform": {
+            "translation": {
+              "x": 1134,
+              "y": 348
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 185,
+            "height": 44
+          },
+          "content": {
+            "label": "Conversa contextual",
+            "mindmapDepth": 2,
+            "mindmapParentId": "ia",
+            "mindmapSide": "right"
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "conversa-contextual",
+              "line": 11,
+              "mindmap": true
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "investigadores",
+          "kind": "mindmap",
+          "parentId": "dsl-t1hhi5",
+          "layerId": "default",
+          "zIndex": 1,
+          "transform": {
+            "translation": {
+              "x": 1153.5,
+              "y": 432
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 146,
+            "height": 44
+          },
+          "content": {
+            "label": "Investigadores",
+            "mindmapDepth": 2,
+            "mindmapParentId": "ia",
+            "mindmapSide": "right"
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "investigadores",
+              "line": 12,
+              "mindmap": true
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "orcamento-e-contexto",
+          "kind": "mindmap",
+          "parentId": "dsl-t1hhi5",
+          "layerId": "default",
+          "zIndex": 1,
+          "transform": {
+            "translation": {
+              "x": 1130,
+              "y": 516
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 193,
+            "height": 44
+          },
+          "content": {
+            "label": "Orcamento e contexto",
+            "mindmapDepth": 2,
+            "mindmapParentId": "ia",
+            "mindmapSide": "right"
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "orcamento-e-contexto",
+              "line": 13,
+              "mindmap": true
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "kali-e-execucao",
+          "kind": "mindmap",
+          "parentId": "dsl-t1hhi5",
+          "layerId": "default",
+          "zIndex": 1,
+          "transform": {
+            "translation": {
+              "x": 929,
+              "y": 726
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 147,
+            "height": 44
+          },
+          "content": {
+            "label": "Kali e execucao",
+            "mindmapDepth": 1,
+            "mindmapParentId": "openkoda",
+            "mindmapSide": "right"
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "kali-e-execucao",
+              "line": 14,
+              "mindmap": true
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "wsl-gerido",
+          "kind": "mindmap",
+          "parentId": "dsl-t1hhi5",
+          "layerId": "default",
+          "zIndex": 1,
+          "transform": {
+            "translation": {
+              "x": 1167,
+              "y": 600
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 119,
+            "height": 44
+          },
+          "content": {
+            "label": "WSL gerido",
+            "mindmapDepth": 2,
+            "mindmapParentId": "kali-e-execucao",
+            "mindmapSide": "right"
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "wsl-gerido",
+              "line": 15,
+              "mindmap": true
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "catalogo-e-pacotes",
+          "kind": "mindmap",
+          "parentId": "dsl-t1hhi5",
+          "layerId": "default",
+          "zIndex": 1,
+          "transform": {
+            "translation": {
+              "x": 1139.5,
+              "y": 684
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 174,
+            "height": 44
+          },
+          "content": {
+            "label": "Catalogo e pacotes",
+            "mindmapDepth": 2,
+            "mindmapParentId": "kali-e-execucao",
+            "mindmapSide": "right"
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "catalogo-e-pacotes",
+              "line": 16,
+              "mindmap": true
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "adaptadores-e-terminal",
+          "kind": "mindmap",
+          "parentId": "dsl-t1hhi5",
+          "layerId": "default",
+          "zIndex": 1,
+          "transform": {
+            "translation": {
+              "x": 1126,
+              "y": 768
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 201,
+            "height": 44
+          },
+          "content": {
+            "label": "Adaptadores e terminal",
+            "mindmapDepth": 2,
+            "mindmapParentId": "kali-e-execucao",
+            "mindmapSide": "right"
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "adaptadores-e-terminal",
+              "line": 17,
+              "mindmap": true
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "processos-e-recuperacao",
+          "kind": "mindmap",
+          "parentId": "dsl-t1hhi5",
+          "layerId": "default",
+          "zIndex": 1,
+          "transform": {
+            "translation": {
+              "x": 1118.5,
+              "y": 852
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 216,
+            "height": 44
+          },
+          "content": {
+            "label": "Processos e recuperacao",
+            "mindmapDepth": 2,
+            "mindmapParentId": "kali-e-execucao",
+            "mindmapSide": "right"
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "processos-e-recuperacao",
+              "line": 18,
+              "mindmap": true
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "modalidades",
+          "kind": "mindmap",
+          "parentId": "dsl-t1hhi5",
+          "layerId": "default",
+          "zIndex": 1,
+          "transform": {
+            "translation": {
+              "x": 339,
+              "y": 1062
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 127,
+            "height": 44
+          },
+          "content": {
+            "label": "Modalidades",
+            "mindmapDepth": 1,
+            "mindmapParentId": "openkoda",
+            "mindmapSide": "left"
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "modalidades",
+              "line": 19,
+              "mindmap": true
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "codigo",
+          "kind": "mindmap",
+          "parentId": "dsl-t1hhi5",
+          "layerId": "default",
+          "zIndex": 1,
+          "transform": {
+            "translation": {
+              "x": 135,
+              "y": 936
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 87,
+            "height": 44
+          },
+          "content": {
+            "label": "Codigo",
+            "mindmapDepth": 2,
+            "mindmapParentId": "modalidades",
+            "mindmapSide": "left"
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "codigo",
+              "line": 20,
+              "mindmap": true
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "web-e-api",
+          "kind": "mindmap",
+          "parentId": "dsl-t1hhi5",
+          "layerId": "default",
+          "zIndex": 1,
+          "transform": {
+            "translation": {
+              "x": 124.5,
+              "y": 1020
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 108,
+            "height": 44
+          },
+          "content": {
+            "label": "Web e API",
+            "mindmapDepth": 2,
+            "mindmapParentId": "modalidades",
+            "mindmapSide": "left"
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "web-e-api",
+              "line": 21,
+              "mindmap": true
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "rede-autorizada",
+          "kind": "mindmap",
+          "parentId": "dsl-t1hhi5",
+          "layerId": "default",
+          "zIndex": 1,
+          "transform": {
+            "translation": {
+              "x": 101.5,
+              "y": 1104
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 154,
+            "height": 44
+          },
+          "content": {
+            "label": "Rede autorizada",
+            "mindmapDepth": 2,
+            "mindmapParentId": "modalidades",
+            "mindmapSide": "left"
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "rede-autorizada",
+              "line": 22,
+              "mindmap": true
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "evidencias-offline",
+          "kind": "mindmap",
+          "parentId": "dsl-t1hhi5",
+          "layerId": "default",
+          "zIndex": 1,
+          "transform": {
+            "translation": {
+              "x": 95.5,
+              "y": 1188
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 166,
+            "height": 44
+          },
+          "content": {
+            "label": "Evidencias offline",
+            "mindmapDepth": 2,
+            "mindmapParentId": "modalidades",
+            "mindmapSide": "left"
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "evidencias-offline",
+              "line": 23,
+              "mindmap": true
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "resultados",
+          "kind": "mindmap",
+          "parentId": "dsl-t1hhi5",
+          "layerId": "default",
+          "zIndex": 1,
+          "transform": {
+            "translation": {
+              "x": 343.5,
+              "y": 1398
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 118,
+            "height": 44
+          },
+          "content": {
+            "label": "Resultados",
+            "mindmapDepth": 1,
+            "mindmapParentId": "openkoda",
+            "mindmapSide": "left"
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "resultados",
+              "line": 24,
+              "mindmap": true
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "bruto-e-observacoes",
+          "kind": "mindmap",
+          "parentId": "dsl-t1hhi5",
+          "layerId": "default",
+          "zIndex": 1,
+          "transform": {
+            "translation": {
+              "x": 86,
+              "y": 1272
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 185,
+            "height": 44
+          },
+          "content": {
+            "label": "Bruto e observacoes",
+            "mindmapDepth": 2,
+            "mindmapParentId": "resultados",
+            "mindmapSide": "left"
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "bruto-e-observacoes",
+              "line": 25,
+              "mindmap": true
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "candidatos-e-achados",
+          "kind": "mindmap",
+          "parentId": "dsl-t1hhi5",
+          "layerId": "default",
+          "zIndex": 1,
+          "transform": {
+            "translation": {
+              "x": 84,
+              "y": 1356
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 189,
+            "height": 44
+          },
+          "content": {
+            "label": "Candidatos e achados",
+            "mindmapDepth": 2,
+            "mindmapParentId": "resultados",
+            "mindmapSide": "left"
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "candidatos-e-achados",
+              "line": 26,
+              "mindmap": true
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "correcao-e-reteste",
+          "kind": "mindmap",
+          "parentId": "dsl-t1hhi5",
+          "layerId": "default",
+          "zIndex": 1,
+          "transform": {
+            "translation": {
+              "x": 90,
+              "y": 1440
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 177,
+            "height": 44
+          },
+          "content": {
+            "label": "Correcao e reteste",
+            "mindmapDepth": 2,
+            "mindmapParentId": "resultados",
+            "mindmapSide": "left"
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "correcao-e-reteste",
+              "line": 27,
+              "mindmap": true
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "relatorios",
+          "kind": "mindmap",
+          "parentId": "dsl-t1hhi5",
+          "layerId": "default",
+          "zIndex": 1,
+          "transform": {
+            "translation": {
+              "x": 121.5,
+              "y": 1524
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 114,
+            "height": 44
+          },
+          "content": {
+            "label": "Relatorios",
+            "mindmapDepth": 2,
+            "mindmapParentId": "resultados",
+            "mindmapSide": "left"
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "relatorios",
+              "line": 28,
+              "mindmap": true
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "autoridade",
+          "kind": "mindmap",
+          "parentId": "dsl-t1hhi5",
+          "layerId": "default",
+          "zIndex": 1,
+          "transform": {
+            "translation": {
+              "x": 343.5,
+              "y": 1734
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 118,
+            "height": 44
+          },
+          "content": {
+            "label": "Autoridade",
+            "mindmapDepth": 1,
+            "mindmapParentId": "openkoda",
+            "mindmapSide": "left"
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "autoridade",
+              "line": 29,
+              "mindmap": true
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "politicas-e-aprovacoes",
+          "kind": "mindmap",
+          "parentId": "dsl-t1hhi5",
+          "layerId": "default",
+          "zIndex": 1,
+          "transform": {
+            "translation": {
+              "x": 80,
+              "y": 1608
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 197,
+            "height": 44
+          },
+          "content": {
+            "label": "Politicas e aprovacoes",
+            "mindmapDepth": 2,
+            "mindmapParentId": "autoridade",
+            "mindmapSide": "left"
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "politicas-e-aprovacoes",
+              "line": 30,
+              "mindmap": true
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "cofre-de-credenciais",
+          "kind": "mindmap",
+          "parentId": "dsl-t1hhi5",
+          "layerId": "default",
+          "zIndex": 1,
+          "transform": {
+            "translation": {
+              "x": 86,
+              "y": 1692
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 185,
+            "height": 44
+          },
+          "content": {
+            "label": "Cofre de credenciais",
+            "mindmapDepth": 2,
+            "mindmapParentId": "autoridade",
+            "mindmapSide": "left"
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "cofre-de-credenciais",
+              "line": 31,
+              "mindmap": true
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "perfis-demonstrados",
+          "kind": "mindmap",
+          "parentId": "dsl-t1hhi5",
+          "layerId": "default",
+          "zIndex": 1,
+          "transform": {
+            "translation": {
+              "x": 86,
+              "y": 1776
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 185,
+            "height": 44
+          },
+          "content": {
+            "label": "Perfis demonstrados",
+            "mindmapDepth": 2,
+            "mindmapParentId": "autoridade",
+            "mindmapSide": "left"
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "perfis-demonstrados",
+              "line": 32,
+              "mindmap": true
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "retencao-e-auditoria",
+          "kind": "mindmap",
+          "parentId": "dsl-t1hhi5",
+          "layerId": "default",
+          "zIndex": 1,
+          "transform": {
+            "translation": {
+              "x": 86,
+              "y": 1860
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 185,
+            "height": 44
+          },
+          "content": {
+            "label": "Retencao e auditoria",
+            "mindmapDepth": 2,
+            "mindmapParentId": "autoridade",
+            "mindmapSide": "left"
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "retencao-e-auditoria",
+              "line": 33,
+              "mindmap": true
+            }
+          },
+          "extensions": {}
+        }
+      ],
+      "connectors": [
+        {
+          "id": "mm:openkoda->trabalho",
+          "source": {
+            "nodeId": "openkoda",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "trabalho",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "bezier",
+            "ownership": "imported-fixed"
+          },
+          "waypoints": [],
+          "labels": [],
+          "appearance": {},
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 6,
+              "mindmapEdge": true
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "mm:openkoda->ia",
+          "source": {
+            "nodeId": "openkoda",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "ia",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "bezier",
+            "ownership": "imported-fixed"
+          },
+          "waypoints": [],
+          "labels": [],
+          "appearance": {},
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 10,
+              "mindmapEdge": true
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "mm:openkoda->kali-e-execucao",
+          "source": {
+            "nodeId": "openkoda",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "kali-e-execucao",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "bezier",
+            "ownership": "imported-fixed"
+          },
+          "waypoints": [],
+          "labels": [],
+          "appearance": {},
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 14,
+              "mindmapEdge": true
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "mm:openkoda->modalidades",
+          "source": {
+            "nodeId": "openkoda",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "modalidades",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "bezier",
+            "ownership": "imported-fixed"
+          },
+          "waypoints": [],
+          "labels": [],
+          "appearance": {},
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 19,
+              "mindmapEdge": true
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "mm:openkoda->resultados",
+          "source": {
+            "nodeId": "openkoda",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "resultados",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "bezier",
+            "ownership": "imported-fixed"
+          },
+          "waypoints": [],
+          "labels": [],
+          "appearance": {},
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 24,
+              "mindmapEdge": true
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "mm:openkoda->autoridade",
+          "source": {
+            "nodeId": "openkoda",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "autoridade",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "bezier",
+            "ownership": "imported-fixed"
+          },
+          "waypoints": [],
+          "labels": [],
+          "appearance": {},
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 29,
+              "mindmapEdge": true
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "mm:trabalho->projetos-e-alvos",
+          "source": {
+            "nodeId": "trabalho",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "projetos-e-alvos",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "bezier",
+            "ownership": "imported-fixed"
+          },
+          "waypoints": [],
+          "labels": [],
+          "appearance": {},
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 7,
+              "mindmapEdge": true
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "mm:trabalho->avaliacoes-e-planos",
+          "source": {
+            "nodeId": "trabalho",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "avaliacoes-e-planos",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "bezier",
+            "ownership": "imported-fixed"
+          },
+          "waypoints": [],
+          "labels": [],
+          "appearance": {},
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 8,
+              "mindmapEdge": true
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "mm:trabalho->escopo-e-cobertura",
+          "source": {
+            "nodeId": "trabalho",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "escopo-e-cobertura",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "bezier",
+            "ownership": "imported-fixed"
+          },
+          "waypoints": [],
+          "labels": [],
+          "appearance": {},
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 9,
+              "mindmapEdge": true
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "mm:ia->conversa-contextual",
+          "source": {
+            "nodeId": "ia",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "conversa-contextual",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "bezier",
+            "ownership": "imported-fixed"
+          },
+          "waypoints": [],
+          "labels": [],
+          "appearance": {},
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 11,
+              "mindmapEdge": true
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "mm:ia->investigadores",
+          "source": {
+            "nodeId": "ia",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "investigadores",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "bezier",
+            "ownership": "imported-fixed"
+          },
+          "waypoints": [],
+          "labels": [],
+          "appearance": {},
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 12,
+              "mindmapEdge": true
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "mm:ia->orcamento-e-contexto",
+          "source": {
+            "nodeId": "ia",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "orcamento-e-contexto",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "bezier",
+            "ownership": "imported-fixed"
+          },
+          "waypoints": [],
+          "labels": [],
+          "appearance": {},
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 13,
+              "mindmapEdge": true
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "mm:kali-e-execucao->wsl-gerido",
+          "source": {
+            "nodeId": "kali-e-execucao",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "wsl-gerido",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "bezier",
+            "ownership": "imported-fixed"
+          },
+          "waypoints": [],
+          "labels": [],
+          "appearance": {},
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 15,
+              "mindmapEdge": true
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "mm:kali-e-execucao->catalogo-e-pacotes",
+          "source": {
+            "nodeId": "kali-e-execucao",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "catalogo-e-pacotes",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "bezier",
+            "ownership": "imported-fixed"
+          },
+          "waypoints": [],
+          "labels": [],
+          "appearance": {},
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 16,
+              "mindmapEdge": true
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "mm:kali-e-execucao->adaptadores-e-terminal",
+          "source": {
+            "nodeId": "kali-e-execucao",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "adaptadores-e-terminal",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "bezier",
+            "ownership": "imported-fixed"
+          },
+          "waypoints": [],
+          "labels": [],
+          "appearance": {},
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 17,
+              "mindmapEdge": true
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "mm:kali-e-execucao->processos-e-recuperacao",
+          "source": {
+            "nodeId": "kali-e-execucao",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "processos-e-recuperacao",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "bezier",
+            "ownership": "imported-fixed"
+          },
+          "waypoints": [],
+          "labels": [],
+          "appearance": {},
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 18,
+              "mindmapEdge": true
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "mm:modalidades->codigo",
+          "source": {
+            "nodeId": "modalidades",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "codigo",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "bezier",
+            "ownership": "imported-fixed"
+          },
+          "waypoints": [],
+          "labels": [],
+          "appearance": {},
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 20,
+              "mindmapEdge": true
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "mm:modalidades->web-e-api",
+          "source": {
+            "nodeId": "modalidades",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "web-e-api",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "bezier",
+            "ownership": "imported-fixed"
+          },
+          "waypoints": [],
+          "labels": [],
+          "appearance": {},
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 21,
+              "mindmapEdge": true
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "mm:modalidades->rede-autorizada",
+          "source": {
+            "nodeId": "modalidades",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "rede-autorizada",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "bezier",
+            "ownership": "imported-fixed"
+          },
+          "waypoints": [],
+          "labels": [],
+          "appearance": {},
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 22,
+              "mindmapEdge": true
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "mm:modalidades->evidencias-offline",
+          "source": {
+            "nodeId": "modalidades",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "evidencias-offline",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "bezier",
+            "ownership": "imported-fixed"
+          },
+          "waypoints": [],
+          "labels": [],
+          "appearance": {},
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 23,
+              "mindmapEdge": true
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "mm:resultados->bruto-e-observacoes",
+          "source": {
+            "nodeId": "resultados",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "bruto-e-observacoes",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "bezier",
+            "ownership": "imported-fixed"
+          },
+          "waypoints": [],
+          "labels": [],
+          "appearance": {},
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 25,
+              "mindmapEdge": true
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "mm:resultados->candidatos-e-achados",
+          "source": {
+            "nodeId": "resultados",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "candidatos-e-achados",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "bezier",
+            "ownership": "imported-fixed"
+          },
+          "waypoints": [],
+          "labels": [],
+          "appearance": {},
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 26,
+              "mindmapEdge": true
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "mm:resultados->correcao-e-reteste",
+          "source": {
+            "nodeId": "resultados",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "correcao-e-reteste",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "bezier",
+            "ownership": "imported-fixed"
+          },
+          "waypoints": [],
+          "labels": [],
+          "appearance": {},
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 27,
+              "mindmapEdge": true
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "mm:resultados->relatorios",
+          "source": {
+            "nodeId": "resultados",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "relatorios",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "bezier",
+            "ownership": "imported-fixed"
+          },
+          "waypoints": [],
+          "labels": [],
+          "appearance": {},
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 28,
+              "mindmapEdge": true
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "mm:autoridade->politicas-e-aprovacoes",
+          "source": {
+            "nodeId": "autoridade",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "politicas-e-aprovacoes",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "bezier",
+            "ownership": "imported-fixed"
+          },
+          "waypoints": [],
+          "labels": [],
+          "appearance": {},
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 30,
+              "mindmapEdge": true
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "mm:autoridade->cofre-de-credenciais",
+          "source": {
+            "nodeId": "autoridade",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "cofre-de-credenciais",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "bezier",
+            "ownership": "imported-fixed"
+          },
+          "waypoints": [],
+          "labels": [],
+          "appearance": {},
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 31,
+              "mindmapEdge": true
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "mm:autoridade->perfis-demonstrados",
+          "source": {
+            "nodeId": "autoridade",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "perfis-demonstrados",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "bezier",
+            "ownership": "imported-fixed"
+          },
+          "waypoints": [],
+          "labels": [],
+          "appearance": {},
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 32,
+              "mindmapEdge": true
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "mm:autoridade->retencao-e-auditoria",
+          "source": {
+            "nodeId": "autoridade",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "retencao-e-auditoria",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "bezier",
+            "ownership": "imported-fixed"
+          },
+          "waypoints": [],
+          "labels": [],
+          "appearance": {},
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 33,
+              "mindmapEdge": true
+            }
+          },
+          "extensions": {}
+        }
+      ],
+      "metadata": {},
+      "extensions": {}
+    }
+  ],
+  "metadata": {},
+  "extensions": {}
+}

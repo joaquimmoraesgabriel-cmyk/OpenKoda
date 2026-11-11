@@ -1,0 +1,33 @@
+%% ofk 1
+mindmap
+title: OpenKoda - mapa do produto proposto
+icons: off
+central: OpenKoda
+  - Trabalho
+    - Projetos e alvos
+    - Avaliacoes e planos
+    - Escopo e cobertura
+  - IA
+    - Conversa contextual
+    - Investigadores
+    - Orcamento e contexto
+  - Kali e execucao
+    - WSL gerido
+    - Catalogo e pacotes
+    - Adaptadores e terminal
+    - Processos e recuperacao
+  - Modalidades
+    - Codigo
+    - Web e API
+    - Rede autorizada
+    - Evidencias offline
+  - Resultados
+    - Bruto e observacoes
+    - Candidatos e achados
+    - Correcao e reteste
+    - Relatorios
+  - Autoridade
+    - Politicas e aprovacoes
+    - Cofre de credenciais
+    - Perfis demonstrados
+    - Retencao e auditoria

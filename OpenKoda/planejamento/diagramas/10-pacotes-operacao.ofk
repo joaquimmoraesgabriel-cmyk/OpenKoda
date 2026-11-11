@@ -1,0 +1,44 @@
+flowchart down
+title: Proposta - manutencao de pacotes Kali
+Escolher conjunto [ellipse, blue]
+Ler estado atual [component, blue]
+Origem e espaco [diamond, orange]
+Simular APT [component, teal]
+Plano concreto [doc, teal]
+Aprovar mudanca [diamond, orange]
+Aguardar exclusividade [queue, violet]
+Drenar ambiente [component, violet]
+Revalidar plano [component, violet]
+Plano igual [diamond, orange]
+Baixar pacotes [component, teal]
+Aplicar pacotes [component, teal]
+Verificar inventario e health [diamond, orange]
+Concluida [ellipse, green]
+Reparo necessario [note, yellow]
+Bloqueada [ellipse, red]
+Cancelada [ellipse, gray]
+Escolher conjunto -> Ler estado atual : ambiente e versoes
+Ler estado atual -> Origem e espaco
+Origem e espaco -> Simular APT : requisitos atendidos
+Origem e espaco -> Bloqueada : erro de origem ou capacidade
+Simular APT -> Plano concreto : mudancas e estimativas
+Simular APT -> Reparo necessario : estado inconsistente
+Plano concreto -> Aprovar mudanca : efeito e recuperacao
+Aprovar mudanca -> Aguardar exclusividade : permitido
+Aprovar mudanca -> Cancelada : recusado
+Aguardar exclusividade -> Drenar ambiente : lease e locks validos
+Aguardar exclusividade -> Cancelada : cancelado sem aplicar
+Drenar ambiente -> Revalidar plano : avaliacoes paradas
+Revalidar plano -> Plano igual
+Plano igual -> Simular APT : mudou
+Plano igual -> Baixar pacotes : sim
+Baixar pacotes -> Aplicar pacotes : download verificado
+Baixar pacotes -> Cancelada : interrompido sem aplicar
+Aplicar pacotes -> Verificar inventario e health : processo terminou
+Aplicar pacotes -> Reparo necessario : falha ou parada ambigua
+Verificar inventario e health -> Concluida : estado efetivo pronto
+Verificar inventario e health -> Reparo necessario : verificacao falhou
+Reparo necessario -> Plano concreto : nova manutencao
+note Aguardar exclusividade : Nao apagar locks alheios
+note Reparo necessario : Sem rollback presumido
+note Concluida : Inventario novo registrado

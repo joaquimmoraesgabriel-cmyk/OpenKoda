@@ -1,0 +1,952 @@
+{
+  "format": "openflowkit.scene",
+  "schemaVersion": 1,
+  "id": "ed46abc1-0e10-4b3b-a17e-c0f99b51c92d",
+  "name": "09-painel - proposta",
+  "createdAt": "2026-11-07T20:40:49.781Z",
+  "updatedAt": "2026-11-07T20:40:49.781Z",
+  "pages": [
+    {
+      "id": "ed46abc1-0e10-4b3b-a17e-c0f99b51c92d:page-1",
+      "name": "Page 1",
+      "diagramKind": "wireframe",
+      "layers": [
+        {
+          "id": "default",
+          "name": "Default",
+          "visible": true,
+          "locked": false
+        }
+      ],
+      "nodes": [
+        {
+          "id": "dsl-trzy5v",
+          "kind": "frame",
+          "parentId": null,
+          "layerId": "default",
+          "zIndex": 0,
+          "transform": {
+            "translation": {
+              "x": 160,
+              "y": 80
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 848,
+            "height": 821
+          },
+          "content": {
+            "label": "OpenKoda - organizacao visual aprovada"
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "family": "wireframe",
+              "version": 1,
+              "source": "%% ofk 1\nwireframe\ntitle: OpenKoda - organizacao visual aprovada\nappearance: paper\nicons: off\nscreen Avaliacao [window] {\n  navbar: OpenKoda | Avaliacoes | Achados | Projetos\n  button: Nova avaliacao [half, primary]\n  paragraph: Kali pronto - exemplo [half]\n  search: Pesquisar avaliacoes [third]\n  heading: API de pagamentos [two-thirds]\n  list: API de pagamentos - selecionada | Revisao do backend | Ambiente de testes [third]\n  list: Resumo - selecionado | Achados | Atividade | Arquivos [two-thirds]\n  paragraph: Lista e filtros preservam selecao [third]\n  paragraph: Validando resultados - ambiente de laboratorio [two-thirds]\n  paragraph: Acesso secundario no trilho lateral [third]\n  paragraph: Atividade recente e candidatos aguardando validacao [two-thirds]\n  paragraph: Kali e ferramentas [third]\n  accordion: Conversa com a IA - recolhida [two-thirds]\n  paragraph: Configuracoes [third]\n  accordion: Execucoes - recolhidas [two-thirds]\n  paragraph: Sem terceira coluna permanente [third]\n  accordion: Evidencias - recolhidas [two-thirds]\n  divider\n  paragraph: Esquema de composicao - seis imagens aprovadas detalham o visual\n  statusbar: Estado real e acesso ao diagnostico | Dados ilustrativos\n}\n",
+              "hash": "qc22x7",
+              "title": "OpenKoda - organizacao visual aprovada",
+              "appearance": {
+                "palette": "paper"
+              },
+              "icons": "off"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "screen-avaliacao",
+          "kind": "frame",
+          "parentId": "dsl-trzy5v",
+          "layerId": "default",
+          "zIndex": 0,
+          "transform": {
+            "translation": {
+              "x": 24,
+              "y": 88
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 800,
+            "height": 709
+          },
+          "content": {
+            "preset": "window",
+            "label": "Avaliacao"
+          },
+          "appearance": {
+            "fill": "#ffffff",
+            "stroke": "#555952",
+            "strokeWidth": 1.5,
+            "cornerRadius": 10,
+            "fontSize": 12,
+            "fontWeight": 500
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "line": 6,
+              "appearance": {
+                "palette": "paper"
+              }
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "screen-avaliacao-1",
+          "kind": "widget",
+          "parentId": "screen-avaliacao",
+          "layerId": "default",
+          "zIndex": 0,
+          "transform": {
+            "translation": {
+              "x": 16,
+              "y": 52
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 768,
+            "height": 56
+          },
+          "content": {
+            "widget": "navbar",
+            "label": "OpenKoda | Avaliacoes | Achados | Projetos"
+          },
+          "appearance": {
+            "fill": "#ffffff",
+            "stroke": "#555952",
+            "strokeWidth": 1.5
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "line": 7,
+              "appearance": {
+                "palette": "paper"
+              }
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "screen-avaliacao-2",
+          "kind": "widget",
+          "parentId": "screen-avaliacao",
+          "layerId": "default",
+          "zIndex": 0,
+          "transform": {
+            "translation": {
+              "x": 16,
+              "y": 120
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 378,
+            "height": 40
+          },
+          "content": {
+            "widget": "button",
+            "label": "Nova avaliacao",
+            "variant": "primary"
+          },
+          "appearance": {
+            "fill": "#ffffff",
+            "stroke": "#555952",
+            "strokeWidth": 1.5
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "line": 8,
+              "width": "half",
+              "appearance": {
+                "palette": "paper"
+              }
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "screen-avaliacao-3",
+          "kind": "widget",
+          "parentId": "screen-avaliacao",
+          "layerId": "default",
+          "zIndex": 0,
+          "transform": {
+            "translation": {
+              "x": 406,
+              "y": 130.5
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 378,
+            "height": 19
+          },
+          "content": {
+            "widget": "paragraph",
+            "label": "Kali pronto - exemplo"
+          },
+          "appearance": {
+            "fill": "#ffffff",
+            "stroke": "#555952",
+            "strokeWidth": 1.5
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "line": 9,
+              "width": "half",
+              "appearance": {
+                "palette": "paper"
+              }
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "screen-avaliacao-4",
+          "kind": "widget",
+          "parentId": "screen-avaliacao",
+          "layerId": "default",
+          "zIndex": 0,
+          "transform": {
+            "translation": {
+              "x": 16,
+              "y": 172
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 248,
+            "height": 40
+          },
+          "content": {
+            "widget": "search",
+            "label": "Pesquisar avaliacoes"
+          },
+          "appearance": {
+            "fill": "#ffffff",
+            "stroke": "#555952",
+            "strokeWidth": 1.5
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "line": 10,
+              "width": "third",
+              "appearance": {
+                "palette": "paper"
+              }
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "screen-avaliacao-5",
+          "kind": "widget",
+          "parentId": "screen-avaliacao",
+          "layerId": "default",
+          "zIndex": 0,
+          "transform": {
+            "translation": {
+              "x": 276,
+              "y": 174
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 508,
+            "height": 36
+          },
+          "content": {
+            "widget": "heading",
+            "label": "API de pagamentos"
+          },
+          "appearance": {
+            "fill": "#ffffff",
+            "stroke": "#555952",
+            "strokeWidth": 1.5
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "line": 11,
+              "width": "two-thirds",
+              "appearance": {
+                "palette": "paper"
+              }
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "screen-avaliacao-6",
+          "kind": "widget",
+          "parentId": "screen-avaliacao",
+          "layerId": "default",
+          "zIndex": 0,
+          "transform": {
+            "translation": {
+              "x": 16,
+              "y": 244
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 248,
+            "height": 120
+          },
+          "content": {
+            "widget": "list",
+            "label": "API de pagamentos - selecionada | Revisao do backend | Ambiente de testes"
+          },
+          "appearance": {
+            "fill": "#ffffff",
+            "stroke": "#555952",
+            "strokeWidth": 1.5
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "line": 12,
+              "width": "third",
+              "appearance": {
+                "palette": "paper"
+              }
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "screen-avaliacao-7",
+          "kind": "widget",
+          "parentId": "screen-avaliacao",
+          "layerId": "default",
+          "zIndex": 0,
+          "transform": {
+            "translation": {
+              "x": 276,
+              "y": 224
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 508,
+            "height": 160
+          },
+          "content": {
+            "widget": "list",
+            "label": "Resumo - selecionado | Achados | Atividade | Arquivos"
+          },
+          "appearance": {
+            "fill": "#ffffff",
+            "stroke": "#555952",
+            "strokeWidth": 1.5
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "line": 13,
+              "width": "two-thirds",
+              "appearance": {
+                "palette": "paper"
+              }
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "screen-avaliacao-8",
+          "kind": "widget",
+          "parentId": "screen-avaliacao",
+          "layerId": "default",
+          "zIndex": 0,
+          "transform": {
+            "translation": {
+              "x": 16,
+              "y": 396
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 248,
+            "height": 19
+          },
+          "content": {
+            "widget": "paragraph",
+            "label": "Lista e filtros preservam selecao"
+          },
+          "appearance": {
+            "fill": "#ffffff",
+            "stroke": "#555952",
+            "strokeWidth": 1.5
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "line": 14,
+              "width": "third",
+              "appearance": {
+                "palette": "paper"
+              }
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "screen-avaliacao-9",
+          "kind": "widget",
+          "parentId": "screen-avaliacao",
+          "layerId": "default",
+          "zIndex": 0,
+          "transform": {
+            "translation": {
+              "x": 276,
+              "y": 396
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 508,
+            "height": 19
+          },
+          "content": {
+            "widget": "paragraph",
+            "label": "Validando resultados - ambiente de laboratorio"
+          },
+          "appearance": {
+            "fill": "#ffffff",
+            "stroke": "#555952",
+            "strokeWidth": 1.5
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "line": 15,
+              "width": "two-thirds",
+              "appearance": {
+                "palette": "paper"
+              }
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "screen-avaliacao-10",
+          "kind": "widget",
+          "parentId": "screen-avaliacao",
+          "layerId": "default",
+          "zIndex": 0,
+          "transform": {
+            "translation": {
+              "x": 16,
+              "y": 427
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 248,
+            "height": 19
+          },
+          "content": {
+            "widget": "paragraph",
+            "label": "Acesso secundario no trilho lateral"
+          },
+          "appearance": {
+            "fill": "#ffffff",
+            "stroke": "#555952",
+            "strokeWidth": 1.5
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "line": 16,
+              "width": "third",
+              "appearance": {
+                "palette": "paper"
+              }
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "screen-avaliacao-11",
+          "kind": "widget",
+          "parentId": "screen-avaliacao",
+          "layerId": "default",
+          "zIndex": 0,
+          "transform": {
+            "translation": {
+              "x": 276,
+              "y": 427
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 508,
+            "height": 19
+          },
+          "content": {
+            "widget": "paragraph",
+            "label": "Atividade recente e candidatos aguardando validacao"
+          },
+          "appearance": {
+            "fill": "#ffffff",
+            "stroke": "#555952",
+            "strokeWidth": 1.5
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "line": 17,
+              "width": "two-thirds",
+              "appearance": {
+                "palette": "paper"
+              }
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "screen-avaliacao-12",
+          "kind": "widget",
+          "parentId": "screen-avaliacao",
+          "layerId": "default",
+          "zIndex": 0,
+          "transform": {
+            "translation": {
+              "x": 16,
+              "y": 468.5
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 248,
+            "height": 19
+          },
+          "content": {
+            "widget": "paragraph",
+            "label": "Kali e ferramentas"
+          },
+          "appearance": {
+            "fill": "#ffffff",
+            "stroke": "#555952",
+            "strokeWidth": 1.5
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "line": 18,
+              "width": "third",
+              "appearance": {
+                "palette": "paper"
+              }
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "screen-avaliacao-13",
+          "kind": "widget",
+          "parentId": "screen-avaliacao",
+          "layerId": "default",
+          "zIndex": 0,
+          "transform": {
+            "translation": {
+              "x": 276,
+              "y": 458
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 508,
+            "height": 40
+          },
+          "content": {
+            "widget": "accordion",
+            "label": "Conversa com a IA - recolhida"
+          },
+          "appearance": {
+            "fill": "#ffffff",
+            "stroke": "#555952",
+            "strokeWidth": 1.5
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "line": 19,
+              "width": "two-thirds",
+              "appearance": {
+                "palette": "paper"
+              }
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "screen-avaliacao-14",
+          "kind": "widget",
+          "parentId": "screen-avaliacao",
+          "layerId": "default",
+          "zIndex": 0,
+          "transform": {
+            "translation": {
+              "x": 16,
+              "y": 520.5
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 248,
+            "height": 19
+          },
+          "content": {
+            "widget": "paragraph",
+            "label": "Configuracoes"
+          },
+          "appearance": {
+            "fill": "#ffffff",
+            "stroke": "#555952",
+            "strokeWidth": 1.5
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "line": 20,
+              "width": "third",
+              "appearance": {
+                "palette": "paper"
+              }
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "screen-avaliacao-15",
+          "kind": "widget",
+          "parentId": "screen-avaliacao",
+          "layerId": "default",
+          "zIndex": 0,
+          "transform": {
+            "translation": {
+              "x": 276,
+              "y": 510
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 508,
+            "height": 40
+          },
+          "content": {
+            "widget": "accordion",
+            "label": "Execucoes - recolhidas"
+          },
+          "appearance": {
+            "fill": "#ffffff",
+            "stroke": "#555952",
+            "strokeWidth": 1.5
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "line": 21,
+              "width": "two-thirds",
+              "appearance": {
+                "palette": "paper"
+              }
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "screen-avaliacao-16",
+          "kind": "widget",
+          "parentId": "screen-avaliacao",
+          "layerId": "default",
+          "zIndex": 0,
+          "transform": {
+            "translation": {
+              "x": 16,
+              "y": 572.5
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 248,
+            "height": 19
+          },
+          "content": {
+            "widget": "paragraph",
+            "label": "Sem terceira coluna permanente"
+          },
+          "appearance": {
+            "fill": "#ffffff",
+            "stroke": "#555952",
+            "strokeWidth": 1.5
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "line": 22,
+              "width": "third",
+              "appearance": {
+                "palette": "paper"
+              }
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "screen-avaliacao-17",
+          "kind": "widget",
+          "parentId": "screen-avaliacao",
+          "layerId": "default",
+          "zIndex": 0,
+          "transform": {
+            "translation": {
+              "x": 276,
+              "y": 562
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 508,
+            "height": 40
+          },
+          "content": {
+            "widget": "accordion",
+            "label": "Evidencias - recolhidas"
+          },
+          "appearance": {
+            "fill": "#ffffff",
+            "stroke": "#555952",
+            "strokeWidth": 1.5
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "line": 23,
+              "width": "two-thirds",
+              "appearance": {
+                "palette": "paper"
+              }
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "screen-avaliacao-18",
+          "kind": "widget",
+          "parentId": "screen-avaliacao",
+          "layerId": "default",
+          "zIndex": 0,
+          "transform": {
+            "translation": {
+              "x": 16,
+              "y": 614
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 768,
+            "height": 12
+          },
+          "content": {
+            "widget": "divider",
+            "label": ""
+          },
+          "appearance": {
+            "fill": "#ffffff",
+            "stroke": "#555952",
+            "strokeWidth": 1.5
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "line": 24,
+              "appearance": {
+                "palette": "paper"
+              }
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "screen-avaliacao-19",
+          "kind": "widget",
+          "parentId": "screen-avaliacao",
+          "layerId": "default",
+          "zIndex": 0,
+          "transform": {
+            "translation": {
+              "x": 16,
+              "y": 638
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 768,
+            "height": 19
+          },
+          "content": {
+            "widget": "paragraph",
+            "label": "Esquema de composicao - seis imagens aprovadas detalham o visual"
+          },
+          "appearance": {
+            "fill": "#ffffff",
+            "stroke": "#555952",
+            "strokeWidth": 1.5
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "line": 25,
+              "appearance": {
+                "palette": "paper"
+              }
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "screen-avaliacao-20",
+          "kind": "widget",
+          "parentId": "screen-avaliacao",
+          "layerId": "default",
+          "zIndex": 0,
+          "transform": {
+            "translation": {
+              "x": 16,
+              "y": 669
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 768,
+            "height": 24
+          },
+          "content": {
+            "widget": "statusbar",
+            "label": "Estado real e acesso ao diagnostico | Dados ilustrativos"
+          },
+          "appearance": {
+            "fill": "#ffffff",
+            "stroke": "#555952",
+            "strokeWidth": 1.5
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "line": 26,
+              "appearance": {
+                "palette": "paper"
+              }
+            }
+          },
+          "extensions": {}
+        }
+      ],
+      "connectors": [],
+      "metadata": {},
+      "extensions": {}
+    }
+  ],
+  "metadata": {},
+  "extensions": {}
+}

@@ -1,0 +1,2215 @@
+{
+  "format": "openflowkit.scene",
+  "schemaVersion": 1,
+  "id": "6529b971-6d75-4fc4-9b0d-336c1ead8148",
+  "name": "06-estados-avaliacao - proposta OpenKoda",
+  "createdAt": "2026-11-07T20:44:09.601Z",
+  "updatedAt": "2026-11-07T20:44:09.601Z",
+  "pages": [
+    {
+      "id": "6529b971-6d75-4fc4-9b0d-336c1ead8148:page-1",
+      "name": "Page 1",
+      "diagramKind": "state",
+      "layers": [
+        {
+          "id": "default",
+          "name": "Default",
+          "visible": true,
+          "locked": false
+        }
+      ],
+      "nodes": [
+        {
+          "id": "dsl-urkt2v",
+          "kind": "frame",
+          "parentId": null,
+          "layerId": "default",
+          "zIndex": 0,
+          "transform": {
+            "translation": {
+              "x": 160,
+              "y": 80
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 2028,
+            "height": 2472
+          },
+          "content": {
+            "label": "OpenKoda - estados propostos da avaliacao"
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "family": "state",
+              "version": 1,
+              "source": "%% ofk 1\nstate down\ntitle: OpenKoda - estados propostos da avaliacao\nicons: off\n[*] -> Rascunho\nRascunho -> Preparando : iniciar e congelar escopo\nPreparando -> Planejando : ambiente pronto\nPreparando -> Bloqueada : dependencia ausente\nPreparando -> Falhou : falha irrecuperavel\nPlanejando -> AguardandoAprovacao : decisao necessaria\nPlanejando -> NaFila : politica suficiente\nPlanejando -> Falhou : falha irrecuperavel\nAguardandoAprovacao -> NaFila : decisao valida\nAguardandoAprovacao -> Planejando : ajustar plano\nNaFila -> Executando : revalidar e despachar\nNaFila -> AguardandoAprovacao : decisao expirada\nExecutando -> Pausando : pausar novos passos\nPausando -> Pausada : estabilizar e checkpoint\nPausada -> Preparando : revalidar para retomar\nExecutando -> Bloqueada : dependencia perdida\nBloqueada -> Preparando : dependencia restaurada\nExecutando -> Validando : trabalho planejado encerrado\nExecutando -> Falhou : falha irrecuperavel\nExecutando -> Cancelando : revogar e encerrar\nAguardandoAprovacao -> Cancelando : cancelar\nPausada -> Cancelando : cancelar\nCancelando -> Cancelada : encerramento confirmado\nCancelando -> EfeitoDesconhecido : falta confirmacao\nEfeitoDesconhecido -> Bloqueada : requer reconciliacao\nValidando -> Concluida : cobertura atendida\nValidando -> Parcial : lacunas preservadas\nValidando -> Falhou : contrato impossivel\nConcluida -> [*]\nParcial -> [*]\nCancelada -> [*]\nFalhou -> [*]\nnote Pausada : Pausa nao e SIGSTOP\nnote Concluida : Nao certifica seguranca",
+              "hash": "vv9zse",
+              "direction": "down",
+              "title": "OpenKoda - estados propostos da avaliacao",
+              "icons": "off"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "state-start",
+          "kind": "process",
+          "parentId": "dsl-urkt2v",
+          "layerId": "default",
+          "zIndex": 1,
+          "transform": {
+            "translation": {
+              "x": 973,
+              "y": 72
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 24,
+            "height": 24
+          },
+          "content": {
+            "label": "",
+            "shape": "ellipse"
+          },
+          "appearance": {
+            "fill": "#475569",
+            "stroke": "#334155",
+            "textColor": "#ffffff"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "state-start",
+              "line": 5,
+              "color": "gray",
+              "fill": "bold",
+              "attrs": [
+                {
+                  "key": "width",
+                  "value": "24"
+                },
+                {
+                  "key": "height",
+                  "value": "24"
+                }
+              ],
+              "statePseudo": "start"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "rascunho",
+          "kind": "process",
+          "parentId": "dsl-urkt2v",
+          "layerId": "default",
+          "zIndex": 2,
+          "transform": {
+            "translation": {
+              "x": 925,
+              "y": 160
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 120,
+            "height": 52
+          },
+          "content": {
+            "label": "Rascunho",
+            "shape": "rectangle"
+          },
+          "appearance": {
+            "fill": "#ffffff",
+            "stroke": "#cbd5e1",
+            "textColor": "#0f172a"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "rascunho",
+              "line": 5
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "preparando",
+          "kind": "process",
+          "parentId": "dsl-urkt2v",
+          "layerId": "default",
+          "zIndex": 3,
+          "transform": {
+            "translation": {
+              "x": 925,
+              "y": 382
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 120,
+            "height": 52
+          },
+          "content": {
+            "label": "Preparando",
+            "shape": "rectangle"
+          },
+          "appearance": {
+            "fill": "#ffffff",
+            "stroke": "#cbd5e1",
+            "textColor": "#0f172a"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "preparando",
+              "line": 6
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "planejando",
+          "kind": "process",
+          "parentId": "dsl-urkt2v",
+          "layerId": "default",
+          "zIndex": 4,
+          "transform": {
+            "translation": {
+              "x": 925,
+              "y": 590
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 120,
+            "height": 52
+          },
+          "content": {
+            "label": "Planejando",
+            "shape": "rectangle"
+          },
+          "appearance": {
+            "fill": "#ffffff",
+            "stroke": "#cbd5e1",
+            "textColor": "#0f172a"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "planejando",
+              "line": 7
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "bloqueada",
+          "kind": "process",
+          "parentId": "dsl-urkt2v",
+          "layerId": "default",
+          "zIndex": 5,
+          "transform": {
+            "translation": {
+              "x": 158,
+              "y": 2392
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 120,
+            "height": 52
+          },
+          "content": {
+            "label": "Bloqueada",
+            "shape": "rectangle"
+          },
+          "appearance": {
+            "fill": "#ffffff",
+            "stroke": "#cbd5e1",
+            "textColor": "#0f172a"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "bloqueada",
+              "line": 8
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "falhou",
+          "kind": "process",
+          "parentId": "dsl-urkt2v",
+          "layerId": "default",
+          "zIndex": 6,
+          "transform": {
+            "translation": {
+              "x": 1768,
+              "y": 1668
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 120,
+            "height": 52
+          },
+          "content": {
+            "label": "Falhou",
+            "shape": "rectangle"
+          },
+          "appearance": {
+            "fill": "#ffffff",
+            "stroke": "#cbd5e1",
+            "textColor": "#0f172a"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "falhou",
+              "line": 9
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "aguardandoaprovacao",
+          "kind": "process",
+          "parentId": "dsl-urkt2v",
+          "layerId": "default",
+          "zIndex": 7,
+          "transform": {
+            "translation": {
+              "x": 909,
+              "y": 798
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 191,
+            "height": 52
+          },
+          "content": {
+            "label": "AguardandoAprovacao",
+            "shape": "rectangle"
+          },
+          "appearance": {
+            "fill": "#ffffff",
+            "stroke": "#cbd5e1",
+            "textColor": "#0f172a"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "aguardandoaprovacao",
+              "line": 10
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "nafila",
+          "kind": "process",
+          "parentId": "dsl-urkt2v",
+          "layerId": "default",
+          "zIndex": 8,
+          "transform": {
+            "translation": {
+              "x": 788,
+              "y": 1006
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 120,
+            "height": 52
+          },
+          "content": {
+            "label": "NaFila",
+            "shape": "rectangle"
+          },
+          "appearance": {
+            "fill": "#ffffff",
+            "stroke": "#cbd5e1",
+            "textColor": "#0f172a"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "nafila",
+              "line": 11
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "executando",
+          "kind": "process",
+          "parentId": "dsl-urkt2v",
+          "layerId": "default",
+          "zIndex": 9,
+          "transform": {
+            "translation": {
+              "x": 788,
+              "y": 1214
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 120,
+            "height": 52
+          },
+          "content": {
+            "label": "Executando",
+            "shape": "rectangle"
+          },
+          "appearance": {
+            "fill": "#ffffff",
+            "stroke": "#cbd5e1",
+            "textColor": "#0f172a"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "executando",
+              "line": 15
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "pausando",
+          "kind": "process",
+          "parentId": "dsl-urkt2v",
+          "layerId": "default",
+          "zIndex": 10,
+          "transform": {
+            "translation": {
+              "x": 788,
+              "y": 1436
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 120,
+            "height": 52
+          },
+          "content": {
+            "label": "Pausando",
+            "shape": "rectangle"
+          },
+          "appearance": {
+            "fill": "#ffffff",
+            "stroke": "#cbd5e1",
+            "textColor": "#0f172a"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "pausando",
+              "line": 17
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "pausada",
+          "kind": "process",
+          "parentId": "dsl-urkt2v",
+          "layerId": "default",
+          "zIndex": 11,
+          "transform": {
+            "translation": {
+              "x": 734,
+              "y": 1682
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 120,
+            "height": 52
+          },
+          "content": {
+            "label": "Pausada",
+            "shape": "rectangle"
+          },
+          "appearance": {
+            "fill": "#ffffff",
+            "stroke": "#cbd5e1",
+            "textColor": "#0f172a"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "pausada",
+              "line": 18,
+              "notes": [
+                "Pausa nao e SIGSTOP"
+              ]
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "validando",
+          "kind": "process",
+          "parentId": "dsl-urkt2v",
+          "layerId": "default",
+          "zIndex": 12,
+          "transform": {
+            "translation": {
+              "x": 1505,
+              "y": 1436
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 120,
+            "height": 52
+          },
+          "content": {
+            "label": "Validando",
+            "shape": "rectangle"
+          },
+          "appearance": {
+            "fill": "#ffffff",
+            "stroke": "#cbd5e1",
+            "textColor": "#0f172a"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "validando",
+              "line": 22
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "cancelando",
+          "kind": "process",
+          "parentId": "dsl-urkt2v",
+          "layerId": "default",
+          "zIndex": 13,
+          "transform": {
+            "translation": {
+              "x": 494,
+              "y": 1933
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 120,
+            "height": 52
+          },
+          "content": {
+            "label": "Cancelando",
+            "shape": "rectangle"
+          },
+          "appearance": {
+            "fill": "#ffffff",
+            "stroke": "#cbd5e1",
+            "textColor": "#0f172a"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "cancelando",
+              "line": 24
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "cancelada",
+          "kind": "process",
+          "parentId": "dsl-urkt2v",
+          "layerId": "default",
+          "zIndex": 14,
+          "transform": {
+            "translation": {
+              "x": 670,
+              "y": 2184
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 120,
+            "height": 52
+          },
+          "content": {
+            "label": "Cancelada",
+            "shape": "rectangle"
+          },
+          "appearance": {
+            "fill": "#ffffff",
+            "stroke": "#cbd5e1",
+            "textColor": "#0f172a"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "cancelada",
+              "line": 27
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "efeitodesconhecido",
+          "kind": "process",
+          "parentId": "dsl-urkt2v",
+          "layerId": "default",
+          "zIndex": 15,
+          "transform": {
+            "translation": {
+              "x": 447,
+              "y": 2184
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 175,
+            "height": 52
+          },
+          "content": {
+            "label": "EfeitoDesconhecido",
+            "shape": "rectangle"
+          },
+          "appearance": {
+            "fill": "#ffffff",
+            "stroke": "#cbd5e1",
+            "textColor": "#0f172a"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "efeitodesconhecido",
+              "line": 28
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "concluida",
+          "kind": "process",
+          "parentId": "dsl-urkt2v",
+          "layerId": "default",
+          "zIndex": 16,
+          "transform": {
+            "translation": {
+              "x": 1083,
+              "y": 1938
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 120,
+            "height": 52
+          },
+          "content": {
+            "label": "Concluida",
+            "shape": "rectangle"
+          },
+          "appearance": {
+            "fill": "#ffffff",
+            "stroke": "#cbd5e1",
+            "textColor": "#0f172a"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "concluida",
+              "line": 30,
+              "notes": [
+                "Nao certifica seguranca"
+              ]
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "parcial",
+          "kind": "process",
+          "parentId": "dsl-urkt2v",
+          "layerId": "default",
+          "zIndex": 17,
+          "transform": {
+            "translation": {
+              "x": 1505,
+              "y": 1938
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 120,
+            "height": 52
+          },
+          "content": {
+            "label": "Parcial",
+            "shape": "rectangle"
+          },
+          "appearance": {
+            "fill": "#ffffff",
+            "stroke": "#cbd5e1",
+            "textColor": "#0f172a"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "parcial",
+              "line": 31
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "state-end",
+          "kind": "process",
+          "parentId": "dsl-urkt2v",
+          "layerId": "default",
+          "zIndex": 18,
+          "transform": {
+            "translation": {
+              "x": 725,
+              "y": 2300
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 24,
+            "height": 24
+          },
+          "content": {
+            "label": "",
+            "shape": "ellipse"
+          },
+          "appearance": {
+            "fill": "#475569",
+            "stroke": "#334155",
+            "textColor": "#ffffff"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "state-end",
+              "line": 33,
+              "color": "gray",
+              "fill": "bold",
+              "attrs": [
+                {
+                  "key": "width",
+                  "value": "24"
+                },
+                {
+                  "key": "height",
+                  "value": "24"
+                }
+              ],
+              "statePseudo": "end"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "pausada-note",
+          "kind": "sticky",
+          "parentId": "dsl-urkt2v",
+          "layerId": "default",
+          "zIndex": 0,
+          "transform": {
+            "translation": {
+              "x": 890,
+              "y": 1658
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 185,
+            "height": 100
+          },
+          "content": {
+            "label": "Pausa nao e SIGSTOP",
+            "subLabel": "",
+            "color": "yellow"
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "pausada-note",
+              "line": 37,
+              "noteFor": "pausada"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "concluida-note",
+          "kind": "sticky",
+          "parentId": "dsl-urkt2v",
+          "layerId": "default",
+          "zIndex": 0,
+          "transform": {
+            "translation": {
+              "x": 1239,
+              "y": 1914
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 218,
+            "height": 100
+          },
+          "content": {
+            "label": "Nao certifica seguranca",
+            "subLabel": "",
+            "color": "yellow"
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "concluida-note",
+              "line": 38,
+              "noteFor": "concluida"
+            }
+          },
+          "extensions": {}
+        }
+      ],
+      "connectors": [
+        {
+          "id": "edge:state-start->rascunho:1",
+          "source": {
+            "nodeId": "state-start",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "rascunho",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 5
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:rascunho->preparando:1",
+          "source": {
+            "nodeId": "rascunho",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "preparando",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "rascunho->preparando:1:label",
+              "text": "iniciar e congelar escopo",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 6
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:preparando->planejando:1",
+          "source": {
+            "nodeId": "preparando",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "planejando",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "preparando->planejando:1:label",
+              "text": "ambiente pronto",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 7
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:preparando->bloqueada:1",
+          "source": {
+            "nodeId": "preparando",
+            "portId": null,
+            "anchor": {
+              "kind": "side",
+              "side": "bottom",
+              "ratio": 0.3
+            },
+            "point": null
+          },
+          "target": {
+            "nodeId": "bloqueada",
+            "portId": null,
+            "anchor": {
+              "kind": "side",
+              "side": "top",
+              "ratio": 0.3
+            },
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "preparando->bloqueada:1:label",
+              "text": "dependencia ausente",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 8
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:preparando->falhou:1",
+          "source": {
+            "nodeId": "preparando",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "falhou",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "preparando->falhou:1:label",
+              "text": "falha irrecuperavel",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 9
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:planejando->aguardandoaprovacao:1",
+          "source": {
+            "nodeId": "planejando",
+            "portId": null,
+            "anchor": {
+              "kind": "side",
+              "side": "bottom",
+              "ratio": 0.3
+            },
+            "point": null
+          },
+          "target": {
+            "nodeId": "aguardandoaprovacao",
+            "portId": null,
+            "anchor": {
+              "kind": "side",
+              "side": "top",
+              "ratio": 0.27225130890052357
+            },
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "planejando->aguardandoaprovacao:1:label",
+              "text": "decisao necessaria",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 10
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:planejando->nafila:1",
+          "source": {
+            "nodeId": "planejando",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "nafila",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "planejando->nafila:1:label",
+              "text": "politica suficiente",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 11
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:planejando->falhou:1",
+          "source": {
+            "nodeId": "planejando",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "falhou",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "planejando->falhou:1:label",
+              "text": "falha irrecuperavel",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 12
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:aguardandoaprovacao->nafila:1",
+          "source": {
+            "nodeId": "aguardandoaprovacao",
+            "portId": null,
+            "anchor": {
+              "kind": "side",
+              "side": "bottom",
+              "ratio": 0.3
+            },
+            "point": null
+          },
+          "target": {
+            "nodeId": "nafila",
+            "portId": null,
+            "anchor": {
+              "kind": "side",
+              "side": "top",
+              "ratio": 0.3
+            },
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "aguardandoaprovacao->nafila:1:label",
+              "text": "decisao valida",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 13
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:aguardandoaprovacao->planejando:1",
+          "source": {
+            "nodeId": "aguardandoaprovacao",
+            "portId": null,
+            "anchor": {
+              "kind": "side",
+              "side": "top",
+              "ratio": 0.5235602094240838
+            },
+            "point": null
+          },
+          "target": {
+            "nodeId": "planejando",
+            "portId": null,
+            "anchor": {
+              "kind": "side",
+              "side": "bottom",
+              "ratio": 0.7
+            },
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "aguardandoaprovacao->planejando:1:label",
+              "text": "ajustar plano",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 14
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:nafila->executando:1",
+          "source": {
+            "nodeId": "nafila",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "executando",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "nafila->executando:1:label",
+              "text": "revalidar e despachar",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 15
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:nafila->aguardandoaprovacao:1",
+          "source": {
+            "nodeId": "nafila",
+            "portId": null,
+            "anchor": {
+              "kind": "side",
+              "side": "top",
+              "ratio": 0.7
+            },
+            "point": null
+          },
+          "target": {
+            "nodeId": "aguardandoaprovacao",
+            "portId": null,
+            "anchor": {
+              "kind": "side",
+              "side": "bottom",
+              "ratio": 0.7
+            },
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "nafila->aguardandoaprovacao:1:label",
+              "text": "decisao expirada",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 16
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:executando->pausando:1",
+          "source": {
+            "nodeId": "executando",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "pausando",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "executando->pausando:1:label",
+              "text": "pausar novos passos",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 17
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:pausando->pausada:1",
+          "source": {
+            "nodeId": "pausando",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "pausada",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "pausando->pausada:1:label",
+              "text": "estabilizar e checkpoint",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 18
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:pausada->preparando:1",
+          "source": {
+            "nodeId": "pausada",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "preparando",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "pausada->preparando:1:label",
+              "text": "revalidar para retomar",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 19
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:executando->bloqueada:1",
+          "source": {
+            "nodeId": "executando",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "bloqueada",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "executando->bloqueada:1:label",
+              "text": "dependencia perdida",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 20
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:bloqueada->preparando:1",
+          "source": {
+            "nodeId": "bloqueada",
+            "portId": null,
+            "anchor": {
+              "kind": "side",
+              "side": "top",
+              "ratio": 0.7
+            },
+            "point": null
+          },
+          "target": {
+            "nodeId": "preparando",
+            "portId": null,
+            "anchor": {
+              "kind": "side",
+              "side": "bottom",
+              "ratio": 0.7
+            },
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "bloqueada->preparando:1:label",
+              "text": "dependencia restaurada",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 21
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:executando->validando:1",
+          "source": {
+            "nodeId": "executando",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "validando",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "executando->validando:1:label",
+              "text": "trabalho planejado encerrado",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 22
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:executando->falhou:1",
+          "source": {
+            "nodeId": "executando",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "falhou",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "executando->falhou:1:label",
+              "text": "falha irrecuperavel",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 23
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:executando->cancelando:1",
+          "source": {
+            "nodeId": "executando",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "cancelando",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "executando->cancelando:1:label",
+              "text": "revogar e encerrar",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 24
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:aguardandoaprovacao->cancelando:1",
+          "source": {
+            "nodeId": "aguardandoaprovacao",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "cancelando",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "aguardandoaprovacao->cancelando:1:label",
+              "text": "cancelar",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 25
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:pausada->cancelando:1",
+          "source": {
+            "nodeId": "pausada",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "cancelando",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "pausada->cancelando:1:label",
+              "text": "cancelar",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 26
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:cancelando->cancelada:1",
+          "source": {
+            "nodeId": "cancelando",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "cancelada",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "cancelando->cancelada:1:label",
+              "text": "encerramento confirmado",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 27
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:cancelando->efeitodesconhecido:1",
+          "source": {
+            "nodeId": "cancelando",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "efeitodesconhecido",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "cancelando->efeitodesconhecido:1:label",
+              "text": "falta confirmacao",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 28
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:efeitodesconhecido->bloqueada:1",
+          "source": {
+            "nodeId": "efeitodesconhecido",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "bloqueada",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "efeitodesconhecido->bloqueada:1:label",
+              "text": "requer reconciliacao",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 29
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:validando->concluida:1",
+          "source": {
+            "nodeId": "validando",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "concluida",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "validando->concluida:1:label",
+              "text": "cobertura atendida",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 30
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:validando->parcial:1",
+          "source": {
+            "nodeId": "validando",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "parcial",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "validando->parcial:1:label",
+              "text": "lacunas preservadas",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 31
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:validando->falhou:1",
+          "source": {
+            "nodeId": "validando",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "falhou",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "validando->falhou:1:label",
+              "text": "contrato impossivel",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 32
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:concluida->state-end:1",
+          "source": {
+            "nodeId": "concluida",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "state-end",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 33
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:parcial->state-end:1",
+          "source": {
+            "nodeId": "parcial",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "state-end",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 34
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:cancelada->state-end:1",
+          "source": {
+            "nodeId": "cancelada",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "state-end",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 35
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:falhou->state-end:1",
+          "source": {
+            "nodeId": "falhou",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "state-end",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 36
+            }
+          },
+          "extensions": {}
+        }
+      ],
+      "metadata": {},
+      "extensions": {}
+    }
+  ],
+  "metadata": {},
+  "extensions": {}
+}

@@ -1,0 +1,19 @@
+# Credenciais locais: manter fora do historico Git.
+/.lab-local/
+__pycache__/
+/API_OPEN_AI.txt
+/OpenKoda/API_OPEN_AI.txt
+/api_openrouter.txt
+/SERVIDOR_IP.txt
+/VNC.txt
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.dpapi
+*.p12
+*.jks
+/secrets/
+**/service-account*.json
+**/*firebase-adminsdk*.json

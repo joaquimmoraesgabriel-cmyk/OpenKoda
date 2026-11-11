@@ -1,0 +1,1442 @@
+{
+  "format": "openflowkit.scene",
+  "schemaVersion": 1,
+  "id": "d4176c71-c46a-49f5-be82-d3c298739adc",
+  "name": "04-autorizacao OpenKoda proposto",
+  "createdAt": "2026-11-07T20:39:52.465Z",
+  "updatedAt": "2026-11-07T20:39:52.465Z",
+  "pages": [
+    {
+      "id": "d4176c71-c46a-49f5-be82-d3c298739adc:page-1",
+      "name": "Page 1",
+      "diagramKind": "sequence",
+      "layers": [
+        {
+          "id": "default",
+          "name": "Default",
+          "visible": true,
+          "locked": false
+        }
+      ],
+      "nodes": [
+        {
+          "id": "dsl-9ctm1k",
+          "kind": "frame",
+          "parentId": null,
+          "layerId": "default",
+          "zIndex": 0,
+          "transform": {
+            "translation": {
+              "x": 160,
+              "y": 80
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 1570,
+            "height": 1519
+          },
+          "content": {
+            "label": "Proposta - autorizacao e execucao"
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "family": "sequence",
+              "version": 1,
+              "source": "sequence\ntitle: Proposta - autorizacao e execucao\nparticipant IA\nparticipant Politica\nparticipant Humano\nparticipant Executor\nparticipant Processo\nparticipant Estado\nIA -> Politica : propor operacao e plano\nPolitica -> Politica : normalizar escopo e efeitos\nalt politica previa suficiente {\n  Politica -> Politica : resolver decisao delimitada\n} else aprovacao humana necessaria {\n  Politica -> Humano : exibir operacao concreta\n  Humano --> Politica : aceitar ou recusar\n}\nalt decisao valida {\n  Politica -> Executor : grant interno com digest e TTL\n  Executor -> Politica : conferir revisao e revogacao\n  Politica --> Executor : autoridade vigente\n  alt valida antes do inicio {\n    Executor -> Processo : iniciar com limites efetivos\n    Processo --> Executor : saida e resultado disponivel\n  } else revogada ou expirada {\n    Executor -> Estado : bloqueada sem iniciar\n  }\n  Executor -> Estado : registrar resultado e cleanup\n  Estado --> IA : resultado ou estado desconhecido\n} else negada ou pendente {\n  Politica --> IA : nao iniciar operacao\n}\nHumano -> Politica : revogar autorizacao\nPolitica -> Executor : impedir novos inicios e cancelar conforme estado\nExecutor -> Estado : confirmar termino ou efeito desconhecido\nnote over Executor : Controle antes do inicio\nnote over Estado : Cancelar nao desfaz efeitos",
+              "hash": "2pzd9u",
+              "title": "Proposta - autorizacao e execucao",
+              "autoIcons": true
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "alt-1",
+          "kind": "annotation",
+          "parentId": "dsl-9ctm1k",
+          "layerId": "default",
+          "zIndex": 0,
+          "transform": {
+            "translation": {
+              "x": 16,
+              "y": 261
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 1498,
+            "height": 84
+          },
+          "content": {
+            "seqFragmentId": "alt-1",
+            "label": "ALT",
+            "subLabel": "politica previa suficiente",
+            "seqGuard": {
+              "x": 134,
+              "width": 232
+            },
+            "color": "violet",
+            "seqMessageOrder": 2,
+            "seqFragmentContinued": true
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "alt-1",
+              "line": 11,
+              "seqBranch": true,
+              "seqFragmentType": "alt",
+              "seqFragmentBranch": 0,
+              "seqFragmentParent": null,
+              "seqFragmentStart": 2,
+              "seqFragmentEnd": 2,
+              "seqFragmentEndLine": 13
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "alt-2",
+          "kind": "annotation",
+          "parentId": "dsl-9ctm1k",
+          "layerId": "default",
+          "zIndex": 0,
+          "transform": {
+            "translation": {
+              "x": 16,
+              "y": 345
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 1498,
+            "height": 149
+          },
+          "content": {
+            "seqFragmentId": "alt-2",
+            "label": "ELSE",
+            "subLabel": "aprovacao humana necessaria",
+            "seqGuard": {
+              "x": 134,
+              "width": 232
+            },
+            "color": "violet",
+            "seqMessageOrder": 3,
+            "seqFragmentDivider": true
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "alt-2",
+              "line": 13,
+              "seqBranch": true,
+              "seqFragmentType": "alt",
+              "seqFragmentBranch": 1,
+              "seqFragmentParent": null,
+              "seqFragmentStart": 3,
+              "seqFragmentEnd": 4,
+              "seqFragmentEndLine": 16
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "alt-3",
+          "kind": "annotation",
+          "parentId": "dsl-9ctm1k",
+          "layerId": "default",
+          "zIndex": 0,
+          "transform": {
+            "translation": {
+              "x": 16,
+              "y": 502
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 1498,
+            "height": 524
+          },
+          "content": {
+            "seqFragmentId": "alt-3",
+            "label": "ALT",
+            "subLabel": "decisao valida",
+            "seqGuard": {
+              "x": 134,
+              "width": 232
+            },
+            "color": "violet",
+            "seqMessageOrder": 5,
+            "seqFragmentContinued": true
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "alt-3",
+              "line": 17,
+              "seqBranch": true,
+              "seqFragmentType": "alt",
+              "seqFragmentBranch": 0,
+              "seqFragmentParent": null,
+              "seqFragmentStart": 5,
+              "seqFragmentEnd": 12,
+              "seqFragmentEndLine": 29
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "alt-4",
+          "kind": "annotation",
+          "parentId": "dsl-9ctm1k",
+          "layerId": "default",
+          "zIndex": 0,
+          "transform": {
+            "translation": {
+              "x": 16,
+              "y": 692
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 1498,
+            "height": 138
+          },
+          "content": {
+            "seqFragmentId": "alt-4",
+            "label": "ALT",
+            "subLabel": "valida antes do inicio",
+            "seqGuard": {
+              "x": 134,
+              "width": 232
+            },
+            "color": "violet",
+            "seqMessageOrder": 8,
+            "seqFragmentContinued": true
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "alt-4",
+              "line": 21,
+              "seqBranch": true,
+              "seqFragmentType": "alt",
+              "seqFragmentBranch": 0,
+              "seqFragmentParent": "alt-3",
+              "seqFragmentStart": 8,
+              "seqFragmentEnd": 9,
+              "seqFragmentEndLine": 24
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "alt-5",
+          "kind": "annotation",
+          "parentId": "dsl-9ctm1k",
+          "layerId": "default",
+          "zIndex": 0,
+          "transform": {
+            "translation": {
+              "x": 16,
+              "y": 830
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 1498,
+            "height": 82
+          },
+          "content": {
+            "seqFragmentId": "alt-5",
+            "label": "ELSE",
+            "subLabel": "revogada ou expirada",
+            "seqGuard": {
+              "x": 134,
+              "width": 232
+            },
+            "color": "violet",
+            "seqMessageOrder": 10,
+            "seqFragmentDivider": true
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "alt-5",
+              "line": 24,
+              "seqBranch": true,
+              "seqFragmentType": "alt",
+              "seqFragmentBranch": 1,
+              "seqFragmentParent": "alt-3",
+              "seqFragmentStart": 10,
+              "seqFragmentEnd": 10,
+              "seqFragmentEndLine": 26
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "alt-6",
+          "kind": "annotation",
+          "parentId": "dsl-9ctm1k",
+          "layerId": "default",
+          "zIndex": 0,
+          "transform": {
+            "translation": {
+              "x": 16,
+              "y": 1026
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 1498,
+            "height": 82
+          },
+          "content": {
+            "seqFragmentId": "alt-6",
+            "label": "ELSE",
+            "subLabel": "negada ou pendente",
+            "seqGuard": {
+              "x": 134,
+              "width": 232
+            },
+            "color": "violet",
+            "seqMessageOrder": 13,
+            "seqFragmentDivider": true
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "alt-6",
+              "line": 29,
+              "seqBranch": true,
+              "seqFragmentType": "alt",
+              "seqFragmentBranch": 1,
+              "seqFragmentParent": null,
+              "seqFragmentStart": 13,
+              "seqFragmentEnd": 13,
+              "seqFragmentEndLine": 31
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "ia",
+          "kind": "sequence_participant",
+          "parentId": "dsl-9ctm1k",
+          "layerId": "default",
+          "zIndex": 1,
+          "transform": {
+            "translation": {
+              "x": 56,
+              "y": 72
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 168,
+            "height": 1423
+          },
+          "content": {
+            "label": "IA",
+            "seqParticipantKind": "participant"
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "ia",
+              "line": 3,
+              "seqParticipant": true,
+              "seqDeclared": true,
+              "seqFirstUseLine": 9
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "politica",
+          "kind": "sequence_participant",
+          "parentId": "dsl-9ctm1k",
+          "layerId": "default",
+          "zIndex": 1,
+          "transform": {
+            "translation": {
+              "x": 308,
+              "y": 72
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 168,
+            "height": 1423
+          },
+          "content": {
+            "label": "Politica",
+            "seqParticipantKind": "participant"
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "politica",
+              "line": 4,
+              "seqParticipant": true,
+              "seqDeclared": true,
+              "seqFirstUseLine": 9
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "humano",
+          "kind": "sequence_participant",
+          "parentId": "dsl-9ctm1k",
+          "layerId": "default",
+          "zIndex": 1,
+          "transform": {
+            "translation": {
+              "x": 560,
+              "y": 72
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 168,
+            "height": 1423
+          },
+          "content": {
+            "label": "Humano",
+            "seqParticipantKind": "participant"
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "humano",
+              "line": 5,
+              "seqParticipant": true,
+              "seqDeclared": true,
+              "seqFirstUseLine": 14
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "executor",
+          "kind": "sequence_participant",
+          "parentId": "dsl-9ctm1k",
+          "layerId": "default",
+          "zIndex": 1,
+          "transform": {
+            "translation": {
+              "x": 812,
+              "y": 72
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 168,
+            "height": 1423
+          },
+          "content": {
+            "label": "Executor",
+            "seqParticipantKind": "participant"
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "executor",
+              "line": 6,
+              "seqParticipant": true,
+              "seqDeclared": true,
+              "seqFirstUseLine": 18
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "processo",
+          "kind": "sequence_participant",
+          "parentId": "dsl-9ctm1k",
+          "layerId": "default",
+          "zIndex": 1,
+          "transform": {
+            "translation": {
+              "x": 1064,
+              "y": 72
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 168,
+            "height": 1423
+          },
+          "content": {
+            "label": "Processo",
+            "seqParticipantKind": "participant"
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "processo",
+              "line": 7,
+              "seqParticipant": true,
+              "seqDeclared": true,
+              "seqFirstUseLine": 22
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "estado",
+          "kind": "sequence_participant",
+          "parentId": "dsl-9ctm1k",
+          "layerId": "default",
+          "zIndex": 1,
+          "transform": {
+            "translation": {
+              "x": 1316,
+              "y": 72
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 168,
+            "height": 1423
+          },
+          "content": {
+            "label": "Estado",
+            "seqParticipantKind": "participant"
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "estado",
+              "line": 8,
+              "seqParticipant": true,
+              "seqDeclared": true,
+              "seqFirstUseLine": 25
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "note-1",
+          "kind": "sequence_note",
+          "parentId": "dsl-9ctm1k",
+          "layerId": "default",
+          "zIndex": 2,
+          "transform": {
+            "translation": {
+              "x": 805.5,
+              "y": 1297
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 181,
+            "height": 56
+          },
+          "content": {
+            "label": "Controle antes do inicio",
+            "seqNotePosition": "over",
+            "seqNoteTargets": [
+              "executor"
+            ],
+            "seqMessageOrder": 17
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "note-1",
+              "line": 35,
+              "seqNote": true
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "note-2",
+          "kind": "sequence_note",
+          "parentId": "dsl-9ctm1k",
+          "layerId": "default",
+          "zIndex": 2,
+          "transform": {
+            "translation": {
+              "x": 1296.5,
+              "y": 1365
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 207,
+            "height": 56
+          },
+          "content": {
+            "label": "Cancelar nao desfaz efeitos",
+            "seqNotePosition": "over",
+            "seqNoteTargets": [
+              "estado"
+            ],
+            "seqMessageOrder": 17
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "note-2",
+              "line": 36,
+              "seqNote": true
+            }
+          },
+          "extensions": {}
+        }
+      ],
+      "connectors": [
+        {
+          "id": "msg-1",
+          "source": {
+            "nodeId": "ia",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "politica",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "direct",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "msg-1-label",
+              "text": "propor operacao e plano",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": -20.5
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {},
+          "semantics": {
+            "seqMessageKind": "sync",
+            "seqMessageOrder": 0,
+            "seqMessageRow": 0.09615384615384616
+          },
+          "metadata": {
+            "dsl": {
+              "line": 9,
+              "seqArrow": "->"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "msg-2",
+          "source": {
+            "nodeId": "politica",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "politica",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "direct",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "msg-2-label",
+              "text": "normalizar escopo e efeitos",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {},
+          "semantics": {
+            "seqMessageKind": "self",
+            "seqMessageOrder": 1,
+            "seqMessageRow": 1.0961538461538463
+          },
+          "metadata": {
+            "dsl": {
+              "line": 10,
+              "seqArrow": "->"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "msg-3",
+          "source": {
+            "nodeId": "politica",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "politica",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "direct",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "msg-3-label",
+              "text": "resolver decisao delimitada",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {},
+          "semantics": {
+            "seqMessageKind": "self",
+            "seqMessageOrder": 2,
+            "seqMessageRow": 2.7115384615384617
+          },
+          "metadata": {
+            "dsl": {
+              "line": 12,
+              "seqArrow": "->"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "msg-4",
+          "source": {
+            "nodeId": "politica",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "humano",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "direct",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "msg-4-label",
+              "text": "exibir operacao concreta",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": -20.5
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {},
+          "semantics": {
+            "seqMessageKind": "sync",
+            "seqMessageOrder": 3,
+            "seqMessageRow": 4.884615384615385
+          },
+          "metadata": {
+            "dsl": {
+              "line": 14,
+              "seqArrow": "->"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "msg-5",
+          "source": {
+            "nodeId": "humano",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "politica",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "direct",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "msg-5-label",
+              "text": "aceitar ou recusar",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": -13
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {},
+          "semantics": {
+            "seqMessageKind": "return",
+            "seqMessageOrder": 4,
+            "seqMessageRow": 5.884615384615385
+          },
+          "metadata": {
+            "dsl": {
+              "line": 15,
+              "seqArrow": "-->"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "msg-6",
+          "source": {
+            "nodeId": "politica",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "executor",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "direct",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "msg-6-label",
+              "text": "grant interno com digest e TTL",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": -20.5
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {},
+          "semantics": {
+            "seqMessageKind": "sync",
+            "seqMessageOrder": 5,
+            "seqMessageRow": 7.903846153846154
+          },
+          "metadata": {
+            "dsl": {
+              "line": 18,
+              "seqArrow": "->"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "msg-7",
+          "source": {
+            "nodeId": "executor",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "politica",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "direct",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "msg-7-label",
+              "text": "conferir revisao e revogacao",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": -20.5
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {},
+          "semantics": {
+            "seqMessageKind": "sync",
+            "seqMessageOrder": 6,
+            "seqMessageRow": 8.923076923076923
+          },
+          "metadata": {
+            "dsl": {
+              "line": 19,
+              "seqArrow": "->"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "msg-8",
+          "source": {
+            "nodeId": "politica",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "executor",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "direct",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "msg-8-label",
+              "text": "autoridade vigente",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": -13
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {},
+          "semantics": {
+            "seqMessageKind": "return",
+            "seqMessageOrder": 7,
+            "seqMessageRow": 9.923076923076923
+          },
+          "metadata": {
+            "dsl": {
+              "line": 20,
+              "seqArrow": "-->"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "msg-9",
+          "source": {
+            "nodeId": "executor",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "processo",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "direct",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "msg-9-label",
+              "text": "iniciar com limites efetivos",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": -20.5
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {},
+          "semantics": {
+            "seqMessageKind": "sync",
+            "seqMessageOrder": 8,
+            "seqMessageRow": 11.557692307692308
+          },
+          "metadata": {
+            "dsl": {
+              "line": 22,
+              "seqArrow": "->"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "msg-10",
+          "source": {
+            "nodeId": "processo",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "executor",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "direct",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "msg-10-label",
+              "text": "saida e resultado disponivel",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": -20.5
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {},
+          "semantics": {
+            "seqMessageKind": "return",
+            "seqMessageOrder": 9,
+            "seqMessageRow": 12.576923076923077
+          },
+          "metadata": {
+            "dsl": {
+              "line": 23,
+              "seqArrow": "-->"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "msg-11",
+          "source": {
+            "nodeId": "executor",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "estado",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "direct",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "msg-11-label",
+              "text": "bloqueada sem iniciar",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": -13
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {},
+          "semantics": {
+            "seqMessageKind": "sync",
+            "seqMessageOrder": 10,
+            "seqMessageRow": 13.923076923076923
+          },
+          "metadata": {
+            "dsl": {
+              "line": 25,
+              "seqArrow": "->"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "msg-12",
+          "source": {
+            "nodeId": "executor",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "estado",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "direct",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "msg-12-label",
+              "text": "registrar resultado e cleanup",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": -20.5
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {},
+          "semantics": {
+            "seqMessageKind": "sync",
+            "seqMessageOrder": 11,
+            "seqMessageRow": 15.326923076923077
+          },
+          "metadata": {
+            "dsl": {
+              "line": 27,
+              "seqArrow": "->"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "msg-13",
+          "source": {
+            "nodeId": "estado",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "ia",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "direct",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "msg-13-label",
+              "text": "resultado ou estado desconhecido",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": -20.5
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {},
+          "semantics": {
+            "seqMessageKind": "return",
+            "seqMessageOrder": 12,
+            "seqMessageRow": 16.346153846153847
+          },
+          "metadata": {
+            "dsl": {
+              "line": 28,
+              "seqArrow": "-->"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "msg-14",
+          "source": {
+            "nodeId": "politica",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "ia",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "direct",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "msg-14-label",
+              "text": "nao iniciar operacao",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": -13
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {},
+          "semantics": {
+            "seqMessageKind": "return",
+            "seqMessageOrder": 13,
+            "seqMessageRow": 17.692307692307693
+          },
+          "metadata": {
+            "dsl": {
+              "line": 30,
+              "seqArrow": "-->"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "msg-15",
+          "source": {
+            "nodeId": "humano",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "politica",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "direct",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "msg-15-label",
+              "text": "revogar autorizacao",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": -13
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {},
+          "semantics": {
+            "seqMessageKind": "sync",
+            "seqMessageOrder": 14,
+            "seqMessageRow": 18.807692307692307
+          },
+          "metadata": {
+            "dsl": {
+              "line": 32,
+              "seqArrow": "->"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "msg-16",
+          "source": {
+            "nodeId": "politica",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "executor",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "direct",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "msg-16-label",
+              "text": "impedir novos inicios e cancelar conforme estado",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": -28
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {},
+          "semantics": {
+            "seqMessageKind": "sync",
+            "seqMessageOrder": 15,
+            "seqMessageRow": 20.115384615384617
+          },
+          "metadata": {
+            "dsl": {
+              "line": 33,
+              "seqArrow": "->"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "msg-17",
+          "source": {
+            "nodeId": "executor",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "estado",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "direct",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "msg-17-label",
+              "text": "confirmar termino ou efeito desconhecido",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": -20.5
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {},
+          "semantics": {
+            "seqMessageKind": "sync",
+            "seqMessageOrder": 16,
+            "seqMessageRow": 21.134615384615383
+          },
+          "metadata": {
+            "dsl": {
+              "line": 34,
+              "seqArrow": "->"
+            }
+          },
+          "extensions": {}
+        }
+      ],
+      "metadata": {},
+      "extensions": {}
+    }
+  ],
+  "metadata": {},
+  "extensions": {}
+}

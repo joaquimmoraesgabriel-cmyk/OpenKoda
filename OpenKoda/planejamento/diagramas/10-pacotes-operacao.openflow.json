@@ -1,0 +1,1774 @@
+{
+  "format": "openflowkit.scene",
+  "schemaVersion": 1,
+  "id": "2349e40e-a0dc-412e-919b-be949cefc7f7",
+  "name": "10-pacotes-operacao",
+  "createdAt": "2026-11-07T20:40:38.049Z",
+  "updatedAt": "2026-11-07T20:40:38.049Z",
+  "pages": [
+    {
+      "id": "2349e40e-a0dc-412e-919b-be949cefc7f7:page-1",
+      "name": "Page 1",
+      "diagramKind": "flowchart",
+      "layers": [
+        {
+          "id": "default",
+          "name": "Default",
+          "visible": true,
+          "locked": false
+        }
+      ],
+      "nodes": [
+        {
+          "id": "dsl-4s2j0m",
+          "kind": "frame",
+          "parentId": null,
+          "layerId": "default",
+          "zIndex": 0,
+          "transform": {
+            "translation": {
+              "x": 160,
+              "y": 80
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 1171,
+            "height": 3158
+          },
+          "content": {
+            "label": "Proposta - manutencao de pacotes Kali"
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "family": "flowchart",
+              "version": 1,
+              "source": "flowchart down\ntitle: Proposta - manutencao de pacotes Kali\nEscolher conjunto [ellipse, blue]\nLer estado atual [component, blue]\nOrigem e espaco [diamond, orange]\nSimular APT [component, teal]\nPlano concreto [doc, teal]\nAprovar mudanca [diamond, orange]\nAguardar exclusividade [queue, violet]\nDrenar ambiente [component, violet]\nRevalidar plano [component, violet]\nPlano igual [diamond, orange]\nBaixar pacotes [component, teal]\nAplicar pacotes [component, teal]\nVerificar inventario e health [diamond, orange]\nConcluida [ellipse, green]\nReparo necessario [note, yellow]\nBloqueada [ellipse, red]\nCancelada [ellipse, gray]\nEscolher conjunto -> Ler estado atual : ambiente e versoes\nLer estado atual -> Origem e espaco\nOrigem e espaco -> Simular APT : requisitos atendidos\nOrigem e espaco -> Bloqueada : erro de origem ou capacidade\nSimular APT -> Plano concreto : mudancas e estimativas\nSimular APT -> Reparo necessario : estado inconsistente\nPlano concreto -> Aprovar mudanca : efeito e recuperacao\nAprovar mudanca -> Aguardar exclusividade : permitido\nAprovar mudanca -> Cancelada : recusado\nAguardar exclusividade -> Drenar ambiente : lease e locks validos\nAguardar exclusividade -> Cancelada : cancelado sem aplicar\nDrenar ambiente -> Revalidar plano : avaliacoes paradas\nRevalidar plano -> Plano igual\nPlano igual -> Simular APT : mudou\nPlano igual -> Baixar pacotes : sim\nBaixar pacotes -> Aplicar pacotes : download verificado\nBaixar pacotes -> Cancelada : interrompido sem aplicar\nAplicar pacotes -> Verificar inventario e health : processo terminou\nAplicar pacotes -> Reparo necessario : falha ou parada ambigua\nVerificar inventario e health -> Concluida : estado efetivo pronto\nVerificar inventario e health -> Reparo necessario : verificacao falhou\nReparo necessario -> Plano concreto : nova manutencao\nnote Aguardar exclusividade : Nao apagar locks alheios\nnote Reparo necessario : Sem rollback presumido\nnote Concluida : Inventario novo registrado",
+              "hash": "1wv8x1m",
+              "direction": "down",
+              "title": "Proposta - manutencao de pacotes Kali",
+              "autoIcons": true
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "escolher-conjunto",
+          "kind": "process",
+          "parentId": "dsl-4s2j0m",
+          "layerId": "default",
+          "zIndex": 1,
+          "transform": {
+            "translation": {
+              "x": 272,
+              "y": 72
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 167,
+            "height": 84
+          },
+          "content": {
+            "label": "Escolher conjunto",
+            "shape": "ellipse"
+          },
+          "appearance": {
+            "fill": "#eff6ff",
+            "stroke": "#60a5fa",
+            "textColor": "#1e293b"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "escolher-conjunto",
+              "line": 3,
+              "color": "blue"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "ler-estado-atual",
+          "kind": "process",
+          "parentId": "dsl-4s2j0m",
+          "layerId": "default",
+          "zIndex": 2,
+          "transform": {
+            "translation": {
+              "x": 278,
+              "y": 312
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 155,
+            "height": 60
+          },
+          "content": {
+            "label": "Ler estado atual",
+            "shape": "rounded"
+          },
+          "appearance": {
+            "fill": "#eff6ff",
+            "stroke": "#60a5fa",
+            "textColor": "#1e293b"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "ler-estado-atual",
+              "line": 4,
+              "shape": "component",
+              "color": "blue"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "origem-e-espaco",
+          "kind": "process",
+          "parentId": "dsl-4s2j0m",
+          "layerId": "default",
+          "zIndex": 3,
+          "transform": {
+            "translation": {
+              "x": 278,
+              "y": 436
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 156,
+            "height": 96
+          },
+          "content": {
+            "label": "Origem e espaco",
+            "shape": "diamond"
+          },
+          "appearance": {
+            "fill": "#fffbeb",
+            "stroke": "#fbbf24",
+            "textColor": "#78350f"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "origem-e-espaco",
+              "line": 5,
+              "color": "orange"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "simular-apt",
+          "kind": "process",
+          "parentId": "dsl-4s2j0m",
+          "layerId": "default",
+          "zIndex": 4,
+          "transform": {
+            "translation": {
+              "x": 260,
+              "y": 720
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 140,
+            "height": 60
+          },
+          "content": {
+            "label": "Simular APT",
+            "shape": "rounded"
+          },
+          "appearance": {
+            "fill": "#ecfeff",
+            "stroke": "#22d3ee",
+            "textColor": "#0e7490"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "simular-apt",
+              "line": 6,
+              "shape": "component",
+              "color": "teal"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "plano-concreto",
+          "kind": "process",
+          "parentId": "dsl-4s2j0m",
+          "layerId": "default",
+          "zIndex": 5,
+          "transform": {
+            "translation": {
+              "x": 513,
+              "y": 956
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 142,
+            "height": 96
+          },
+          "content": {
+            "label": "Plano concreto",
+            "shape": "document"
+          },
+          "appearance": {
+            "fill": "#ecfeff",
+            "stroke": "#22d3ee",
+            "textColor": "#0e7490"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "plano-concreto",
+              "line": 7,
+              "color": "teal"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "aprovar-mudanca",
+          "kind": "process",
+          "parentId": "dsl-4s2j0m",
+          "layerId": "default",
+          "zIndex": 6,
+          "transform": {
+            "translation": {
+              "x": 483,
+              "y": 1208
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 156,
+            "height": 96
+          },
+          "content": {
+            "label": "Aprovar mudanca",
+            "shape": "diamond"
+          },
+          "appearance": {
+            "fill": "#fffbeb",
+            "stroke": "#fbbf24",
+            "textColor": "#78350f"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "aprovar-mudanca",
+              "line": 8,
+              "color": "orange"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "aguardar-exclusividade",
+          "kind": "process",
+          "parentId": "dsl-4s2j0m",
+          "layerId": "default",
+          "zIndex": 7,
+          "transform": {
+            "translation": {
+              "x": 307,
+              "y": 1468
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 201,
+            "height": 84
+          },
+          "content": {
+            "label": "Aguardar exclusividade",
+            "shape": "queue"
+          },
+          "appearance": {
+            "fill": "#f5f3ff",
+            "stroke": "#8b5cf6",
+            "textColor": "#5b21b6"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "aguardar-exclusividade",
+              "line": 9,
+              "color": "violet",
+              "notes": [
+                "Nao apagar locks alheios"
+              ]
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "drenar-ambiente",
+          "kind": "process",
+          "parentId": "dsl-4s2j0m",
+          "layerId": "default",
+          "zIndex": 8,
+          "transform": {
+            "translation": {
+              "x": 384,
+              "y": 1716
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 150,
+            "height": 60
+          },
+          "content": {
+            "label": "Drenar ambiente",
+            "shape": "rounded"
+          },
+          "appearance": {
+            "fill": "#f5f3ff",
+            "stroke": "#8b5cf6",
+            "textColor": "#5b21b6"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "drenar-ambiente",
+              "line": 10,
+              "shape": "component",
+              "color": "violet"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "revalidar-plano",
+          "kind": "process",
+          "parentId": "dsl-4s2j0m",
+          "layerId": "default",
+          "zIndex": 9,
+          "transform": {
+            "translation": {
+              "x": 387,
+              "y": 1932
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 143,
+            "height": 60
+          },
+          "content": {
+            "label": "Revalidar plano",
+            "shape": "rounded"
+          },
+          "appearance": {
+            "fill": "#f5f3ff",
+            "stroke": "#8b5cf6",
+            "textColor": "#5b21b6"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "revalidar-plano",
+              "line": 11,
+              "shape": "component",
+              "color": "violet"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "plano-igual",
+          "kind": "process",
+          "parentId": "dsl-4s2j0m",
+          "layerId": "default",
+          "zIndex": 10,
+          "transform": {
+            "translation": {
+              "x": 243,
+              "y": 2056
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 156,
+            "height": 96
+          },
+          "content": {
+            "label": "Plano igual",
+            "shape": "diamond"
+          },
+          "appearance": {
+            "fill": "#fffbeb",
+            "stroke": "#fbbf24",
+            "textColor": "#78350f"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "plano-igual",
+              "line": 12,
+              "color": "orange"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "baixar-pacotes",
+          "kind": "process",
+          "parentId": "dsl-4s2j0m",
+          "layerId": "default",
+          "zIndex": 11,
+          "transform": {
+            "translation": {
+              "x": 250,
+              "y": 2308
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 142,
+            "height": 60
+          },
+          "content": {
+            "label": "Baixar pacotes",
+            "shape": "rounded"
+          },
+          "appearance": {
+            "fill": "#ecfeff",
+            "stroke": "#22d3ee",
+            "textColor": "#0e7490"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "baixar-pacotes",
+              "line": 13,
+              "shape": "component",
+              "color": "teal"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "aplicar-pacotes",
+          "kind": "process",
+          "parentId": "dsl-4s2j0m",
+          "layerId": "default",
+          "zIndex": 12,
+          "transform": {
+            "translation": {
+              "x": 223,
+              "y": 2554
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 147,
+            "height": 60
+          },
+          "content": {
+            "label": "Aplicar pacotes",
+            "shape": "rounded"
+          },
+          "appearance": {
+            "fill": "#ecfeff",
+            "stroke": "#22d3ee",
+            "textColor": "#0e7490"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "aplicar-pacotes",
+              "line": 14,
+              "shape": "component",
+              "color": "teal"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "verificar-inventario-e-health",
+          "kind": "process",
+          "parentId": "dsl-4s2j0m",
+          "layerId": "default",
+          "zIndex": 13,
+          "transform": {
+            "translation": {
+              "x": 150,
+              "y": 2778
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 245,
+            "height": 96
+          },
+          "content": {
+            "label": "Verificar inventario e health",
+            "shape": "diamond"
+          },
+          "appearance": {
+            "fill": "#fffbeb",
+            "stroke": "#fbbf24",
+            "textColor": "#78350f"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "verificar-inventario-e-health",
+              "line": 15,
+              "color": "orange"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "concluida",
+          "kind": "process",
+          "parentId": "dsl-4s2j0m",
+          "layerId": "default",
+          "zIndex": 14,
+          "transform": {
+            "translation": {
+              "x": 28,
+              "y": 3038
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 132,
+            "height": 84
+          },
+          "content": {
+            "label": "Concluida",
+            "shape": "ellipse"
+          },
+          "appearance": {
+            "fill": "#ecfdf5",
+            "stroke": "#34d399",
+            "textColor": "#064e3b"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "concluida",
+              "line": 16,
+              "color": "green",
+              "notes": [
+                "Inventario novo registrado"
+              ]
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "reparo-necessario",
+          "kind": "sticky",
+          "parentId": "dsl-4s2j0m",
+          "layerId": "default",
+          "zIndex": 15,
+          "transform": {
+            "translation": {
+              "x": 483,
+              "y": 3030
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 180,
+            "height": 100
+          },
+          "content": {
+            "label": "Reparo necessario",
+            "color": "yellow"
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "reparo-necessario",
+              "line": 17,
+              "color": "yellow",
+              "notes": [
+                "Sem rollback presumido"
+              ]
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "bloqueada",
+          "kind": "process",
+          "parentId": "dsl-4s2j0m",
+          "layerId": "default",
+          "zIndex": 16,
+          "transform": {
+            "translation": {
+              "x": 448,
+              "y": 702
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 132,
+            "height": 84
+          },
+          "content": {
+            "label": "Bloqueada",
+            "shape": "ellipse"
+          },
+          "appearance": {
+            "fill": "#fef2f2",
+            "stroke": "#f87171",
+            "textColor": "#7f1d1d"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "bloqueada",
+              "line": 18,
+              "color": "red"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "cancelada",
+          "kind": "process",
+          "parentId": "dsl-4s2j0m",
+          "layerId": "default",
+          "zIndex": 17,
+          "transform": {
+            "translation": {
+              "x": 671,
+              "y": 2538
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 132,
+            "height": 84
+          },
+          "content": {
+            "label": "Cancelada",
+            "shape": "ellipse"
+          },
+          "appearance": {
+            "fill": "#f8fafc",
+            "stroke": "#94a3b8",
+            "textColor": "#1e293b"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "cancelada",
+              "line": 19,
+              "color": "gray"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "aguardar-exclusividade-note",
+          "kind": "sticky",
+          "parentId": "dsl-4s2j0m",
+          "layerId": "default",
+          "zIndex": 0,
+          "transform": {
+            "translation": {
+              "x": 544,
+              "y": 1460
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 219,
+            "height": 100
+          },
+          "content": {
+            "label": "Nao apagar locks alheios",
+            "subLabel": "",
+            "color": "yellow"
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "aguardar-exclusividade-note",
+              "line": 42,
+              "noteFor": "aguardar-exclusividade"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "reparo-necessario-note",
+          "kind": "sticky",
+          "parentId": "dsl-4s2j0m",
+          "layerId": "default",
+          "zIndex": 0,
+          "transform": {
+            "translation": {
+              "x": 699,
+              "y": 3030
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 206,
+            "height": 100
+          },
+          "content": {
+            "label": "Sem rollback presumido",
+            "subLabel": "",
+            "color": "yellow"
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "reparo-necessario-note",
+              "line": 43,
+              "noteFor": "reparo-necessario"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "concluida-note",
+          "kind": "sticky",
+          "parentId": "dsl-4s2j0m",
+          "layerId": "default",
+          "zIndex": 0,
+          "transform": {
+            "translation": {
+              "x": 196,
+              "y": 3030
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 239,
+            "height": 100
+          },
+          "content": {
+            "label": "Inventario novo registrado",
+            "subLabel": "",
+            "color": "yellow"
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "concluida-note",
+              "line": 44,
+              "noteFor": "concluida"
+            }
+          },
+          "extensions": {}
+        }
+      ],
+      "connectors": [
+        {
+          "id": "edge:escolher-conjunto->ler-estado-atual:1",
+          "source": {
+            "nodeId": "escolher-conjunto",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "ler-estado-atual",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "escolher-conjunto->ler-estado-atual:1:label",
+              "text": "ambiente e versoes",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 20
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:ler-estado-atual->origem-e-espaco:1",
+          "source": {
+            "nodeId": "ler-estado-atual",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "origem-e-espaco",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 21
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:origem-e-espaco->simular-apt:1",
+          "source": {
+            "nodeId": "origem-e-espaco",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "simular-apt",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "origem-e-espaco->simular-apt:1:label",
+              "text": "requisitos atendidos",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 22
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:origem-e-espaco->bloqueada:1",
+          "source": {
+            "nodeId": "origem-e-espaco",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "bloqueada",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "origem-e-espaco->bloqueada:1:label",
+              "text": "erro de origem ou capacidade",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 23
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:simular-apt->plano-concreto:1",
+          "source": {
+            "nodeId": "simular-apt",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "plano-concreto",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "simular-apt->plano-concreto:1:label",
+              "text": "mudancas e estimativas",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 24
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:simular-apt->reparo-necessario:1",
+          "source": {
+            "nodeId": "simular-apt",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "reparo-necessario",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "simular-apt->reparo-necessario:1:label",
+              "text": "estado inconsistente",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 25
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:plano-concreto->aprovar-mudanca:1",
+          "source": {
+            "nodeId": "plano-concreto",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "aprovar-mudanca",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "plano-concreto->aprovar-mudanca:1:label",
+              "text": "efeito e recuperacao",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 26
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:aprovar-mudanca->aguardar-exclusividade:1",
+          "source": {
+            "nodeId": "aprovar-mudanca",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "aguardar-exclusividade",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "aprovar-mudanca->aguardar-exclusividade:1:label",
+              "text": "permitido",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 27
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:aprovar-mudanca->cancelada:1",
+          "source": {
+            "nodeId": "aprovar-mudanca",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "cancelada",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "aprovar-mudanca->cancelada:1:label",
+              "text": "recusado",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 28
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:aguardar-exclusividade->drenar-ambiente:1",
+          "source": {
+            "nodeId": "aguardar-exclusividade",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "drenar-ambiente",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "aguardar-exclusividade->drenar-ambiente:1:label",
+              "text": "lease e locks validos",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 29
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:aguardar-exclusividade->cancelada:1",
+          "source": {
+            "nodeId": "aguardar-exclusividade",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "cancelada",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "aguardar-exclusividade->cancelada:1:label",
+              "text": "cancelado sem aplicar",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 30
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:drenar-ambiente->revalidar-plano:1",
+          "source": {
+            "nodeId": "drenar-ambiente",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "revalidar-plano",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "drenar-ambiente->revalidar-plano:1:label",
+              "text": "avaliacoes paradas",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 31
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:revalidar-plano->plano-igual:1",
+          "source": {
+            "nodeId": "revalidar-plano",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "plano-igual",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 32
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:plano-igual->simular-apt:1",
+          "source": {
+            "nodeId": "plano-igual",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "simular-apt",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "plano-igual->simular-apt:1:label",
+              "text": "mudou",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 33
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:plano-igual->baixar-pacotes:1",
+          "source": {
+            "nodeId": "plano-igual",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "baixar-pacotes",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "plano-igual->baixar-pacotes:1:label",
+              "text": "sim",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 34
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:baixar-pacotes->aplicar-pacotes:1",
+          "source": {
+            "nodeId": "baixar-pacotes",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "aplicar-pacotes",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "baixar-pacotes->aplicar-pacotes:1:label",
+              "text": "download verificado",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 35
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:baixar-pacotes->cancelada:1",
+          "source": {
+            "nodeId": "baixar-pacotes",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "cancelada",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "baixar-pacotes->cancelada:1:label",
+              "text": "interrompido sem aplicar",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 36
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:aplicar-pacotes->verificar-inventario-e-health:1",
+          "source": {
+            "nodeId": "aplicar-pacotes",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "verificar-inventario-e-health",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "aplicar-pacotes->verificar-inventario-e-health:1:label",
+              "text": "processo terminou",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 37
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:aplicar-pacotes->reparo-necessario:1",
+          "source": {
+            "nodeId": "aplicar-pacotes",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "reparo-necessario",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "aplicar-pacotes->reparo-necessario:1:label",
+              "text": "falha ou parada ambigua",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 38
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:verificar-inventario-e-health->concluida:1",
+          "source": {
+            "nodeId": "verificar-inventario-e-health",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "concluida",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "verificar-inventario-e-health->concluida:1:label",
+              "text": "estado efetivo pronto",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 39
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:verificar-inventario-e-health->reparo-necessario:1",
+          "source": {
+            "nodeId": "verificar-inventario-e-health",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "reparo-necessario",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "verificar-inventario-e-health->reparo-necessario:1:label",
+              "text": "verificacao falhou",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 40
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:reparo-necessario->plano-concreto:1",
+          "source": {
+            "nodeId": "reparo-necessario",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "plano-concreto",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "reparo-necessario->plano-concreto:1:label",
+              "text": "nova manutencao",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 41
+            }
+          },
+          "extensions": {}
+        }
+      ],
+      "metadata": {},
+      "extensions": {}
+    }
+  ],
+  "metadata": {},
+  "extensions": {}
+}

@@ -1,0 +1,1012 @@
+{
+  "format": "openflowkit.scene",
+  "schemaVersion": 1,
+  "id": "7dae7d4e-61b2-49e4-9080-fff76c761bda",
+  "name": "05-dados - proposta OpenKoda",
+  "createdAt": "2026-11-07T20:44:00.064Z",
+  "updatedAt": "2026-11-07T20:44:00.064Z",
+  "pages": [
+    {
+      "id": "7dae7d4e-61b2-49e4-9080-fff76c761bda:page-1",
+      "name": "Page 1",
+      "diagramKind": "erd",
+      "layers": [
+        {
+          "id": "default",
+          "name": "Default",
+          "visible": true,
+          "locked": false
+        }
+      ],
+      "nodes": [
+        {
+          "id": "dsl-1jsj36w",
+          "kind": "frame",
+          "parentId": null,
+          "layerId": "default",
+          "zIndex": 0,
+          "transform": {
+            "translation": {
+              "x": 160,
+              "y": 80
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 2970,
+            "height": 460
+          },
+          "content": {
+            "label": "OpenKoda - modelo de dados conceitual proposto"
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "family": "erd",
+              "version": 1,
+              "source": "%% ofk 1\nerd\ntitle: OpenKoda - modelo de dados conceitual proposto\nicons: off\nProjeto {\n  id uuid pk\n  nome text\n}\nAlvo {\n  id uuid pk\n  projeto_id uuid fk\n  tipo text\n}\nAvaliacao {\n  id uuid pk\n  projeto_id uuid fk\n  escopo_digest text\n  estado text\n}\nPlano {\n  id uuid pk\n  avaliacao_id uuid fk\n  revisao int\n}\nOperacao {\n  id uuid pk\n  plano_id uuid fk\n  digest text\n}\nExecucao {\n  id uuid pk\n  operacao_id uuid fk\n  tentativa int\n  estado text\n}\nEvidencia {\n  id uuid pk\n  execucao_id uuid fk null\n  hash text\n  disponibilidade text\n}\nCandidato {\n  id uuid pk\n  avaliacao_id uuid fk\n  estado text\n}\nAchado {\n  id uuid pk\n  candidato_id uuid fk\n  validade text\n  tratamento text\n}\nSuporte {\n  id uuid pk\n  candidato_id uuid fk\n  evidencia_id uuid fk\n}\nProjeto ||--o{ Alvo : delimita\nProjeto ||--o{ Avaliacao : organiza\nAvaliacao ||--o{ Plano : versiona\nPlano ||--o{ Operacao : contem\nOperacao ||--o{ Execucao : tenta\nExecucao |o--o{ Evidencia : produz\nAvaliacao ||--o{ Candidato : investiga\nCandidato ||--o| Achado : valida\nCandidato ||--o{ Suporte : referencia\nEvidencia ||--o{ Suporte : sustenta",
+              "hash": "tul92v",
+              "title": "OpenKoda - modelo de dados conceitual proposto",
+              "icons": "off"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "projeto",
+          "kind": "er_entity",
+          "parentId": "dsl-1jsj36w",
+          "layerId": "default",
+          "zIndex": 1,
+          "transform": {
+            "translation": {
+              "x": 28,
+              "y": 284
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 240,
+            "height": 100
+          },
+          "content": {
+            "label": "Projeto",
+            "erFields": [
+              {
+                "name": "id",
+                "dataType": "uuid",
+                "isPrimaryKey": true
+              },
+              {
+                "name": "nome",
+                "dataType": "text"
+              }
+            ]
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "projeto",
+              "line": 5
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "alvo",
+          "kind": "er_entity",
+          "parentId": "dsl-1jsj36w",
+          "layerId": "default",
+          "zIndex": 1,
+          "transform": {
+            "translation": {
+              "x": 475,
+              "y": 117
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 240,
+            "height": 118
+          },
+          "content": {
+            "label": "Alvo",
+            "erFields": [
+              {
+                "name": "id",
+                "dataType": "uuid",
+                "isPrimaryKey": true
+              },
+              {
+                "name": "projeto_id",
+                "dataType": "uuid",
+                "isForeignKey": true
+              },
+              {
+                "name": "tipo",
+                "dataType": "text"
+              }
+            ]
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "alvo",
+              "line": 9
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "avaliacao",
+          "kind": "er_entity",
+          "parentId": "dsl-1jsj36w",
+          "layerId": "default",
+          "zIndex": 1,
+          "transform": {
+            "translation": {
+              "x": 475,
+              "y": 283
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 240,
+            "height": 136
+          },
+          "content": {
+            "label": "Avaliacao",
+            "erFields": [
+              {
+                "name": "id",
+                "dataType": "uuid",
+                "isPrimaryKey": true
+              },
+              {
+                "name": "projeto_id",
+                "dataType": "uuid",
+                "isForeignKey": true
+              },
+              {
+                "name": "escopo_digest",
+                "dataType": "text"
+              },
+              {
+                "name": "estado",
+                "dataType": "text"
+              }
+            ]
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "avaliacao",
+              "line": 14
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "plano",
+          "kind": "er_entity",
+          "parentId": "dsl-1jsj36w",
+          "layerId": "default",
+          "zIndex": 1,
+          "transform": {
+            "translation": {
+              "x": 926,
+              "y": 81
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 240,
+            "height": 118
+          },
+          "content": {
+            "label": "Plano",
+            "erFields": [
+              {
+                "name": "id",
+                "dataType": "uuid",
+                "isPrimaryKey": true
+              },
+              {
+                "name": "avaliacao_id",
+                "dataType": "uuid",
+                "isForeignKey": true
+              },
+              {
+                "name": "revisao",
+                "dataType": "int"
+              }
+            ]
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "plano",
+              "line": 20
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "operacao",
+          "kind": "er_entity",
+          "parentId": "dsl-1jsj36w",
+          "layerId": "default",
+          "zIndex": 1,
+          "transform": {
+            "translation": {
+              "x": 1362,
+              "y": 81
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 240,
+            "height": 118
+          },
+          "content": {
+            "label": "Operacao",
+            "erFields": [
+              {
+                "name": "id",
+                "dataType": "uuid",
+                "isPrimaryKey": true
+              },
+              {
+                "name": "plano_id",
+                "dataType": "uuid",
+                "isForeignKey": true
+              },
+              {
+                "name": "digest",
+                "dataType": "text"
+              }
+            ]
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "operacao",
+              "line": 25
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "execucao",
+          "kind": "er_entity",
+          "parentId": "dsl-1jsj36w",
+          "layerId": "default",
+          "zIndex": 1,
+          "transform": {
+            "translation": {
+              "x": 1791,
+              "y": 72
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 240,
+            "height": 136
+          },
+          "content": {
+            "label": "Execucao",
+            "erFields": [
+              {
+                "name": "id",
+                "dataType": "uuid",
+                "isPrimaryKey": true
+              },
+              {
+                "name": "operacao_id",
+                "dataType": "uuid",
+                "isForeignKey": true
+              },
+              {
+                "name": "tentativa",
+                "dataType": "int"
+              },
+              {
+                "name": "estado",
+                "dataType": "text"
+              }
+            ]
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "execucao",
+              "line": 30
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "evidencia",
+          "kind": "er_entity",
+          "parentId": "dsl-1jsj36w",
+          "layerId": "default",
+          "zIndex": 1,
+          "transform": {
+            "translation": {
+              "x": 2227,
+              "y": 72
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 265,
+            "height": 136
+          },
+          "content": {
+            "label": "Evidencia",
+            "erFields": [
+              {
+                "name": "id",
+                "dataType": "uuid",
+                "isPrimaryKey": true
+              },
+              {
+                "name": "execucao_id",
+                "dataType": "uuid",
+                "isForeignKey": true,
+                "isNullable": true
+              },
+              {
+                "name": "hash",
+                "dataType": "text"
+              },
+              {
+                "name": "disponibilidade",
+                "dataType": "text"
+              }
+            ]
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "evidencia",
+              "line": 36
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "candidato",
+          "kind": "er_entity",
+          "parentId": "dsl-1jsj36w",
+          "layerId": "default",
+          "zIndex": 1,
+          "transform": {
+            "translation": {
+              "x": 926,
+              "y": 314
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 240,
+            "height": 118
+          },
+          "content": {
+            "label": "Candidato",
+            "erFields": [
+              {
+                "name": "id",
+                "dataType": "uuid",
+                "isPrimaryKey": true
+              },
+              {
+                "name": "avaliacao_id",
+                "dataType": "uuid",
+                "isForeignKey": true
+              },
+              {
+                "name": "estado",
+                "dataType": "text"
+              }
+            ]
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "candidato",
+              "line": 42
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "achado",
+          "kind": "er_entity",
+          "parentId": "dsl-1jsj36w",
+          "layerId": "default",
+          "zIndex": 1,
+          "transform": {
+            "translation": {
+              "x": 1362,
+              "y": 247
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 240,
+            "height": 136
+          },
+          "content": {
+            "label": "Achado",
+            "erFields": [
+              {
+                "name": "id",
+                "dataType": "uuid",
+                "isPrimaryKey": true
+              },
+              {
+                "name": "candidato_id",
+                "dataType": "uuid",
+                "isForeignKey": true
+              },
+              {
+                "name": "validade",
+                "dataType": "text"
+              },
+              {
+                "name": "tratamento",
+                "dataType": "text"
+              }
+            ]
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "achado",
+              "line": 47
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "suporte",
+          "kind": "er_entity",
+          "parentId": "dsl-1jsj36w",
+          "layerId": "default",
+          "zIndex": 1,
+          "transform": {
+            "translation": {
+              "x": 2702,
+              "y": 314
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 240,
+            "height": 118
+          },
+          "content": {
+            "label": "Suporte",
+            "erFields": [
+              {
+                "name": "id",
+                "dataType": "uuid",
+                "isPrimaryKey": true
+              },
+              {
+                "name": "candidato_id",
+                "dataType": "uuid",
+                "isForeignKey": true
+              },
+              {
+                "name": "evidencia_id",
+                "dataType": "uuid",
+                "isForeignKey": true
+              }
+            ]
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "suporte",
+              "line": 53
+            }
+          },
+          "extensions": {}
+        }
+      ],
+      "connectors": [
+        {
+          "id": "rel:projeto->alvo:1",
+          "source": {
+            "nodeId": "projeto",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "alvo",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "rel-label-1",
+              "text": "delimita",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {},
+          "semantics": {
+            "erRelation": "||--o{"
+          },
+          "metadata": {
+            "dsl": {
+              "line": 58,
+              "structuredRelation": "||--o{"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "rel:projeto->avaliacao:2",
+          "source": {
+            "nodeId": "projeto",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "avaliacao",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "rel-label-2",
+              "text": "organiza",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {},
+          "semantics": {
+            "erRelation": "||--o{"
+          },
+          "metadata": {
+            "dsl": {
+              "line": 59,
+              "structuredRelation": "||--o{"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "rel:avaliacao->plano:3",
+          "source": {
+            "nodeId": "avaliacao",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "plano",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "rel-label-3",
+              "text": "versiona",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {},
+          "semantics": {
+            "erRelation": "||--o{"
+          },
+          "metadata": {
+            "dsl": {
+              "line": 60,
+              "structuredRelation": "||--o{"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "rel:plano->operacao:4",
+          "source": {
+            "nodeId": "plano",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "operacao",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "rel-label-4",
+              "text": "contem",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {},
+          "semantics": {
+            "erRelation": "||--o{"
+          },
+          "metadata": {
+            "dsl": {
+              "line": 61,
+              "structuredRelation": "||--o{"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "rel:operacao->execucao:5",
+          "source": {
+            "nodeId": "operacao",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "execucao",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "rel-label-5",
+              "text": "tenta",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {},
+          "semantics": {
+            "erRelation": "||--o{"
+          },
+          "metadata": {
+            "dsl": {
+              "line": 62,
+              "structuredRelation": "||--o{"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "rel:execucao->evidencia:6",
+          "source": {
+            "nodeId": "execucao",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "evidencia",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "rel-label-6",
+              "text": "produz",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {},
+          "semantics": {
+            "erRelation": "|o--o{"
+          },
+          "metadata": {
+            "dsl": {
+              "line": 63,
+              "structuredRelation": "|o--o{"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "rel:avaliacao->candidato:7",
+          "source": {
+            "nodeId": "avaliacao",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "candidato",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "rel-label-7",
+              "text": "investiga",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {},
+          "semantics": {
+            "erRelation": "||--o{"
+          },
+          "metadata": {
+            "dsl": {
+              "line": 64,
+              "structuredRelation": "||--o{"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "rel:candidato->achado:8",
+          "source": {
+            "nodeId": "candidato",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "achado",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "rel-label-8",
+              "text": "valida",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {},
+          "semantics": {
+            "erRelation": "||--o|"
+          },
+          "metadata": {
+            "dsl": {
+              "line": 65,
+              "structuredRelation": "||--o|"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "rel:candidato->suporte:9",
+          "source": {
+            "nodeId": "candidato",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "suporte",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "rel-label-9",
+              "text": "referencia",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {},
+          "semantics": {
+            "erRelation": "||--o{"
+          },
+          "metadata": {
+            "dsl": {
+              "line": 66,
+              "structuredRelation": "||--o{"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "rel:evidencia->suporte:10",
+          "source": {
+            "nodeId": "evidencia",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "suporte",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "rel-label-10",
+              "text": "sustenta",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {},
+          "semantics": {
+            "erRelation": "||--o{"
+          },
+          "metadata": {
+            "dsl": {
+              "line": 67,
+              "structuredRelation": "||--o{"
+            }
+          },
+          "extensions": {}
+        }
+      ],
+      "metadata": {},
+      "extensions": {}
+    }
+  ],
+  "metadata": {},
+  "extensions": {}
+}

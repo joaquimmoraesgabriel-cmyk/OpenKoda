@@ -1,0 +1,36 @@
+sequence
+title: Proposta - autorizacao e execucao
+participant IA
+participant Politica
+participant Humano
+participant Executor
+participant Processo
+participant Estado
+IA -> Politica : propor operacao e plano
+Politica -> Politica : normalizar escopo e efeitos
+alt politica previa suficiente {
+  Politica -> Politica : resolver decisao delimitada
+} else aprovacao humana necessaria {
+  Politica -> Humano : exibir operacao concreta
+  Humano --> Politica : aceitar ou recusar
+}
+alt decisao valida {
+  Politica -> Executor : grant interno com digest e TTL
+  Executor -> Politica : conferir revisao e revogacao
+  Politica --> Executor : autoridade vigente
+  alt valida antes do inicio {
+    Executor -> Processo : iniciar com limites efetivos
+    Processo --> Executor : saida e resultado disponivel
+  } else revogada ou expirada {
+    Executor -> Estado : bloqueada sem iniciar
+  }
+  Executor -> Estado : registrar resultado e cleanup
+  Estado --> IA : resultado ou estado desconhecido
+} else negada ou pendente {
+  Politica --> IA : nao iniciar operacao
+}
+Humano -> Politica : revogar autorizacao
+Politica -> Executor : impedir novos inicios e cancelar conforme estado
+Executor -> Estado : confirmar termino ou efeito desconhecido
+note over Executor : Controle antes do inicio
+note over Estado : Cancelar nao desfaz efeitos

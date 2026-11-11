@@ -1,0 +1,56 @@
+%% ofk 1
+flowchart down
+title: OpenKoda - jornada da avaliacao - proposta
+appearance: paper
+icons: off
+rascunho = Rascunho [doc, blue]
+preparando = Preparando [rect, blue]
+planejando = Planejando [rect, blue]
+aprovacao = Aguardando aprovação [diamond, orange]
+fila = Na fila [queue, teal]
+executando = Executando [rect, teal]
+pausando = Pausando [rect, orange]
+pausada = Pausada [rect, orange]
+validando = Validando [rect, teal]
+concluida = Concluída [ellipse, green]
+parcial = Parcial [ellipse, yellow]
+bloqueada = Bloqueada [rect, orange]
+cancelando = Cancelando [rect, orange]
+cancelada = Cancelada [ellipse, gray]
+desconhecido = Efeito desconhecido [diamond, red]
+falhou = Falhou [ellipse, red]
+relatorio = Relatório [doc, green]
+reteste = Reteste [doc, blue]
+rascunho -> preparando : objetivo e escopo
+preparando -> planejando : fontes e ambiente prontos
+preparando -> bloqueada : requisito indisponivel
+preparando -> falhou : falha irrecuperavel
+planejando -> aprovacao : decisao necessaria
+planejando -> fila : politica valida
+aprovacao -> fila : revisao aprovada
+aprovacao -> planejando : ajustar plano
+fila -> executando : revalidar antes do despacho
+fila -> aprovacao : autorizacao mudou
+executando -> validando : operacoes encerradas
+executando -> bloqueada : falta recurso
+executando -> pausando : pausar ou rever plano
+pausando -> pausada : checkpoint estavel
+pausada -> preparando : retomar e revalidar
+pausada --> rascunho : novo escopo cria nova avaliacao
+bloqueada -> preparando : causa tratada
+executando -> falhou : falha irrecuperavel
+executando -> cancelando : parar avaliacao
+aprovacao -> cancelando : cancelar
+pausada -> cancelando : encerrar trabalho
+cancelando -> cancelada : encerramento reconciliado
+cancelando -> desconhecido : efeito nao confirmado
+desconhecido -> parcial : reconciliar e registrar restricoes
+validando -> concluida : cobertura planejada atendida
+validando -> parcial : lacunas explicitas
+concluida -> relatorio : resultados e evidencias
+parcial -> relatorio : declarar limitacoes
+cancelada -> relatorio : preservar resultado parcial
+relatorio -> reteste : correcao identificada
+reteste -> rascunho : nova avaliacao vinculada
+note rascunho : Escopo usado e imutavel
+note desconhecido : Nunca repetir efeito as cegas

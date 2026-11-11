@@ -1,0 +1,38 @@
+%% ofk 1
+state down
+title: OpenKoda - estados propostos da avaliacao
+icons: off
+[*] -> Rascunho
+Rascunho -> Preparando : iniciar e congelar escopo
+Preparando -> Planejando : ambiente pronto
+Preparando -> Bloqueada : dependencia ausente
+Preparando -> Falhou : falha irrecuperavel
+Planejando -> AguardandoAprovacao : decisao necessaria
+Planejando -> NaFila : politica suficiente
+Planejando -> Falhou : falha irrecuperavel
+AguardandoAprovacao -> NaFila : decisao valida
+AguardandoAprovacao -> Planejando : ajustar plano
+NaFila -> Executando : revalidar e despachar
+NaFila -> AguardandoAprovacao : decisao expirada
+Executando -> Pausando : pausar novos passos
+Pausando -> Pausada : estabilizar e checkpoint
+Pausada -> Preparando : revalidar para retomar
+Executando -> Bloqueada : dependencia perdida
+Bloqueada -> Preparando : dependencia restaurada
+Executando -> Validando : trabalho planejado encerrado
+Executando -> Falhou : falha irrecuperavel
+Executando -> Cancelando : revogar e encerrar
+AguardandoAprovacao -> Cancelando : cancelar
+Pausada -> Cancelando : cancelar
+Cancelando -> Cancelada : encerramento confirmado
+Cancelando -> EfeitoDesconhecido : falta confirmacao
+EfeitoDesconhecido -> Bloqueada : requer reconciliacao
+Validando -> Concluida : cobertura atendida
+Validando -> Parcial : lacunas preservadas
+Validando -> Falhou : contrato impossivel
+Concluida -> [*]
+Parcial -> [*]
+Cancelada -> [*]
+Falhou -> [*]
+note Pausada : Pausa nao e SIGSTOP
+note Concluida : Nao certifica seguranca

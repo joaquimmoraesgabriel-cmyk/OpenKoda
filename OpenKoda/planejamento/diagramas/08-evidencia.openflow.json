@@ -1,0 +1,1508 @@
+{
+  "format": "openflowkit.scene",
+  "schemaVersion": 1,
+  "id": "2a031b24-92cd-4740-be8c-8b5a43521dbd",
+  "name": "08-evidencia OpenKoda proposto",
+  "createdAt": "2026-11-07T20:40:02.987Z",
+  "updatedAt": "2026-11-07T20:40:02.987Z",
+  "pages": [
+    {
+      "id": "2a031b24-92cd-4740-be8c-8b5a43521dbd:page-1",
+      "name": "Page 1",
+      "diagramKind": "flowchart",
+      "layers": [
+        {
+          "id": "default",
+          "name": "Default",
+          "visible": true,
+          "locked": false
+        }
+      ],
+      "nodes": [
+        {
+          "id": "dsl-1tf4ptj",
+          "kind": "frame",
+          "parentId": null,
+          "layerId": "default",
+          "zIndex": 0,
+          "transform": {
+            "translation": {
+              "x": 160,
+              "y": 80
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 766,
+            "height": 3288
+          },
+          "content": {
+            "label": "Proposta - cadeia de evidencia e achado"
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "family": "flowchart",
+              "version": 1,
+              "source": "flowchart down\ntitle: Proposta - cadeia de evidencia e achado\nSaida [doc, blue]\nSpool [cylinder, blue]\nLimites [diamond, orange]\nParcial [doc, orange]\nIntegridade [component, teal]\nRepositorio [cylinder, teal]\nParser [component, violet]\nErroParser [doc, orange]\nObservacao [doc, green]\nCandidato [doc, green]\nValidacao [diamond, orange]\nPendente [doc, gray]\nAchado [doc, green]\nCobertura [doc, blue]\nRelatorio [doc, green]\nSaida -> Spool : bytes e eventos por execucao\nSpool -> Limites : quotas e estado da captura\nLimites -> Parcial : cap ou falha\nLimites -> Integridade : captura preservada\nParcial -> Integridade : ranges e perdas explicitas\nIntegridade -> Repositorio : hash e promocao verificada\nRepositorio -> Parser : input imutavel\nParser -> ErroParser : formato invalido ou timeout\nParser -> Observacao : dados e origem\nErroParser -> Cobertura : processamento parcial\nObservacao -> Candidato : hipotese vinculada\nCandidato -> Validacao : evidencias e contraevidencias\nValidacao -> Pendente : inconclusivo ou nao reportavel\nValidacao -> Achado : sustentado com limites\nPendente -> Cobertura : pendencia ou descarte motivado\nAchado -> Relatorio : evidencia e validacao\nCobertura -> Relatorio : limites e exclusoes\nRepositorio -> Relatorio : referencias inspecionaveis\nnote Parser : Processo sem autoridade\nnote Cobertura : Erro nao prova seguranca",
+              "hash": "12irl9s",
+              "direction": "down",
+              "title": "Proposta - cadeia de evidencia e achado",
+              "autoIcons": true
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "saida",
+          "kind": "process",
+          "parentId": "dsl-1tf4ptj",
+          "layerId": "default",
+          "zIndex": 1,
+          "transform": {
+            "translation": {
+              "x": 218,
+              "y": 72
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 132,
+            "height": 96
+          },
+          "content": {
+            "label": "Saida",
+            "shape": "document"
+          },
+          "appearance": {
+            "fill": "#eff6ff",
+            "stroke": "#60a5fa",
+            "textColor": "#1e293b"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "saida",
+              "line": 3,
+              "color": "blue"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "spool",
+          "kind": "process",
+          "parentId": "dsl-1tf4ptj",
+          "layerId": "default",
+          "zIndex": 2,
+          "transform": {
+            "translation": {
+              "x": 218,
+              "y": 338
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 132,
+            "height": 88
+          },
+          "content": {
+            "label": "Spool",
+            "shape": "cylinder"
+          },
+          "appearance": {
+            "fill": "#eff6ff",
+            "stroke": "#60a5fa",
+            "textColor": "#1e293b"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "spool",
+              "line": 4,
+              "color": "blue"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "limites",
+          "kind": "process",
+          "parentId": "dsl-1tf4ptj",
+          "layerId": "default",
+          "zIndex": 3,
+          "transform": {
+            "translation": {
+              "x": 206,
+              "y": 596
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 156,
+            "height": 96
+          },
+          "content": {
+            "label": "Limites",
+            "shape": "diamond"
+          },
+          "appearance": {
+            "fill": "#fffbeb",
+            "stroke": "#fbbf24",
+            "textColor": "#78350f"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "limites",
+              "line": 5,
+              "color": "orange"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "parcial",
+          "kind": "process",
+          "parentId": "dsl-1tf4ptj",
+          "layerId": "default",
+          "zIndex": 4,
+          "transform": {
+            "translation": {
+              "x": 192,
+              "y": 848
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 132,
+            "height": 96
+          },
+          "content": {
+            "label": "Parcial",
+            "shape": "document"
+          },
+          "appearance": {
+            "fill": "#fffbeb",
+            "stroke": "#fbbf24",
+            "textColor": "#78350f"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "parcial",
+              "line": 6,
+              "color": "orange"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "integridade",
+          "kind": "process",
+          "parentId": "dsl-1tf4ptj",
+          "layerId": "default",
+          "zIndex": 5,
+          "transform": {
+            "translation": {
+              "x": 211,
+              "y": 1114
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 140,
+            "height": 60
+          },
+          "content": {
+            "label": "Integridade",
+            "shape": "rounded"
+          },
+          "appearance": {
+            "fill": "#ecfeff",
+            "stroke": "#22d3ee",
+            "textColor": "#0e7490"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "integridade",
+              "line": 7,
+              "shape": "component",
+              "color": "teal"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "repositorio",
+          "kind": "process",
+          "parentId": "dsl-1tf4ptj",
+          "layerId": "default",
+          "zIndex": 6,
+          "transform": {
+            "translation": {
+              "x": 215,
+              "y": 1344
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 132,
+            "height": 88
+          },
+          "content": {
+            "label": "Repositorio",
+            "shape": "cylinder"
+          },
+          "appearance": {
+            "fill": "#ecfeff",
+            "stroke": "#22d3ee",
+            "textColor": "#0e7490"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "repositorio",
+              "line": 8,
+              "color": "teal"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "parser",
+          "kind": "process",
+          "parentId": "dsl-1tf4ptj",
+          "layerId": "default",
+          "zIndex": 7,
+          "transform": {
+            "translation": {
+              "x": 60,
+              "y": 1608
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 140,
+            "height": 60
+          },
+          "content": {
+            "label": "Parser",
+            "shape": "rounded"
+          },
+          "appearance": {
+            "fill": "#f5f3ff",
+            "stroke": "#8b5cf6",
+            "textColor": "#5b21b6"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "parser",
+              "line": 9,
+              "shape": "component",
+              "color": "violet",
+              "notes": [
+                "Processo sem autoridade"
+              ]
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "erroparser",
+          "kind": "process",
+          "parentId": "dsl-1tf4ptj",
+          "layerId": "default",
+          "zIndex": 8,
+          "transform": {
+            "translation": {
+              "x": 127,
+              "y": 1858
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 132,
+            "height": 96
+          },
+          "content": {
+            "label": "ErroParser",
+            "shape": "document"
+          },
+          "appearance": {
+            "fill": "#fffbeb",
+            "stroke": "#fbbf24",
+            "textColor": "#78350f"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "erroparser",
+              "line": 10,
+              "color": "orange"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "observacao",
+          "kind": "process",
+          "parentId": "dsl-1tf4ptj",
+          "layerId": "default",
+          "zIndex": 9,
+          "transform": {
+            "translation": {
+              "x": 329,
+              "y": 1858
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 132,
+            "height": 96
+          },
+          "content": {
+            "label": "Observacao",
+            "shape": "document"
+          },
+          "appearance": {
+            "fill": "#ecfdf5",
+            "stroke": "#34d399",
+            "textColor": "#064e3b"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "observacao",
+              "line": 11,
+              "color": "green"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "candidato",
+          "kind": "process",
+          "parentId": "dsl-1tf4ptj",
+          "layerId": "default",
+          "zIndex": 10,
+          "transform": {
+            "translation": {
+              "x": 329,
+              "y": 2110
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 132,
+            "height": 96
+          },
+          "content": {
+            "label": "Candidato",
+            "shape": "document"
+          },
+          "appearance": {
+            "fill": "#ecfdf5",
+            "stroke": "#34d399",
+            "textColor": "#064e3b"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "candidato",
+              "line": 12,
+              "color": "green"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "validacao",
+          "kind": "process",
+          "parentId": "dsl-1tf4ptj",
+          "layerId": "default",
+          "zIndex": 11,
+          "transform": {
+            "translation": {
+              "x": 317,
+              "y": 2376
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 156,
+            "height": 96
+          },
+          "content": {
+            "label": "Validacao",
+            "shape": "diamond"
+          },
+          "appearance": {
+            "fill": "#fffbeb",
+            "stroke": "#fbbf24",
+            "textColor": "#78350f"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "validacao",
+              "line": 13,
+              "color": "orange"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "pendente",
+          "kind": "process",
+          "parentId": "dsl-1tf4ptj",
+          "layerId": "default",
+          "zIndex": 12,
+          "transform": {
+            "translation": {
+              "x": 303,
+              "y": 2642
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 132,
+            "height": 96
+          },
+          "content": {
+            "label": "Pendente",
+            "shape": "document"
+          },
+          "appearance": {
+            "fill": "#f8fafc",
+            "stroke": "#94a3b8",
+            "textColor": "#1e293b"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "pendente",
+              "line": 14,
+              "color": "gray"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "achado",
+          "kind": "process",
+          "parentId": "dsl-1tf4ptj",
+          "layerId": "default",
+          "zIndex": 13,
+          "transform": {
+            "translation": {
+              "x": 595,
+              "y": 2642
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 132,
+            "height": 96
+          },
+          "content": {
+            "label": "Achado",
+            "shape": "document"
+          },
+          "appearance": {
+            "fill": "#ecfdf5",
+            "stroke": "#34d399",
+            "textColor": "#064e3b"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "achado",
+              "line": 15,
+              "color": "green"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "cobertura",
+          "kind": "process",
+          "parentId": "dsl-1tf4ptj",
+          "layerId": "default",
+          "zIndex": 14,
+          "transform": {
+            "translation": {
+              "x": 60,
+              "y": 2910
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 132,
+            "height": 96
+          },
+          "content": {
+            "label": "Cobertura",
+            "shape": "document"
+          },
+          "appearance": {
+            "fill": "#eff6ff",
+            "stroke": "#60a5fa",
+            "textColor": "#1e293b"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "cobertura",
+              "line": 16,
+              "color": "blue",
+              "notes": [
+                "Erro nao prova seguranca"
+              ]
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "relatorio",
+          "kind": "process",
+          "parentId": "dsl-1tf4ptj",
+          "layerId": "default",
+          "zIndex": 15,
+          "transform": {
+            "translation": {
+              "x": 595,
+              "y": 3164
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 132,
+            "height": 96
+          },
+          "content": {
+            "label": "Relatorio",
+            "shape": "document"
+          },
+          "appearance": {
+            "fill": "#ecfdf5",
+            "stroke": "#34d399",
+            "textColor": "#064e3b"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "relatorio",
+              "line": 17,
+              "color": "green"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "parser-note",
+          "kind": "sticky",
+          "parentId": "dsl-1tf4ptj",
+          "layerId": "default",
+          "zIndex": 0,
+          "transform": {
+            "translation": {
+              "x": 236,
+              "y": 1588
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 222,
+            "height": 100
+          },
+          "content": {
+            "label": "Processo sem autoridade",
+            "subLabel": "",
+            "color": "yellow"
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "parser-note",
+              "line": 36,
+              "noteFor": "parser"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "cobertura-note",
+          "kind": "sticky",
+          "parentId": "dsl-1tf4ptj",
+          "layerId": "default",
+          "zIndex": 0,
+          "transform": {
+            "translation": {
+              "x": 228,
+              "y": 2908
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 230,
+            "height": 100
+          },
+          "content": {
+            "label": "Erro nao prova seguranca",
+            "subLabel": "",
+            "color": "yellow"
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "cobertura-note",
+              "line": 37,
+              "noteFor": "cobertura"
+            }
+          },
+          "extensions": {}
+        }
+      ],
+      "connectors": [
+        {
+          "id": "edge:saida->spool:1",
+          "source": {
+            "nodeId": "saida",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "spool",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "saida->spool:1:label",
+              "text": "bytes e eventos por execucao",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 18
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:spool->limites:1",
+          "source": {
+            "nodeId": "spool",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "limites",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "spool->limites:1:label",
+              "text": "quotas e estado da captura",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 19
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:limites->parcial:1",
+          "source": {
+            "nodeId": "limites",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "parcial",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "limites->parcial:1:label",
+              "text": "cap ou falha",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 20
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:limites->integridade:1",
+          "source": {
+            "nodeId": "limites",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "integridade",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "limites->integridade:1:label",
+              "text": "captura preservada",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 21
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:parcial->integridade:1",
+          "source": {
+            "nodeId": "parcial",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "integridade",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "parcial->integridade:1:label",
+              "text": "ranges e perdas explicitas",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 22
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:integridade->repositorio:1",
+          "source": {
+            "nodeId": "integridade",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "repositorio",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "integridade->repositorio:1:label",
+              "text": "hash e promocao verificada",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 23
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:repositorio->parser:1",
+          "source": {
+            "nodeId": "repositorio",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "parser",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "repositorio->parser:1:label",
+              "text": "input imutavel",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 24
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:parser->erroparser:1",
+          "source": {
+            "nodeId": "parser",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "erroparser",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "parser->erroparser:1:label",
+              "text": "formato invalido ou timeout",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 25
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:parser->observacao:1",
+          "source": {
+            "nodeId": "parser",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "observacao",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "parser->observacao:1:label",
+              "text": "dados e origem",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 26
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:erroparser->cobertura:1",
+          "source": {
+            "nodeId": "erroparser",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "cobertura",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "erroparser->cobertura:1:label",
+              "text": "processamento parcial",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 27
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:observacao->candidato:1",
+          "source": {
+            "nodeId": "observacao",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "candidato",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "observacao->candidato:1:label",
+              "text": "hipotese vinculada",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 28
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:candidato->validacao:1",
+          "source": {
+            "nodeId": "candidato",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "validacao",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "candidato->validacao:1:label",
+              "text": "evidencias e contraevidencias",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 29
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:validacao->pendente:1",
+          "source": {
+            "nodeId": "validacao",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "pendente",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "validacao->pendente:1:label",
+              "text": "inconclusivo ou nao reportavel",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 30
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:validacao->achado:1",
+          "source": {
+            "nodeId": "validacao",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "achado",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "validacao->achado:1:label",
+              "text": "sustentado com limites",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 31
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:pendente->cobertura:1",
+          "source": {
+            "nodeId": "pendente",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "cobertura",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "pendente->cobertura:1:label",
+              "text": "pendencia ou descarte motivado",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 32
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:achado->relatorio:1",
+          "source": {
+            "nodeId": "achado",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "relatorio",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "achado->relatorio:1:label",
+              "text": "evidencia e validacao",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 33
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:cobertura->relatorio:1",
+          "source": {
+            "nodeId": "cobertura",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "relatorio",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "cobertura->relatorio:1:label",
+              "text": "limites e exclusoes",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 34
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:repositorio->relatorio:1",
+          "source": {
+            "nodeId": "repositorio",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "relatorio",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "repositorio->relatorio:1:label",
+              "text": "referencias inspecionaveis",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 35
+            }
+          },
+          "extensions": {}
+        }
+      ],
+      "metadata": {},
+      "extensions": {}
+    }
+  ],
+  "metadata": {},
+  "extensions": {}
+}

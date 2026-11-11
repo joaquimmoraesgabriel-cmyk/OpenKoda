@@ -1,0 +1,27 @@
+%% ofk 1
+wireframe
+title: OpenKoda - organizacao visual aprovada
+appearance: paper
+icons: off
+screen Avaliacao [window] {
+  navbar: OpenKoda | Avaliacoes | Achados | Projetos
+  button: Nova avaliacao [half, primary]
+  paragraph: Kali pronto - exemplo [half]
+  search: Pesquisar avaliacoes [third]
+  heading: API de pagamentos [two-thirds]
+  list: API de pagamentos - selecionada | Revisao do backend | Ambiente de testes [third]
+  list: Resumo - selecionado | Achados | Atividade | Arquivos [two-thirds]
+  paragraph: Lista e filtros preservam selecao [third]
+  paragraph: Validando resultados - ambiente de laboratorio [two-thirds]
+  paragraph: Acesso secundario no trilho lateral [third]
+  paragraph: Atividade recente e candidatos aguardando validacao [two-thirds]
+  paragraph: Kali e ferramentas [third]
+  accordion: Conversa com a IA - recolhida [two-thirds]
+  paragraph: Configuracoes [third]
+  accordion: Execucoes - recolhidas [two-thirds]
+  paragraph: Sem terceira coluna permanente [third]
+  accordion: Evidencias - recolhidas [two-thirds]
+  divider
+  paragraph: Esquema de composicao - seis imagens aprovadas detalham o visual
+  statusbar: Estado real e acesso ao diagnostico | Dados ilustrativos
+}

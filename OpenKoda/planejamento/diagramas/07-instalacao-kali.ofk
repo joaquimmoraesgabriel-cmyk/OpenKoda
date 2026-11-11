@@ -1,0 +1,51 @@
+flowchart down
+title: Proposta - instalacao e retomada do Kali
+Iniciar [ellipse, blue]
+Ler checkpoint [doc, blue]
+Diagnosticar host [component, blue]
+Pre requisitos prontos [diamond, orange]
+Plano WSL [doc, violet]
+Aprovar sistema [diamond, orange]
+Preparar WSL [component, violet]
+Reboot necessario [diamond, orange]
+Aguardar reboot [queue, gray]
+Escolher destino [component, blue]
+Destino livre [diamond, orange]
+Obter Kali [component, teal]
+Origem verificada [diamond, orange]
+Registrar distro dedicada [component, teal]
+Configurar usuario e executor [component, teal]
+Health e capabilities [diamond, orange]
+Pronto por perfil [ellipse, green]
+Reparo necessario [note, yellow]
+Bloqueado [ellipse, red]
+Iniciar -> Ler checkpoint
+Ler checkpoint -> Diagnosticar host : revalidar etapa salva
+Diagnosticar host -> Pre requisitos prontos
+Pre requisitos prontos -> Plano WSL : componentes ausentes
+Pre requisitos prontos -> Escolher destino : sim
+Pre requisitos prontos -> Bloqueado : host incompativel
+Plano WSL -> Aprovar sistema : efeitos e elevacao
+Aprovar sistema -> Preparar WSL : permitido
+Aprovar sistema -> Bloqueado : recusado
+Preparar WSL -> Reboot necessario : etapa confirmada
+Preparar WSL -> Reparo necessario : falha parcial
+Reboot necessario -> Aguardar reboot : sim
+Reboot necessario -> Ler checkpoint : nao
+Aguardar reboot -> Ler checkpoint : app reaberto
+Escolher destino -> Destino livre
+Destino livre -> Obter Kali : gerido e novo
+Destino livre -> Escolher destino : colisao ou distro pessoal
+Obter Kali -> Origem verificada
+Obter Kali -> Reparo necessario : download interrompido
+Origem verificada -> Registrar distro dedicada : bytes admitidos
+Origem verificada -> Bloqueado : verificacao falhou
+Registrar distro dedicada -> Configurar usuario e executor : WSL 2 confirmado
+Registrar distro dedicada -> Reparo necessario : registro parcial
+Configurar usuario e executor -> Health e capabilities
+Configurar usuario e executor -> Reparo necessario : provisionamento parcial
+Health e capabilities -> Pronto por perfil : controles verificados
+Health e capabilities -> Reparo necessario : dependencia ou controle ausente
+Reparo necessario -> Ler checkpoint : recuperar sem duplicar
+note Destino livre : Preservar distros pessoais
+note Pronto por perfil : Nao implica sandbox host

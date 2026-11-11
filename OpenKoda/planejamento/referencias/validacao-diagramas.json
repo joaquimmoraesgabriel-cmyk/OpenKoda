@@ -1,0 +1,57 @@
+{
+  "date": "2026-11-07",
+  "tool": "OpenFlowKit validate_openflow_dsl",
+  "scope": "DSL parsing/compilation only; not product behavior.",
+  "results": [
+    {
+      "name": "01-visao-produto",
+      "ok": true,
+      "diagnostics": []
+    },
+    {
+      "name": "02-arquitetura",
+      "ok": true,
+      "diagnostics": []
+    },
+    {
+      "name": "03-jornada-avaliacao",
+      "ok": true,
+      "diagnostics": []
+    },
+    {
+      "name": "04-autorizacao",
+      "ok": true,
+      "diagnostics": []
+    },
+    {
+      "name": "05-dados",
+      "ok": true,
+      "diagnostics": []
+    },
+    {
+      "name": "06-estados-avaliacao",
+      "ok": true,
+      "diagnostics": []
+    },
+    {
+      "name": "07-instalacao-kali",
+      "ok": true,
+      "diagnostics": []
+    },
+    {
+      "name": "08-evidencia",
+      "ok": true,
+      "diagnostics": []
+    },
+    {
+      "name": "09-painel",
+      "ok": true,
+      "diagnostics": []
+    },
+    {
+      "name": "10-pacotes-operacao",
+      "ok": true,
+      "diagnostics": []
+    }
+  ]
+}

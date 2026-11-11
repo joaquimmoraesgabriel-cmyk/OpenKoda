@@ -1,0 +1,139 @@
+{
+  "valid": true,
+  "markdownDocuments": 24,
+  "localLinks": 213,
+  "diagrams": [
+    {
+      "name": "01-visao-produto",
+      "documentId": "4d2419fc-4e8a-4c53-b180-1fe6d39c61c2",
+      "svgBytes": 16849,
+      "sourceBytes": 704
+    },
+    {
+      "name": "02-arquitetura",
+      "documentId": "a741741b-2215-42a7-8e9b-6109b1a3ee84",
+      "svgBytes": 23163,
+      "sourceBytes": 1513
+    },
+    {
+      "name": "03-jornada-avaliacao",
+      "documentId": "01be6a4c-b0a9-4c7f-916d-8e23f5bfac28",
+      "svgBytes": 30963,
+      "sourceBytes": 2266
+    },
+    {
+      "name": "04-autorizacao",
+      "documentId": "d4176c71-c46a-49f5-be82-d3c298739adc",
+      "svgBytes": 20460,
+      "sourceBytes": 1320
+    },
+    {
+      "name": "05-dados",
+      "documentId": "7dae7d4e-61b2-49e4-9080-fff76c761bda",
+      "svgBytes": 34947,
+      "sourceBytes": 1101
+    },
+    {
+      "name": "06-estados-avaliacao",
+      "documentId": "6529b971-6d75-4fc4-9b0d-336c1ead8148",
+      "svgBytes": 28276,
+      "sourceBytes": 1493
+    },
+    {
+      "name": "07-instalacao-kali",
+      "documentId": "7b97f962-eb67-498a-8cd5-dbd3bc13fd36",
+      "svgBytes": 28197,
+      "sourceBytes": 2294
+    },
+    {
+      "name": "08-evidencia",
+      "documentId": "2a031b24-92cd-4740-be8c-8b5a43521dbd",
+      "svgBytes": 21232,
+      "sourceBytes": 1355
+    },
+    {
+      "name": "09-painel",
+      "documentId": "ed46abc1-0e10-4b3b-a17e-c0f99b51c92d",
+      "svgBytes": 12706,
+      "sourceBytes": 1210
+    },
+    {
+      "name": "10-pacotes-operacao",
+      "documentId": "2349e40e-a0dc-412e-919b-be949cefc7f7",
+      "svgBytes": 25228,
+      "sourceBytes": 1959
+    }
+  ],
+  "adrStatus": [
+    {
+      "name": "0001-autoridade-do-executor-local.md",
+      "expectedStatus": "proposed"
+    },
+    {
+      "name": "0002-kali-dedicado-e-limites-de-isolamento.md",
+      "expectedStatus": "proposed"
+    },
+    {
+      "name": "0003-evidencia-bruta-e-projecoes.md",
+      "expectedStatus": "proposed"
+    },
+    {
+      "name": "0004-tauri-como-framework-desktop.md",
+      "expectedStatus": "accepted"
+    }
+  ],
+  "approvedImages": [
+    {
+      "id": "V-01",
+      "name": "painel-openkoda-v2.png",
+      "width": 1672,
+      "height": 941,
+      "bytes": 1495629,
+      "sha256": "e35c654c6f0bf51da11e378942d12e80ac738dfeb2f3274a5905769a1f66a345"
+    },
+    {
+      "id": "V-02",
+      "name": "01-nova-avaliacao-v1.png",
+      "width": 1672,
+      "height": 941,
+      "bytes": 1530804,
+      "sha256": "3f63cf61e7ea0112a8d69e8a645a13504b3715de9667b71cfc92299cf024c1cf"
+    },
+    {
+      "id": "V-03",
+      "name": "02-kali-e-ferramentas-v1.png",
+      "width": 1672,
+      "height": 941,
+      "bytes": 1642207,
+      "sha256": "ea33bbcc4f39877848a4e823ea7e773dcd1855d22e8cfc8e07588de9991f1b93"
+    },
+    {
+      "id": "V-04",
+      "name": "03-achados-v1.png",
+      "width": 1672,
+      "height": 941,
+      "bytes": 1572447,
+      "sha256": "74ef2728c94d14c4c04f36ecfdebbdd375267c3d426732b569b719d0a63b09c4"
+    },
+    {
+      "id": "V-05",
+      "name": "04-projetos-v1.png",
+      "width": 1672,
+      "height": 941,
+      "bytes": 1629057,
+      "sha256": "177ea3c33b070a07d38ee477ad4f7007d822e9832c41491e3c69c924aff4122f"
+    },
+    {
+      "id": "V-06",
+      "name": "05-configuracoes-v1.png",
+      "width": 1672,
+      "height": 941,
+      "bytes": 1596780,
+      "sha256": "9691e4f6d062ab59ae193c5529d446d3e8ba1fbe19bd6b6297b2776b3b357346"
+    }
+  ],
+  "acceptanceCriteria": 28,
+  "securityRequirements": 23,
+  "errors": [],
+  "scope": "Document links, serialization, ADR status, DSL/SVG identities, PNG metadata/hashes and requirement IDs only. No product behavior, accessibility or security control was tested."
+}

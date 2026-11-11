@@ -1,0 +1,37 @@
+flowchart down
+title: Proposta - cadeia de evidencia e achado
+Saida [doc, blue]
+Spool [cylinder, blue]
+Limites [diamond, orange]
+Parcial [doc, orange]
+Integridade [component, teal]
+Repositorio [cylinder, teal]
+Parser [component, violet]
+ErroParser [doc, orange]
+Observacao [doc, green]
+Candidato [doc, green]
+Validacao [diamond, orange]
+Pendente [doc, gray]
+Achado [doc, green]
+Cobertura [doc, blue]
+Relatorio [doc, green]
+Saida -> Spool : bytes e eventos por execucao
+Spool -> Limites : quotas e estado da captura
+Limites -> Parcial : cap ou falha
+Limites -> Integridade : captura preservada
+Parcial -> Integridade : ranges e perdas explicitas
+Integridade -> Repositorio : hash e promocao verificada
+Repositorio -> Parser : input imutavel
+Parser -> ErroParser : formato invalido ou timeout
+Parser -> Observacao : dados e origem
+ErroParser -> Cobertura : processamento parcial
+Observacao -> Candidato : hipotese vinculada
+Candidato -> Validacao : evidencias e contraevidencias
+Validacao -> Pendente : inconclusivo ou nao reportavel
+Validacao -> Achado : sustentado com limites
+Pendente -> Cobertura : pendencia ou descarte motivado
+Achado -> Relatorio : evidencia e validacao
+Cobertura -> Relatorio : limites e exclusoes
+Repositorio -> Relatorio : referencias inspecionaveis
+note Parser : Processo sem autoridade
+note Cobertura : Erro nao prova seguranca

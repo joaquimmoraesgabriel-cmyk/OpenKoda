@@ -1,0 +1,2 @@
+# Preserve the exact source and resource bytes checked by the desktop release manifests on Windows.
+OpenKoda/app/** -text

@@ -1,0 +1,67 @@
+%% ofk 1
+erd
+title: OpenKoda - modelo de dados conceitual proposto
+icons: off
+Projeto {
+  id uuid pk
+  nome text
+}
+Alvo {
+  id uuid pk
+  projeto_id uuid fk
+  tipo text
+}
+Avaliacao {
+  id uuid pk
+  projeto_id uuid fk
+  escopo_digest text
+  estado text
+}
+Plano {
+  id uuid pk
+  avaliacao_id uuid fk
+  revisao int
+}
+Operacao {
+  id uuid pk
+  plano_id uuid fk
+  digest text
+}
+Execucao {
+  id uuid pk
+  operacao_id uuid fk
+  tentativa int
+  estado text
+}
+Evidencia {
+  id uuid pk
+  execucao_id uuid fk null
+  hash text
+  disponibilidade text
+}
+Candidato {
+  id uuid pk
+  avaliacao_id uuid fk
+  estado text
+}
+Achado {
+  id uuid pk
+  candidato_id uuid fk
+  validade text
+  tratamento text
+}
+Suporte {
+  id uuid pk
+  candidato_id uuid fk
+  evidencia_id uuid fk
+}
+Projeto ||--o{ Alvo : delimita
+Projeto ||--o{ Avaliacao : organiza
+Avaliacao ||--o{ Plano : versiona
+Plano ||--o{ Operacao : contem
+Operacao ||--o{ Execucao : tenta
+Execucao |o--o{ Evidencia : produz
+Avaliacao ||--o{ Candidato : investiga
+Candidato ||--o| Achado : valida
+Candidato ||--o{ Suporte : referencia
+Evidencia ||--o{ Suporte : sustenta

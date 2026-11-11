@@ -1,0 +1,1550 @@
+{
+  "format": "openflowkit.scene",
+  "schemaVersion": 1,
+  "id": "a741741b-2215-42a7-8e9b-6109b1a3ee84",
+  "name": "02-arquitetura - proposta OpenKoda",
+  "createdAt": "2026-11-07T20:43:48.534Z",
+  "updatedAt": "2026-11-07T20:43:48.534Z",
+  "pages": [
+    {
+      "id": "a741741b-2215-42a7-8e9b-6109b1a3ee84:page-1",
+      "name": "Page 1",
+      "diagramKind": "flowchart",
+      "layers": [
+        {
+          "id": "default",
+          "name": "Default",
+          "visible": true,
+          "locked": false
+        }
+      ],
+      "nodes": [
+        {
+          "id": "dsl-fl8kjg",
+          "kind": "frame",
+          "parentId": null,
+          "layerId": "default",
+          "zIndex": 0,
+          "transform": {
+            "translation": {
+              "x": 160,
+              "y": 80
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 854,
+            "height": 2393
+          },
+          "content": {
+            "label": "OpenKoda - Tauri escolhido e arquitetura proposta"
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "family": "flowchart",
+              "version": 1,
+              "source": "%% ofk 1\nflowchart down\ntitle: OpenKoda - Tauri escolhido e arquitetura proposta\nicons: off\ngroup Windows {\n  Painel [browser, blue, label: Painel Tauri WebView2]\n  Nucleo [component, blue, label: Nucleo nativo - Rust proposto]\n  CoordenadorIA [component, violet]\n  Politica [diamond, orange]\n  GatewayMCP [component, teal]\n  BrokerHost [component, orange]\n  Vault [cylinder, orange]\n  BancoLocal [cylinder, green]\n  Evidencias [cylinder, green]\n  Parser [component, green]\n}\ngroup KaliWSL {\n  Executor [component, teal]\n  PerfilVerificado [diamond, orange]\n  Ferramenta [component, teal]\n  Spool [cylinder, green]\n}\nModelo [cloud, violet]\nAlvoAutorizado [rect, gray]\nPainel <-> Nucleo : commands e eventos IPC restritos\nNucleo <-> BancoLocal : estado e eventos\nNucleo <-> CoordenadorIA : objetivo e cobertura\nCoordenadorIA <-> Modelo : API e contexto selecionado\nCoordenadorIA -> GatewayMCP : proposta de ferramenta\nGatewayMCP <-> Politica : decidir autoridade\nPolitica -> BrokerHost : grant interno\nBrokerHost <-> Vault : referencias opacas\nBrokerHost -> Executor : ambiente e delegacao\nGatewayMCP <-> Executor : MCP stdio supervisionado\nExecutor -> PerfilVerificado : revalidar antes de iniciar\nPerfilVerificado -> Ferramenta : capacidade permitida\nFerramenta <-> AlvoAutorizado : acesso sob controles\nFerramenta -> Spool : bytes e artefatos\nSpool -> BrokerHost : copiar e verificar\nBrokerHost -> Evidencias : promover com hash\nEvidencias -> Parser : bruto como dados\nParser -> Nucleo : observacao com origem\n",
+              "hash": "1yzx1ja",
+              "direction": "down",
+              "title": "OpenKoda - Tauri escolhido e arquitetura proposta",
+              "icons": "off"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "windows",
+          "kind": "frame",
+          "parentId": "dsl-fl8kjg",
+          "layerId": "default",
+          "zIndex": 1,
+          "transform": {
+            "translation": {
+              "x": 28,
+              "y": 72
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 739,
+            "height": 1282
+          },
+          "content": {
+            "label": "Windows"
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "windows",
+              "line": 5
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "kaliwsl",
+          "kind": "frame",
+          "parentId": "dsl-fl8kjg",
+          "layerId": "default",
+          "zIndex": 2,
+          "transform": {
+            "translation": {
+              "x": 221,
+              "y": 1534
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 331,
+            "height": 618
+          },
+          "content": {
+            "label": "KaliWSL"
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "kaliwsl",
+              "line": 17
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "painel",
+          "kind": "browser",
+          "parentId": "windows",
+          "layerId": "default",
+          "zIndex": 3,
+          "transform": {
+            "translation": {
+              "x": 99,
+              "y": 54
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 240,
+            "height": 170
+          },
+          "content": {
+            "label": "Painel Tauri WebView2"
+          },
+          "appearance": {
+            "fill": "#eff6ff",
+            "stroke": "#60a5fa",
+            "textColor": "#1e293b"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "painel",
+              "line": 6,
+              "name": "Painel",
+              "color": "blue"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "nucleo",
+          "kind": "process",
+          "parentId": "windows",
+          "layerId": "default",
+          "zIndex": 4,
+          "transform": {
+            "translation": {
+              "x": 93,
+              "y": 306
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 253,
+            "height": 60
+          },
+          "content": {
+            "label": "Nucleo nativo - Rust proposto",
+            "shape": "rounded"
+          },
+          "appearance": {
+            "fill": "#eff6ff",
+            "stroke": "#60a5fa",
+            "textColor": "#1e293b"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "nucleo",
+              "line": 7,
+              "name": "Nucleo",
+              "shape": "component",
+              "color": "blue"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "coordenadoria",
+          "kind": "process",
+          "parentId": "windows",
+          "layerId": "default",
+          "zIndex": 5,
+          "transform": {
+            "translation": {
+              "x": 403,
+              "y": 453
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 140,
+            "height": 60
+          },
+          "content": {
+            "label": "CoordenadorIA",
+            "shape": "rounded"
+          },
+          "appearance": {
+            "fill": "#f5f3ff",
+            "stroke": "#8b5cf6",
+            "textColor": "#5b21b6"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "coordenadoria",
+              "line": 8,
+              "shape": "component",
+              "color": "violet"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "politica",
+          "kind": "process",
+          "parentId": "windows",
+          "layerId": "default",
+          "zIndex": 6,
+          "transform": {
+            "translation": {
+              "x": 348,
+              "y": 732
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 156,
+            "height": 96
+          },
+          "content": {
+            "label": "Politica",
+            "shape": "diamond"
+          },
+          "appearance": {
+            "fill": "#fffbeb",
+            "stroke": "#fbbf24",
+            "textColor": "#78350f"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "politica",
+              "line": 9,
+              "color": "orange"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "gatewaymcp",
+          "kind": "process",
+          "parentId": "windows",
+          "layerId": "default",
+          "zIndex": 7,
+          "transform": {
+            "translation": {
+              "x": 379,
+              "y": 604
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 140,
+            "height": 60
+          },
+          "content": {
+            "label": "GatewayMCP",
+            "shape": "rounded"
+          },
+          "appearance": {
+            "fill": "#ecfeff",
+            "stroke": "#22d3ee",
+            "textColor": "#0e7490"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "gatewaymcp",
+              "line": 10,
+              "shape": "component",
+              "color": "teal"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "brokerhost",
+          "kind": "process",
+          "parentId": "windows",
+          "layerId": "default",
+          "zIndex": 8,
+          "transform": {
+            "translation": {
+              "x": 356,
+              "y": 896
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 140,
+            "height": 60
+          },
+          "content": {
+            "label": "BrokerHost",
+            "shape": "rounded"
+          },
+          "appearance": {
+            "fill": "#fffbeb",
+            "stroke": "#fbbf24",
+            "textColor": "#78350f"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "brokerhost",
+              "line": 11,
+              "shape": "component",
+              "color": "orange"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "vault",
+          "kind": "process",
+          "parentId": "windows",
+          "layerId": "default",
+          "zIndex": 9,
+          "transform": {
+            "translation": {
+              "x": 552,
+              "y": 1044
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 132,
+            "height": 88
+          },
+          "content": {
+            "label": "Vault",
+            "shape": "cylinder"
+          },
+          "appearance": {
+            "fill": "#fffbeb",
+            "stroke": "#fbbf24",
+            "textColor": "#78350f"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "vault",
+              "line": 12,
+              "color": "orange"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "bancolocal",
+          "kind": "process",
+          "parentId": "windows",
+          "layerId": "default",
+          "zIndex": 10,
+          "transform": {
+            "translation": {
+              "x": 90,
+              "y": 434
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 132,
+            "height": 88
+          },
+          "content": {
+            "label": "BancoLocal",
+            "shape": "cylinder"
+          },
+          "appearance": {
+            "fill": "#ecfdf5",
+            "stroke": "#34d399",
+            "textColor": "#064e3b"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "bancolocal",
+              "line": 13,
+              "color": "green"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "evidencias",
+          "kind": "process",
+          "parentId": "windows",
+          "layerId": "default",
+          "zIndex": 11,
+          "transform": {
+            "translation": {
+              "x": 318,
+              "y": 1044
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 132,
+            "height": 88
+          },
+          "content": {
+            "label": "Evidencias",
+            "shape": "cylinder"
+          },
+          "appearance": {
+            "fill": "#ecfdf5",
+            "stroke": "#34d399",
+            "textColor": "#064e3b"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "evidencias",
+              "line": 14,
+              "color": "green"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "parser",
+          "kind": "process",
+          "parentId": "windows",
+          "layerId": "default",
+          "zIndex": 12,
+          "transform": {
+            "translation": {
+              "x": 185,
+              "y": 1200
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 140,
+            "height": 60
+          },
+          "content": {
+            "label": "Parser",
+            "shape": "rounded"
+          },
+          "appearance": {
+            "fill": "#ecfdf5",
+            "stroke": "#34d399",
+            "textColor": "#064e3b"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "parser",
+              "line": 15,
+              "shape": "component",
+              "color": "green"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "executor",
+          "kind": "process",
+          "parentId": "kaliwsl",
+          "layerId": "default",
+          "zIndex": 13,
+          "transform": {
+            "translation": {
+              "x": 107,
+              "y": 74
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 140,
+            "height": 60
+          },
+          "content": {
+            "label": "Executor",
+            "shape": "rounded"
+          },
+          "appearance": {
+            "fill": "#ecfeff",
+            "stroke": "#22d3ee",
+            "textColor": "#0e7490"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "executor",
+              "line": 18,
+              "shape": "component",
+              "color": "teal"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "perfilverificado",
+          "kind": "process",
+          "parentId": "kaliwsl",
+          "layerId": "default",
+          "zIndex": 14,
+          "transform": {
+            "translation": {
+              "x": 99,
+              "y": 216
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 156,
+            "height": 96
+          },
+          "content": {
+            "label": "PerfilVerificado",
+            "shape": "diamond"
+          },
+          "appearance": {
+            "fill": "#fffbeb",
+            "stroke": "#fbbf24",
+            "textColor": "#78350f"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "perfilverificado",
+              "line": 19,
+              "color": "orange"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "ferramenta",
+          "kind": "process",
+          "parentId": "kaliwsl",
+          "layerId": "default",
+          "zIndex": 15,
+          "transform": {
+            "translation": {
+              "x": 107,
+              "y": 380
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 140,
+            "height": 60
+          },
+          "content": {
+            "label": "Ferramenta",
+            "shape": "rounded"
+          },
+          "appearance": {
+            "fill": "#ecfeff",
+            "stroke": "#22d3ee",
+            "textColor": "#0e7490"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "ferramenta",
+              "line": 20,
+              "shape": "component",
+              "color": "teal"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "spool",
+          "kind": "process",
+          "parentId": "kaliwsl",
+          "layerId": "default",
+          "zIndex": 16,
+          "transform": {
+            "translation": {
+              "x": 177,
+              "y": 508
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 132,
+            "height": 88
+          },
+          "content": {
+            "label": "Spool",
+            "shape": "cylinder"
+          },
+          "appearance": {
+            "fill": "#ecfdf5",
+            "stroke": "#34d399",
+            "textColor": "#064e3b"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "spool",
+              "line": 21,
+              "color": "green"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "modelo",
+          "kind": "process",
+          "parentId": "dsl-fl8kjg",
+          "layerId": "default",
+          "zIndex": 17,
+          "transform": {
+            "translation": {
+              "x": 662,
+              "y": 1534
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 164,
+            "height": 96
+          },
+          "content": {
+            "label": "Modelo",
+            "shape": "cloud"
+          },
+          "appearance": {
+            "fill": "#f5f3ff",
+            "stroke": "#8b5cf6",
+            "textColor": "#5b21b6"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "modelo",
+              "line": 23,
+              "color": "violet"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "alvoautorizado",
+          "kind": "process",
+          "parentId": "dsl-fl8kjg",
+          "layerId": "default",
+          "zIndex": 18,
+          "transform": {
+            "translation": {
+              "x": 198,
+              "y": 2313
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 142,
+            "height": 52
+          },
+          "content": {
+            "label": "AlvoAutorizado",
+            "shape": "rectangle"
+          },
+          "appearance": {
+            "fill": "#f8fafc",
+            "stroke": "#94a3b8",
+            "textColor": "#1e293b"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "alvoautorizado",
+              "line": 24,
+              "color": "gray"
+            }
+          },
+          "extensions": {}
+        }
+      ],
+      "connectors": [
+        {
+          "id": "edge:painel->nucleo:1",
+          "source": {
+            "nodeId": "painel",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "nucleo",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "painel->nucleo:1:label",
+              "text": "commands e eventos IPC restritos",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerStart": "arrow",
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 25
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:nucleo->bancolocal:1",
+          "source": {
+            "nodeId": "nucleo",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "bancolocal",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "nucleo->bancolocal:1:label",
+              "text": "estado e eventos",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerStart": "arrow",
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 26
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:nucleo->coordenadoria:1",
+          "source": {
+            "nodeId": "nucleo",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "coordenadoria",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "nucleo->coordenadoria:1:label",
+              "text": "objetivo e cobertura",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerStart": "arrow",
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 27
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:coordenadoria->modelo:1",
+          "source": {
+            "nodeId": "coordenadoria",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "modelo",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "coordenadoria->modelo:1:label",
+              "text": "API e contexto selecionado",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerStart": "arrow",
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 28
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:coordenadoria->gatewaymcp:1",
+          "source": {
+            "nodeId": "coordenadoria",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "gatewaymcp",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "coordenadoria->gatewaymcp:1:label",
+              "text": "proposta de ferramenta",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 29
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:gatewaymcp->politica:1",
+          "source": {
+            "nodeId": "gatewaymcp",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "politica",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "gatewaymcp->politica:1:label",
+              "text": "decidir autoridade",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerStart": "arrow",
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 30
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:politica->brokerhost:1",
+          "source": {
+            "nodeId": "politica",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "brokerhost",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "politica->brokerhost:1:label",
+              "text": "grant interno",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 31
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:brokerhost->vault:1",
+          "source": {
+            "nodeId": "brokerhost",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "vault",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "brokerhost->vault:1:label",
+              "text": "referencias opacas",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerStart": "arrow",
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 32
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:brokerhost->executor:1",
+          "source": {
+            "nodeId": "brokerhost",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "executor",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "brokerhost->executor:1:label",
+              "text": "ambiente e delegacao",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 33
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:gatewaymcp->executor:1",
+          "source": {
+            "nodeId": "gatewaymcp",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "executor",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "gatewaymcp->executor:1:label",
+              "text": "MCP stdio supervisionado",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerStart": "arrow",
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 34
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:executor->perfilverificado:1",
+          "source": {
+            "nodeId": "executor",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "perfilverificado",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "executor->perfilverificado:1:label",
+              "text": "revalidar antes de iniciar",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 35
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:perfilverificado->ferramenta:1",
+          "source": {
+            "nodeId": "perfilverificado",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "ferramenta",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "perfilverificado->ferramenta:1:label",
+              "text": "capacidade permitida",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 36
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:ferramenta->alvoautorizado:1",
+          "source": {
+            "nodeId": "ferramenta",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "alvoautorizado",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "ferramenta->alvoautorizado:1:label",
+              "text": "acesso sob controles",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerStart": "arrow",
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 37
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:ferramenta->spool:1",
+          "source": {
+            "nodeId": "ferramenta",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "spool",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "ferramenta->spool:1:label",
+              "text": "bytes e artefatos",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 38
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:spool->brokerhost:1",
+          "source": {
+            "nodeId": "spool",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "brokerhost",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "spool->brokerhost:1:label",
+              "text": "copiar e verificar",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 39
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:brokerhost->evidencias:1",
+          "source": {
+            "nodeId": "brokerhost",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "evidencias",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "brokerhost->evidencias:1:label",
+              "text": "promover com hash",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 40
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:evidencias->parser:1",
+          "source": {
+            "nodeId": "evidencias",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "parser",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "evidencias->parser:1:label",
+              "text": "bruto como dados",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 41
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:parser->nucleo:1",
+          "source": {
+            "nodeId": "parser",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "nucleo",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "parser->nucleo:1:label",
+              "text": "observacao com origem",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 42
+            }
+          },
+          "extensions": {}
+        }
+      ],
+      "metadata": {},
+      "extensions": {}
+    }
+  ],
+  "metadata": {},
+  "extensions": {}
+}

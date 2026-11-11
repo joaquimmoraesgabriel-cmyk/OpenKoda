@@ -1,0 +1,2049 @@
+{
+  "format": "openflowkit.scene",
+  "schemaVersion": 1,
+  "id": "7b97f962-eb67-498a-8cd5-dbd3bc13fd36",
+  "name": "07-instalacao-kali",
+  "createdAt": "2026-11-07T20:40:26.579Z",
+  "updatedAt": "2026-11-07T20:40:26.579Z",
+  "pages": [
+    {
+      "id": "7b97f962-eb67-498a-8cd5-dbd3bc13fd36:page-1",
+      "name": "Page 1",
+      "diagramKind": "flowchart",
+      "layers": [
+        {
+          "id": "default",
+          "name": "Default",
+          "visible": true,
+          "locked": false
+        }
+      ],
+      "nodes": [
+        {
+          "id": "dsl-thdjrb",
+          "kind": "frame",
+          "parentId": null,
+          "layerId": "default",
+          "zIndex": 0,
+          "transform": {
+            "translation": {
+              "x": 160,
+              "y": 80
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 1313,
+            "height": 2642
+          },
+          "content": {
+            "label": "Proposta - instalacao e retomada do Kali"
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "family": "flowchart",
+              "version": 1,
+              "source": "flowchart down\ntitle: Proposta - instalacao e retomada do Kali\nIniciar [ellipse, blue]\nLer checkpoint [doc, blue]\nDiagnosticar host [component, blue]\nPre requisitos prontos [diamond, orange]\nPlano WSL [doc, violet]\nAprovar sistema [diamond, orange]\nPreparar WSL [component, violet]\nReboot necessario [diamond, orange]\nAguardar reboot [queue, gray]\nEscolher destino [component, blue]\nDestino livre [diamond, orange]\nObter Kali [component, teal]\nOrigem verificada [diamond, orange]\nRegistrar distro dedicada [component, teal]\nConfigurar usuario e executor [component, teal]\nHealth e capabilities [diamond, orange]\nPronto por perfil [ellipse, green]\nReparo necessario [note, yellow]\nBloqueado [ellipse, red]\nIniciar -> Ler checkpoint\nLer checkpoint -> Diagnosticar host : revalidar etapa salva\nDiagnosticar host -> Pre requisitos prontos\nPre requisitos prontos -> Plano WSL : componentes ausentes\nPre requisitos prontos -> Escolher destino : sim\nPre requisitos prontos -> Bloqueado : host incompativel\nPlano WSL -> Aprovar sistema : efeitos e elevacao\nAprovar sistema -> Preparar WSL : permitido\nAprovar sistema -> Bloqueado : recusado\nPreparar WSL -> Reboot necessario : etapa confirmada\nPreparar WSL -> Reparo necessario : falha parcial\nReboot necessario -> Aguardar reboot : sim\nReboot necessario -> Ler checkpoint : nao\nAguardar reboot -> Ler checkpoint : app reaberto\nEscolher destino -> Destino livre\nDestino livre -> Obter Kali : gerido e novo\nDestino livre -> Escolher destino : colisao ou distro pessoal\nObter Kali -> Origem verificada\nObter Kali -> Reparo necessario : download interrompido\nOrigem verificada -> Registrar distro dedicada : bytes admitidos\nOrigem verificada -> Bloqueado : verificacao falhou\nRegistrar distro dedicada -> Configurar usuario e executor : WSL 2 confirmado\nRegistrar distro dedicada -> Reparo necessario : registro parcial\nConfigurar usuario e executor -> Health e capabilities\nConfigurar usuario e executor -> Reparo necessario : provisionamento parcial\nHealth e capabilities -> Pronto por perfil : controles verificados\nHealth e capabilities -> Reparo necessario : dependencia ou controle ausente\nReparo necessario -> Ler checkpoint : recuperar sem duplicar\nnote Destino livre : Preservar distros pessoais\nnote Pronto por perfil : Nao implica sandbox host",
+              "hash": "1hlefmf",
+              "direction": "down",
+              "title": "Proposta - instalacao e retomada do Kali",
+              "autoIcons": true
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "iniciar",
+          "kind": "process",
+          "parentId": "dsl-thdjrb",
+          "layerId": "default",
+          "zIndex": 1,
+          "transform": {
+            "translation": {
+              "x": 114,
+              "y": 72
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 132,
+            "height": 84
+          },
+          "content": {
+            "label": "Iniciar",
+            "shape": "ellipse"
+          },
+          "appearance": {
+            "fill": "#eff6ff",
+            "stroke": "#60a5fa",
+            "textColor": "#1e293b"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "iniciar",
+              "line": 3,
+              "color": "blue"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "ler-checkpoint",
+          "kind": "process",
+          "parentId": "dsl-thdjrb",
+          "layerId": "default",
+          "zIndex": 2,
+          "transform": {
+            "translation": {
+              "x": 109,
+              "y": 220
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 142,
+            "height": 96
+          },
+          "content": {
+            "label": "Ler checkpoint",
+            "shape": "document"
+          },
+          "appearance": {
+            "fill": "#eff6ff",
+            "stroke": "#60a5fa",
+            "textColor": "#1e293b"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "ler-checkpoint",
+              "line": 4,
+              "color": "blue"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "diagnosticar-host",
+          "kind": "process",
+          "parentId": "dsl-thdjrb",
+          "layerId": "default",
+          "zIndex": 3,
+          "transform": {
+            "translation": {
+              "x": 366,
+              "y": 472
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 163,
+            "height": 60
+          },
+          "content": {
+            "label": "Diagnosticar host",
+            "shape": "rounded"
+          },
+          "appearance": {
+            "fill": "#eff6ff",
+            "stroke": "#60a5fa",
+            "textColor": "#1e293b"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "diagnosticar-host",
+              "line": 5,
+              "shape": "component",
+              "color": "blue"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "pre-requisitos-prontos",
+          "kind": "process",
+          "parentId": "dsl-thdjrb",
+          "layerId": "default",
+          "zIndex": 4,
+          "transform": {
+            "translation": {
+              "x": 347,
+              "y": 596
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 202,
+            "height": 96
+          },
+          "content": {
+            "label": "Pre requisitos prontos",
+            "shape": "diamond"
+          },
+          "appearance": {
+            "fill": "#fffbeb",
+            "stroke": "#fbbf24",
+            "textColor": "#78350f"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "pre-requisitos-prontos",
+              "line": 6,
+              "color": "orange"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "plano-wsl",
+          "kind": "process",
+          "parentId": "dsl-thdjrb",
+          "layerId": "default",
+          "zIndex": 5,
+          "transform": {
+            "translation": {
+              "x": 331,
+              "y": 848
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 132,
+            "height": 96
+          },
+          "content": {
+            "label": "Plano WSL",
+            "shape": "document"
+          },
+          "appearance": {
+            "fill": "#f5f3ff",
+            "stroke": "#8b5cf6",
+            "textColor": "#5b21b6"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "plano-wsl",
+              "line": 7,
+              "color": "violet"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "aprovar-sistema",
+          "kind": "process",
+          "parentId": "dsl-thdjrb",
+          "layerId": "default",
+          "zIndex": 6,
+          "transform": {
+            "translation": {
+              "x": 319,
+              "y": 1117
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 156,
+            "height": 96
+          },
+          "content": {
+            "label": "Aprovar sistema",
+            "shape": "diamond"
+          },
+          "appearance": {
+            "fill": "#fffbeb",
+            "stroke": "#fbbf24",
+            "textColor": "#78350f"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "aprovar-sistema",
+              "line": 8,
+              "color": "orange"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "preparar-wsl",
+          "kind": "process",
+          "parentId": "dsl-thdjrb",
+          "layerId": "default",
+          "zIndex": 7,
+          "transform": {
+            "translation": {
+              "x": 301,
+              "y": 1384
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 140,
+            "height": 60
+          },
+          "content": {
+            "label": "Preparar WSL",
+            "shape": "rounded"
+          },
+          "appearance": {
+            "fill": "#f5f3ff",
+            "stroke": "#8b5cf6",
+            "textColor": "#5b21b6"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "preparar-wsl",
+              "line": 9,
+              "shape": "component",
+              "color": "violet"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "reboot-necessario",
+          "kind": "process",
+          "parentId": "dsl-thdjrb",
+          "layerId": "default",
+          "zIndex": 8,
+          "transform": {
+            "translation": {
+              "x": 148,
+              "y": 1668
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 167,
+            "height": 96
+          },
+          "content": {
+            "label": "Reboot necessario",
+            "shape": "diamond"
+          },
+          "appearance": {
+            "fill": "#fffbeb",
+            "stroke": "#fbbf24",
+            "textColor": "#78350f"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "reboot-necessario",
+              "line": 10,
+              "color": "orange"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "aguardar-reboot",
+          "kind": "process",
+          "parentId": "dsl-thdjrb",
+          "layerId": "default",
+          "zIndex": 9,
+          "transform": {
+            "translation": {
+              "x": 86,
+              "y": 1976
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 154,
+            "height": 84
+          },
+          "content": {
+            "label": "Aguardar reboot",
+            "shape": "queue"
+          },
+          "appearance": {
+            "fill": "#f8fafc",
+            "stroke": "#94a3b8",
+            "textColor": "#1e293b"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "aguardar-reboot",
+              "line": 11,
+              "color": "gray"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "escolher-destino",
+          "kind": "process",
+          "parentId": "dsl-thdjrb",
+          "layerId": "default",
+          "zIndex": 10,
+          "transform": {
+            "translation": {
+              "x": 633,
+              "y": 872
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 155,
+            "height": 60
+          },
+          "content": {
+            "label": "Escolher destino",
+            "shape": "rounded"
+          },
+          "appearance": {
+            "fill": "#eff6ff",
+            "stroke": "#60a5fa",
+            "textColor": "#1e293b"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "escolher-destino",
+              "line": 12,
+              "shape": "component",
+              "color": "blue"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "destino-livre",
+          "kind": "process",
+          "parentId": "dsl-thdjrb",
+          "layerId": "default",
+          "zIndex": 11,
+          "transform": {
+            "translation": {
+              "x": 539,
+              "y": 1116
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 156,
+            "height": 96
+          },
+          "content": {
+            "label": "Destino livre",
+            "shape": "diamond"
+          },
+          "appearance": {
+            "fill": "#fffbeb",
+            "stroke": "#fbbf24",
+            "textColor": "#78350f"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "destino-livre",
+              "line": 13,
+              "color": "orange",
+              "notes": [
+                "Preservar distros pessoais"
+              ]
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "obter-kali",
+          "kind": "process",
+          "parentId": "dsl-thdjrb",
+          "layerId": "default",
+          "zIndex": 12,
+          "transform": {
+            "translation": {
+              "x": 687,
+              "y": 1384
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 140,
+            "height": 60
+          },
+          "content": {
+            "label": "Obter Kali",
+            "shape": "rounded"
+          },
+          "appearance": {
+            "fill": "#ecfeff",
+            "stroke": "#22d3ee",
+            "textColor": "#0e7490"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "obter-kali",
+              "line": 14,
+              "shape": "component",
+              "color": "teal"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "origem-verificada",
+          "kind": "process",
+          "parentId": "dsl-thdjrb",
+          "layerId": "default",
+          "zIndex": 13,
+          "transform": {
+            "translation": {
+              "x": 654,
+              "y": 1508
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 159,
+            "height": 96
+          },
+          "content": {
+            "label": "Origem verificada",
+            "shape": "diamond"
+          },
+          "appearance": {
+            "fill": "#fffbeb",
+            "stroke": "#fbbf24",
+            "textColor": "#78350f"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "origem-verificada",
+              "line": 15,
+              "color": "orange"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "registrar-distro-dedicada",
+          "kind": "process",
+          "parentId": "dsl-thdjrb",
+          "layerId": "default",
+          "zIndex": 14,
+          "transform": {
+            "translation": {
+              "x": 596,
+              "y": 1844
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 223,
+            "height": 60
+          },
+          "content": {
+            "label": "Registrar distro dedicada",
+            "shape": "rounded"
+          },
+          "appearance": {
+            "fill": "#ecfeff",
+            "stroke": "#22d3ee",
+            "textColor": "#0e7490"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "registrar-distro-dedicada",
+              "line": 16,
+              "shape": "component",
+              "color": "teal"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "configurar-usuario-e-executor",
+          "kind": "process",
+          "parentId": "dsl-thdjrb",
+          "layerId": "default",
+          "zIndex": 15,
+          "transform": {
+            "translation": {
+              "x": 541,
+              "y": 2124
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 257,
+            "height": 60
+          },
+          "content": {
+            "label": "Configurar usuario e executor",
+            "shape": "rounded"
+          },
+          "appearance": {
+            "fill": "#ecfeff",
+            "stroke": "#22d3ee",
+            "textColor": "#0e7490"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "configurar-usuario-e-executor",
+              "line": 17,
+              "shape": "component",
+              "color": "teal"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "health-e-capabilities",
+          "kind": "process",
+          "parentId": "dsl-thdjrb",
+          "layerId": "default",
+          "zIndex": 16,
+          "transform": {
+            "translation": {
+              "x": 536,
+              "y": 2248
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 182,
+            "height": 96
+          },
+          "content": {
+            "label": "Health e capabilities",
+            "shape": "diamond"
+          },
+          "appearance": {
+            "fill": "#fffbeb",
+            "stroke": "#fbbf24",
+            "textColor": "#78350f"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "health-e-capabilities",
+              "line": 18,
+              "color": "orange"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "pronto-por-perfil",
+          "kind": "process",
+          "parentId": "dsl-thdjrb",
+          "layerId": "default",
+          "zIndex": 17,
+          "transform": {
+            "translation": {
+              "x": 389,
+              "y": 2522
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 160,
+            "height": 84
+          },
+          "content": {
+            "label": "Pronto por perfil",
+            "shape": "ellipse"
+          },
+          "appearance": {
+            "fill": "#ecfdf5",
+            "stroke": "#34d399",
+            "textColor": "#064e3b"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "pronto-por-perfil",
+              "line": 19,
+              "color": "green",
+              "notes": [
+                "Nao implica sandbox host"
+              ]
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "reparo-necessario",
+          "kind": "sticky",
+          "parentId": "dsl-thdjrb",
+          "layerId": "default",
+          "zIndex": 18,
+          "transform": {
+            "translation": {
+              "x": 852,
+              "y": 2514
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 180,
+            "height": 100
+          },
+          "content": {
+            "label": "Reparo necessario",
+            "color": "yellow"
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "reparo-necessario",
+              "line": 20,
+              "color": "yellow"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "bloqueado",
+          "kind": "process",
+          "parentId": "dsl-thdjrb",
+          "layerId": "default",
+          "zIndex": 19,
+          "transform": {
+            "translation": {
+              "x": 867,
+              "y": 1828
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 132,
+            "height": 84
+          },
+          "content": {
+            "label": "Bloqueado",
+            "shape": "ellipse"
+          },
+          "appearance": {
+            "fill": "#fef2f2",
+            "stroke": "#f87171",
+            "textColor": "#7f1d1d"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "bloqueado",
+              "line": 21,
+              "color": "red"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "destino-livre-note",
+          "kind": "sticky",
+          "parentId": "dsl-thdjrb",
+          "layerId": "default",
+          "zIndex": 0,
+          "transform": {
+            "translation": {
+              "x": 731,
+              "y": 1114
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 243,
+            "height": 100
+          },
+          "content": {
+            "label": "Preservar distros pessoais",
+            "subLabel": "",
+            "color": "yellow"
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "destino-livre-note",
+              "line": 50,
+              "noteFor": "destino-livre"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "pronto-por-perfil-note",
+          "kind": "sticky",
+          "parentId": "dsl-thdjrb",
+          "layerId": "default",
+          "zIndex": 0,
+          "transform": {
+            "translation": {
+              "x": 585,
+              "y": 2514
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 219,
+            "height": 100
+          },
+          "content": {
+            "label": "Nao implica sandbox host",
+            "subLabel": "",
+            "color": "yellow"
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "pronto-por-perfil-note",
+              "line": 51,
+              "noteFor": "pronto-por-perfil"
+            }
+          },
+          "extensions": {}
+        }
+      ],
+      "connectors": [
+        {
+          "id": "edge:iniciar->ler-checkpoint:1",
+          "source": {
+            "nodeId": "iniciar",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "ler-checkpoint",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 22
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:ler-checkpoint->diagnosticar-host:1",
+          "source": {
+            "nodeId": "ler-checkpoint",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "diagnosticar-host",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "ler-checkpoint->diagnosticar-host:1:label",
+              "text": "revalidar etapa salva",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 23
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:diagnosticar-host->pre-requisitos-prontos:1",
+          "source": {
+            "nodeId": "diagnosticar-host",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "pre-requisitos-prontos",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 24
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:pre-requisitos-prontos->plano-wsl:1",
+          "source": {
+            "nodeId": "pre-requisitos-prontos",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "plano-wsl",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "pre-requisitos-prontos->plano-wsl:1:label",
+              "text": "componentes ausentes",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 25
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:pre-requisitos-prontos->escolher-destino:1",
+          "source": {
+            "nodeId": "pre-requisitos-prontos",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "escolher-destino",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "pre-requisitos-prontos->escolher-destino:1:label",
+              "text": "sim",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 26
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:pre-requisitos-prontos->bloqueado:1",
+          "source": {
+            "nodeId": "pre-requisitos-prontos",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "bloqueado",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "pre-requisitos-prontos->bloqueado:1:label",
+              "text": "host incompativel",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 27
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:plano-wsl->aprovar-sistema:1",
+          "source": {
+            "nodeId": "plano-wsl",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "aprovar-sistema",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "plano-wsl->aprovar-sistema:1:label",
+              "text": "efeitos e elevacao",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 28
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:aprovar-sistema->preparar-wsl:1",
+          "source": {
+            "nodeId": "aprovar-sistema",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "preparar-wsl",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "aprovar-sistema->preparar-wsl:1:label",
+              "text": "permitido",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 29
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:aprovar-sistema->bloqueado:1",
+          "source": {
+            "nodeId": "aprovar-sistema",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "bloqueado",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "aprovar-sistema->bloqueado:1:label",
+              "text": "recusado",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 30
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:preparar-wsl->reboot-necessario:1",
+          "source": {
+            "nodeId": "preparar-wsl",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "reboot-necessario",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "preparar-wsl->reboot-necessario:1:label",
+              "text": "etapa confirmada",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 31
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:preparar-wsl->reparo-necessario:1",
+          "source": {
+            "nodeId": "preparar-wsl",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "reparo-necessario",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "preparar-wsl->reparo-necessario:1:label",
+              "text": "falha parcial",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 32
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:reboot-necessario->aguardar-reboot:1",
+          "source": {
+            "nodeId": "reboot-necessario",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "aguardar-reboot",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "reboot-necessario->aguardar-reboot:1:label",
+              "text": "sim",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 33
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:reboot-necessario->ler-checkpoint:1",
+          "source": {
+            "nodeId": "reboot-necessario",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "ler-checkpoint",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "reboot-necessario->ler-checkpoint:1:label",
+              "text": "nao",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 34
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:aguardar-reboot->ler-checkpoint:1",
+          "source": {
+            "nodeId": "aguardar-reboot",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "ler-checkpoint",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "aguardar-reboot->ler-checkpoint:1:label",
+              "text": "app reaberto",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 35
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:escolher-destino->destino-livre:1",
+          "source": {
+            "nodeId": "escolher-destino",
+            "portId": null,
+            "anchor": {
+              "kind": "side",
+              "side": "bottom",
+              "ratio": 0.12000000000000015
+            },
+            "point": null
+          },
+          "target": {
+            "nodeId": "destino-livre",
+            "portId": null,
+            "anchor": {
+              "kind": "side",
+              "side": "top",
+              "ratio": 0.7217948717948719
+            },
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 36
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:destino-livre->obter-kali:1",
+          "source": {
+            "nodeId": "destino-livre",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "obter-kali",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "destino-livre->obter-kali:1:label",
+              "text": "gerido e novo",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 37
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:destino-livre->escolher-destino:1",
+          "source": {
+            "nodeId": "destino-livre",
+            "portId": null,
+            "anchor": {
+              "kind": "side",
+              "side": "top",
+              "ratio": 0.8807692307692306
+            },
+            "point": null
+          },
+          "target": {
+            "nodeId": "escolher-destino",
+            "portId": null,
+            "anchor": {
+              "kind": "side",
+              "side": "bottom",
+              "ratio": 0.27999999999999986
+            },
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "destino-livre->escolher-destino:1:label",
+              "text": "colisao ou distro pessoal",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 38
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:obter-kali->origem-verificada:1",
+          "source": {
+            "nodeId": "obter-kali",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "origem-verificada",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 39
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:obter-kali->reparo-necessario:1",
+          "source": {
+            "nodeId": "obter-kali",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "reparo-necessario",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "obter-kali->reparo-necessario:1:label",
+              "text": "download interrompido",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 40
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:origem-verificada->registrar-distro-dedicada:1",
+          "source": {
+            "nodeId": "origem-verificada",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "registrar-distro-dedicada",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "origem-verificada->registrar-distro-dedicada:1:label",
+              "text": "bytes admitidos",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 41
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:origem-verificada->bloqueado:1",
+          "source": {
+            "nodeId": "origem-verificada",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "bloqueado",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "origem-verificada->bloqueado:1:label",
+              "text": "verificacao falhou",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 42
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:registrar-distro-dedicada->configurar-usuario-e-executor:1",
+          "source": {
+            "nodeId": "registrar-distro-dedicada",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "configurar-usuario-e-executor",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "registrar-distro-dedicada->configurar-usuario-e-executor:1:label",
+              "text": "WSL 2 confirmado",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 43
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:registrar-distro-dedicada->reparo-necessario:1",
+          "source": {
+            "nodeId": "registrar-distro-dedicada",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "reparo-necessario",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "registrar-distro-dedicada->reparo-necessario:1:label",
+              "text": "registro parcial",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 44
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:configurar-usuario-e-executor->health-e-capabilities:1",
+          "source": {
+            "nodeId": "configurar-usuario-e-executor",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "health-e-capabilities",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 45
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:configurar-usuario-e-executor->reparo-necessario:1",
+          "source": {
+            "nodeId": "configurar-usuario-e-executor",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "reparo-necessario",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "configurar-usuario-e-executor->reparo-necessario:1:label",
+              "text": "provisionamento parcial",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 46
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:health-e-capabilities->pronto-por-perfil:1",
+          "source": {
+            "nodeId": "health-e-capabilities",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "pronto-por-perfil",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "health-e-capabilities->pronto-por-perfil:1:label",
+              "text": "controles verificados",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 47
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:health-e-capabilities->reparo-necessario:1",
+          "source": {
+            "nodeId": "health-e-capabilities",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "reparo-necessario",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "health-e-capabilities->reparo-necessario:1:label",
+              "text": "dependencia ou controle ausente",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 48
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:reparo-necessario->ler-checkpoint:1",
+          "source": {
+            "nodeId": "reparo-necessario",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "ler-checkpoint",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [
+            {
+              "id": "reparo-necessario->ler-checkpoint:1:label",
+              "text": "recuperar sem duplicar",
+              "pathRatio": 0.5,
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "metadata": {}
+            }
+          ],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 49
+            }
+          },
+          "extensions": {}
+        }
+      ],
+      "metadata": {},
+      "extensions": {}
+    }
+  ],
+  "metadata": {},
+  "extensions": {}
+}
