@@ -1,0 +1,8 @@
+import { describe, expect, it } from 'vitest';
+import { readKaliScanResult } from './kali-scan-result';
+function output(){return {operation:'scan_bytes',adapter:'kali.rg.signals.v1',rulesVersion:'2026-11-07.1',inputSha256:'a'.repeat(64),bytes:100,environmentId:'fixture',sessionId:'session',assessmentId:'assessment',tool:{name:'ripgrep',version:'fixture',binarySha256:'b'.repeat(64)},candidates:[{ruleId:'dynamic-evaluation',line:4,label:'Sinal lexical',status:'candidate'}],counts:{'private-key-marker':0,'dynamic-evaluation':3,'credential-identifier':0},observedSignals:3,omittedCandidates:2,countsComplete:false,partial:true,termination:'output_limited',effects:'Leitura offline.',limitations:'Sinais não confirmam vulnerabilidades.'};}
+describe('resultado delimitado da análise de evidência no Kali',()=>{
+  it('conserva linha da evidência e cobertura parcial sem promover o sinal',()=>{expect(readKaliScanResult(output())).toMatchObject({termination:'output_limited',countsComplete:false,omittedCandidates:2,candidates:[{line:4,status:'candidate'}]});});
+  it('recusa sinais com status promovido ou regra desconhecida',()=>{const value=output();value.candidates[0].status='validated';expect(readKaliScanResult(value)).toBeNull();value.candidates[0].status='candidate';value.candidates[0].ruleId='arbitrary-rule';expect(readKaliScanResult(value)).toBeNull();});
+  it('recusa contagem textual e resultado que excede o catálogo limitado',()=>{expect(readKaliScanResult({...output(),observedSignals:'todos'})).toBeNull();expect(readKaliScanResult({...output(),candidates:Array.from({length:17},()=>output().candidates[0])})).toBeNull();});
+});

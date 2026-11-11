@@ -1,0 +1,10 @@
+import { describe, expect, it } from 'vitest';
+import { parseSourceResult, readSourceResult } from './source-result';
+
+function output(){return {adapter:'source.rules.v1',rulesVersion:'2026-11-07.1',manifestSha256:'a'.repeat(64),termination:'timed_out',canceled:false,timedOut:true,partial:true,counts:{plannedFiles:2,plannedBytes:72,verifiedFiles:2,scannedFiles:1,binaryFiles:0,tooLargeFiles:0,partialFiles:0,readErrors:0,excludedDirectories:1,unvisitedFiles:1,candidates:1,omittedCandidates:0,omittedFileResults:0},candidates:[{id:'candidate-1',ruleId:'lexical-signal',ruleVersion:'1',status:'candidate',title:'Sinal textual',observation:'Requer contexto.',path:'src/access.ts',line:5,fileSha256:'b'.repeat(64)}],fileResults:[],limits:['Cobertura parcial.']};}
+describe('leitura de evidência da análise local',()=>{
+  it('preserva limites e localização em uma interrupção parcial',()=>{const result=parseSourceResult(JSON.stringify(output()));expect(result?.termination).toBe('timed_out');expect(result?.counts.unvisitedFiles).toBe(1);expect(result?.candidates[0]).toMatchObject({status:'candidate',path:'src/access.ts',line:5});});
+  it('não transforma texto importado que contém JSON em resultado nativo',()=>{expect(parseSourceResult(JSON.stringify({origin:'user_supplied',sourceVerified:false,text:JSON.stringify(output())}))).toBeNull();});
+  it('lê a projeção estruturada sem requerer os bytes originais',()=>{const projected=output();expect(readSourceResult(projected)?.counts.unvisitedFiles).toBe(1);expect(readSourceResult(JSON.stringify(projected))).toBeNull();expect(readSourceResult({schema:'unknown',content:JSON.stringify(projected)})).toBeNull();});
+  it('recusa estrutura quebrada ou status de validação injetado',()=>{expect(parseSourceResult('{')).toBeNull();const invalid=output();invalid.candidates[0].status='validated';expect(parseSourceResult(JSON.stringify(invalid))).toBeNull();expect(parseSourceResult(JSON.stringify({...output(),counts:{...output().counts,scannedFiles:'todos'}}))).toBeNull();});
+});

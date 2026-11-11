@@ -1,0 +1,8 @@
+import { it,expect } from 'vitest';
+import { ScopeStatus } from './scope';
+import { evidenceMethodGate } from './evidence-scope';
+const a={entryId:'a',entryDigest:'a-digest'},b={entryId:'b',entryDigest:'b-digest'};
+const status={revision:{body:{targetSet:{}}},targetOptions:[{targetRef:a,entry:{label:'A'},workGates:[{method:'kali.hash-evidence.v1',allowedByScope:true}]},{targetRef:b,entry:{label:'B'},workGates:[{method:'kali.hash-evidence.v1',allowedByScope:false}]}]} as unknown as ScopeStatus;
+it('exige método permitido em todos os contribuidores sem ampliar pelo primeiro',()=>{expect(evidenceMethodGate(status,{verified:true,targetRefs:[a]},'kali.hash-evidence.v1').allowed).toBe(true);const gate=evidenceMethodGate(status,{verified:true,targetRefs:[a,b]},'kali.hash-evidence.v1');expect(gate.allowed).toBe(false);expect(gate.reason).toContain('“B”');});
+it('bloqueia origem ausente, não verificada, comum, duplicada ou obsoleta',()=>{for(const origin of [undefined,{verified:false,targetRefs:[a]},{verified:true,targetRefs:[]},{verified:true,targetRefs:[a,a]},{verified:true,targetRefs:[{...a,entryDigest:'old'}]}])expect(evidenceMethodGate(status,origin,'kali.hash-evidence.v1').allowed).toBe(false);expect(evidenceMethodGate(undefined,{verified:true,targetRefs:[a]},'kali.hash-evidence.v1').allowed).toBe(false);});
+it('preserva o gate simples V1 sem exigir linhagem V2 retroativa',()=>{const v1={workGates:[{method:'kali.hash-evidence.v1',allowedByScope:true},{method:'kali.rg.signals.v1',allowedByScope:false}]} as ScopeStatus;expect(evidenceMethodGate(v1,undefined,'kali.hash-evidence.v1').allowed).toBe(true);expect(evidenceMethodGate(v1,undefined,'kali.rg.signals.v1').allowed).toBe(false);});

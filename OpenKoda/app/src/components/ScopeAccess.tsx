@@ -1,0 +1,18 @@
+import { ScopeTargetRef, sameTargetRef, targetAllows } from '../combined-scope';
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { native, request } from '../api';
+import { Assessment, errorMessage } from '../types';
+import { ScopeMethod, ScopeStatus, ScopeRef, scopePlanMatches, scopeAllows, scopeReason, validScopeStatus } from '../scope';
+import { Notice } from './shared';
+export const scopeChanged=()=>window.dispatchEvent(new Event('openkoda-scope-changed'));
+export function useAssessmentScope(assessment?:Assessment){
+  const [data,setData]=useState<{value:ScopeStatus;revision:string}>();const [error,setError]=useState('');const [loading,setLoading]=useState(false);const generation=useRef(0);
+  const revision=JSON.stringify([assessment?.id,assessment?.scopeId,assessment?.objective,assessment?.status,assessment?.updatedAt]);
+  const refresh=useCallback(async()=>{if(!native||!assessment)return;const call=++generation.current;setLoading(true);setError('');try{const value=await request<unknown>('assessment.scopeStatus',{assessmentId:assessment.id});if(!validScopeStatus(value,assessment.id))throw new Error('O núcleo não retornou um estado de escopo reconhecido. Novas operações permanecem bloqueadas.');if(call===generation.current)setData({value,revision});return value;}catch(e){if(call===generation.current){setData(undefined);setError(errorMessage(e));}}finally{if(call===generation.current)setLoading(false);}},[revision]);
+  useEffect(()=>{setData(undefined);if(native&&assessment)void refresh();const handler=()=>void refresh();window.addEventListener('openkoda-scope-changed',handler);window.addEventListener('focus',handler);const timer=native&&assessment?setInterval(handler,30000):undefined;return()=>{generation.current++;clearInterval(timer);window.removeEventListener('openkoda-scope-changed',handler);window.removeEventListener('focus',handler);};},[refresh]);
+  function accept(value:ScopeStatus){if(!assessment||!validScopeStatus(value,assessment.id))throw new Error('Resposta de escopo incompatível com a avaliação.');setData({value,revision});setError('');}
+  return {status:data?.revision===revision&&data.value.assessmentId===assessment?.id?data.value:undefined,error,loading,refresh,accept};
+}
+export const ScopeAccess=createContext<ReturnType<typeof useAssessmentScope>|undefined>(undefined);
+export function useScopeAccess(){const state=useContext(ScopeAccess);return {...state,allowsTarget:(method:ScopeMethod,ref?:ScopeTargetRef)=>!native||(!state?.status?.revision?.body.targetSet?scopeAllows(state?.status,method):!!ref&&state.status.targetOptions?.some(t=>sameTargetRef(t.targetRef,ref)&&targetAllows(t,method))===true),allows:(method:ScopeMethod)=>!native||scopeAllows(state?.status,method),reviewed:!native||state?.status?.actions.canReviewStoredEvidence===true,canImport:!native||state?.status?.actions.canImportEvidence===true,matches:(ref:ScopeRef|undefined)=>!native||scopePlanMatches(ref,state?.status),revision:state?.status?.revision?.digest??''};}
+export function ScopeRestriction({method,kind='review'}:{method?:ScopeMethod;kind?:'review'|'import'}){const scope=useScopeAccess();if(!native||(method?scope.allows(method):kind==='import'?scope.canImport:scope.reviewed))return null;const reasons=method?scope.status?.workGates.find(g=>g.method===method)?.reasonCodes:scope.status?.actions.reasonCodes;return <Notice tone="warning">{scope.error||reasons?.map(scopeReason).join(' ')||'Revise o escopo desta avaliação antes de iniciar este trabalho.'} <span>Consulte “Escopo desta avaliação”. Histórico, cancelamento e reconciliação permanecem disponíveis.</span></Notice>;}

@@ -1,0 +1,8 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "main-window",
+  "description": "Only the trusted local main webview can call validated domain actions.",
+  "windows": ["main"],
+  "local": true,
+  "permissions": ["allow-request"]
+}

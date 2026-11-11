@@ -1,0 +1,50 @@
+import { ScopeRestriction, useScopeAccess } from './ScopeAccess';
+import { useEffect, useRef, useState } from 'react';
+import { FileText } from 'lucide-react';
+import { native, request } from '../api';
+import { Action, Assessment, Evidence, ExecutionPlan, Settings, errorMessage, shortDate } from '../types';
+import { SourcePreview, sourceCaptureAllowed, validSourcePreview } from '../source-capture';
+import { Disclosure, Field, KeyValue, Notice } from './shared';
+
+const planStates:Record<string,string>={proposed:'Aguardando revisão',approved:'Aprovado',running:'Em execução',completed:'Concluído',failed:'Falhou',canceled:'Cancelado',revoked:'Revogado',unknown:'Estado desconhecido',canceling:'Cancelando'};
+interface Props {assessment:Assessment;plans:ExecutionPlan[];projectActive:boolean;settings:Settings;action:Action;busy:boolean}
+export default function SourceCapture(props:Props){return <Disclosure label="Capturar fontes selecionadas" icon={<FileText size={20}/>}><div className="source-capture">{native?<CapturePanel {...props}/>:<Notice>A captura seletiva de fontes está disponível no aplicativo desktop. A prévia do navegador não lê arquivos nem envia conteúdo à IA.</Notice>}</div></Disclosure>;}
+function CapturePanel({assessment,plans,projectActive,settings,action,busy}:Props){
+  const scope=useScopeAccess();
+  const [planId,setPlanId]=useState('');const [paths,setPaths]=useState<string[]>([]);const [filter,setFilter]=useState('');const [preview,setPreview]=useState<SourcePreview>();const [ack,setAck]=useState(false);const [pending,setPending]=useState(false);const [error,setError]=useState('');const [receipt,setReceipt]=useState<{evidence:Evidence;reused:boolean}>();const pendingRef=useRef(false);
+  const sourcePlans=plans.filter(p=>p.assessmentId===assessment.id&&p.adapter==='source.rules.v1'&&p.sourceScope);const plan=sourcePlans.find(p=>p.id===planId);
+  const allowed=sourceCaptureAllowed(assessment,plans,projectActive);const usable=!!plan&&scope.matches(plan.scopeRef)&&scope.allowsTarget('source.capture.v1',plan.targetRef)&&scope.allowsTarget('source.rules.v1',plan.targetRef)&&['proposed','completed','failed','canceled','revoked'].includes(plan.status);
+  const totalBytes=plan?.inputFiles.filter(f=>paths.includes(f.path)).reduce((sum,f)=>sum+f.size,0)??0;
+  const revision=JSON.stringify([scope.revision,assessment.id,assessment.updatedAt,assessment.status,projectActive,sourcePlans.map(p=>[p.id,p.digest,p.status,p.sourceScope?.manifestSha256]),plans.map(p=>[p.id,p.status]),settings.hasApiKey,settings.model,settings.endpoint]);
+  const revisionRef=useRef(revision);revisionRef.current=revision;
+  const disabled=busy||pending||!allowed||!scope.allows('source.capture.v1')||!scope.allows('source.rules.v1');
+  function clearReview(){setPreview(undefined);setAck(false);}
+  useEffect(()=>{clearReview();},[revision]);
+  function choosePlan(id:string){setPlanId(id);setPaths([]);setFilter('');setReceipt(undefined);setError('');clearReview();}
+  async function review(){
+    if(!plan||!paths.length||pendingRef.current||!allowed||!usable)return;const startedRevision=revision;pendingRef.current=true;setPending(true);setError('');setReceipt(undefined);clearReview();
+    try{const result=await request<unknown>('evidence.sourcePreview',{assessmentId:assessment.id,planId:plan.id,paths});if(startedRevision!==revisionRef.current)throw new Error('O estado mudou durante a prévia. Revise novamente a seleção atual.');if(!validSourcePreview(result,assessment.id,plan,paths))throw new Error('A prévia não corresponde aos arquivos e hashes selecionados. Nenhuma captura foi autorizada.');setPreview(result);}catch(e){setError(errorMessage(e));}finally{pendingRef.current=false;setPending(false);}
+  }
+  async function capture(){
+    if(!plan||!preview||!ack||pendingRef.current||!allowed||!usable)return;pendingRef.current=true;setPending(true);setError('');setReceipt(undefined);setAck(false);
+    try{const evidence=await action<Evidence>('evidence.sourceCapture',{assessmentId:assessment.id,planId:plan.id,paths:preview.paths,digest:preview.digest,acknowledgeLocalCapture:true});setReceipt({evidence,reused:assessment.evidence.some(item=>item.id===evidence.id)});}catch(e){setError(errorMessage(e));}finally{clearReview();pendingRef.current=false;setPending(false);}
+  }
+  return <><ScopeRestriction method="source.capture.v1"/>
+    <p className="muted">Escolha arquivos de um plano de análise local já registrado. A prévia confere o manifest, as identidades e os hashes antes de mostrar uma cópia redigida. Não há descoberta de novos caminhos nem execução de código.</p>
+    <Notice>A captura grava somente a cópia redigida como evidência local. A redação automática pode deixar segredos passar: revise todo o texto antes de capturar. Nenhum conteúdo será enviado à IA nesta ação.</Notice>
+    <p className="muted">Uma captura local ainda pode exceder o limite do contexto da IA. Nesse caso, crie outra captura com menos arquivos; nenhum conteúdo será truncado automaticamente.</p>
+    {error&&<div role="alert"><Notice tone="warning">{error} Revise novamente antes de tentar outra captura; não haverá repetição automática.</Notice></div>}
+    {!allowed&&<Notice tone="warning">A captura exige projeto ativo e avaliação sem operação em andamento ou desconhecida. Revogue ou encerre qualquer plano autorizado antes de capturar fontes.</Notice>}
+    {!sourcePlans.length?<p className="muted">Prepare uma análise local para registrar o manifest. O inventário de arquivos não autoriza esta captura.</p>:<>
+      <Field label="Plano de análise para captura"><select value={planId} onChange={e=>choosePlan(e.target.value)} disabled={disabled}><option value="">Selecione um plano</option>{sourcePlans.map(p=><option key={p.id} value={p.id}>{p.target} · {shortDate(p.createdAt)} · {planStates[p.status]??p.status} · {p.id}</option>)}</select></Field>
+      {plan&&<><KeyValue label="Alvo da captura"><span className="break-word">{plan.target}</span></KeyValue><KeyValue label="Plano e integridade"><span className="mono break-word">{plan.id} · {plan.digest}</span></KeyValue><KeyValue label="Manifest"><span className="mono break-word">{plan.sourceScope!.manifestSha256}</span></KeyValue>
+        {!usable&&<Notice tone="warning">Este plano não permite captura no estado atual.</Notice>}
+        <Field label="Filtrar caminhos do manifest" hint="Este campo apenas filtra arquivos já registrados; não aceita novos caminhos para captura."><input type="search" value={filter} onChange={e=>setFilter(e.target.value)} disabled={disabled||!usable}/></Field>
+        <fieldset className="context-selection" disabled={disabled||!usable}><legend>Arquivos para captura local</legend><p>{paths.length} de 8 arquivos · {totalBytes.toLocaleString('pt-BR')} de 32.768 bytes de origem</p><p className="muted">Selecione apenas texto UTF-8 sem NUL. A prévia recusará arquivos alterados, binários ou substituídos, sem truncar o conteúdo.</p><div className="source-file-options">{plan.inputFiles.filter(file=>file.path.toLowerCase().includes(filter.toLowerCase())).map(file=>{const checked=paths.includes(file.path);const overLimit=paths.length>=8||totalBytes+file.size>32768;return <label key={file.path} className="check-field"><input type="checkbox" checked={checked} disabled={!checked&&overLimit} onChange={e=>{setPaths(current=>e.target.checked?[...current,file.path]:current.filter(path=>path!==file.path));setReceipt(undefined);setError('');clearReview();}}/><span className="break-word">{file.path}<small> · {file.size.toLocaleString('pt-BR')} bytes{file.size>32768?' · Acima do limite de captura':''}</small></span></label>;})}</div></fieldset>
+        <button type="button" className="button" disabled={disabled||!usable||!paths.length||paths.length>8||totalBytes>32768} onClick={()=>void review()}>Revisar fontes selecionadas</button>
+      </>}
+    </>}
+    {preview&&<section className="context-review" aria-label="Prévia da captura local"><h3>Cópia redigida para revisão</h3><KeyValue label="Seleção">{preview.files.length} arquivo(s) · {preview.totalSourceBytes.toLocaleString('pt-BR')} bytes de origem</KeyValue><Notice>{preview.notice}</Notice>{preview.files.map(file=><article className="execution-entry" key={file.path}><h4 className="break-word">{file.path}</h4><KeyValue label="Redação">{file.redactionChanged?'O conteúdo foi alterado pela redação automática':'Nenhuma alteração de redação detectada; isso não garante ausência de segredos'}</KeyValue><KeyValue label="SHA-256 da origem"><span className="mono break-word">{file.sourceSha256}</span></KeyValue><KeyValue label="SHA-256 da cópia redigida"><span className="mono break-word">{file.redactedSha256}</span></KeyValue><pre aria-label={`Conteúdo redigido de ${file.path}`}>{file.text}</pre></article>)}<KeyValue label="Digest da revisão"><span className="mono break-word">{preview.digest}</span></KeyValue><label className="check-field"><input type="checkbox" checked={ack} onChange={e=>setAck(e.target.checked)} disabled={disabled||!usable}/><span>Revisei todo o texto exibido e autorizo gravar esta cópia redigida como evidência local, sem envio à IA.</span></label><button type="button" className="button" disabled={disabled||!usable||!ack} onClick={()=>void capture()}>Capturar cópia local revisada</button></section>}
+    {receipt&&<section className="review-sheet" aria-label="Resultado da captura local"><p role="status">{receipt.reused?'A cópia idêntica já estava registrada e foi reutilizada.':'Cópia redigida registrada como evidência local.'} Nenhum conteúdo foi enviado à IA e nenhum candidato foi criado.</p><KeyValue label="Evidência">{receipt.evidence.name}</KeyValue><p className="mono break-word">{receipt.evidence.id} · {receipt.evidence.rawSha256}</p><Notice>Para pedir uma análise à IA, selecione esta evidência no contexto da conversa, investigação ou sugestão e revise o consentimento de envio separadamente.</Notice></section>}
+  </>;
+}

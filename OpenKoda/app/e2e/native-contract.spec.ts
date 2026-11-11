@@ -1,0 +1,631 @@
+import { chooseAiData, reviewKaliData } from './data-fixture';
+import { installScopeFixture } from './scope-fixture';
+import { Page } from '@playwright/test';
+import { test, expect } from './fixtures';
+
+// Browser contract fixtures exercise UI decisions only. They do not prove native
+// authority, credential encryption, WSL, or provider connectivity.
+async function nativeFixture(page:Page, environmentReady=false, bridgeMode='success', remediationMode='none', imageMode='available', recoveryMode='none', assessmentMode='normal') {
+  await installScopeFixture(page);
+  await page.addInitScript(({environmentReady,bridgeMode,remediationMode,imageMode,recoveryMode,assessmentMode})=>{
+    const appWindow=window as unknown as {isTauri:boolean;__TAURI_INTERNALS__:unknown;__contractCalls:{action:string;payload:Record<string,unknown>}[]};
+    appWindow.isTauri=true;appWindow.__contractCalls=[];
+    const now=new Date().toISOString();
+    const disk={id:crypto.randomUUID(),sourceId:crypto.randomUUID(),source:{name:'OpenKoda-Kali'},maxBytes:64*1024**3,spool:{terminalCaptures:0,sessionRecords:0},
+      ...(imageMode==='archive-legacy-vhdx'?{}:{format:'tar'})};
+    const restore={id:crypto.randomUUID(),backup:disk,bytes:4096,sha256:'a'.repeat(64),firstWslDistribution:false};
+    const interrupted={operation:{kind:'export',backup:{...disk,id:crypto.randomUUID()}},status:imageMode==='archive-metadata'?'exporting_source':'stop_unknown',startedAt:now};
+    const archives:{operation:object;status:string;startedAt:string}[]=[interrupted];
+    if(imageMode==='archive-legacy-vhdx')archives.push({operation:{kind:'export',backup:disk},status:'exported',startedAt:now});
+    const diskReview={digest:imageMode==='archive-metadata'?null:'b'.repeat(64),expiresAt:new Date(Date.now()+600000).toISOString()};
+    if(imageMode==='archive-metadata')archives.push({operation:{kind:'[Texto indisponível]'},status:'[Texto indisponível]',startedAt:now});
+    const assessment={id:'assessment-fixture',projectId:'project-fixture',title:'Avaliação de contrato',kind:remediationMode==='none'?'web':'code',target:remediationMode==='none'?'https://fixture.example.test/':'D:\\Fixture',objective:'Verificar controles de interface.',status:'awaiting_approval',createdAt:now,updatedAt:now,events:[],evidence:[{id:'evidence-fixture',name:'Cabeçalhos de contrato',content:'X-Fixture: true',sha256:'fixture-hash',createdAt:now}],coverage:[],summary:''};
+    const plan={id:'plan-fixture',assessmentId:assessment.id,adapter:remediationMode==='none'?'http.headers.v1':'local.inventory.v1',target:assessment.target,timeoutSeconds:10,outputLimitKiB:16,inputFiles:[],resolvedAddresses:['192.0.2.20'],digest:'test-plan-digest',createdAt:now,expiresAt:new Date(Date.now()+600000).toISOString(),approvedAt:null as string|null,status:'proposed'};
+    const state={projects:[{id:'project-fixture',name:'Projeto de contrato',kind:assessment.kind,target:assessment.target,description:'Fixture de interface',createdAt:now}],assessments:[assessment],findings:[{id:'finding-fixture',assessmentId:assessment.id,title:'Candidato de contrato',severity:'low',confidence:'Requer revisão',status:remediationMode==='none'?'candidate':'validated',description:'Observação simulada para o contrato da interface.',recommendation:'Revisar a evidência.',evidenceIds:['evidence-fixture'],createdAt:now}],validations:[] as {id:string;findingId:string;assessmentId:string;method:string;expected:string;observed:string;evidence:{id:string;sha256:string}[];author:string;createdAt:string}[],settings:{provider:'openai',endpoint:'https://api.example.test/v1',model:'fixture-model',mode:'assisted',theme:'light',language:'pt-BR',retentionDays:90,timeoutSeconds:10,outputLimitKiB:16,hasApiKey:false},plans:[plan],executions:[] as {id:string;planId:string;assessmentId:string;status:string;startedAt:string;finishedAt:string|null;evidenceId:null;message:string}[]};
+    const scope=window.__scopeFixture(state,remediationMode==='none'?['http.headers.v1','ai.remote-review.v1','kali.runtime-diagnostics.v1','kali.hash-evidence.v1']:['local.inventory.v1','local.text-remediation.v1','ai.remote-review.v1']);
+    if(assessmentMode.startsWith('unknown')){assessment.status='unknown';plan.status='unknown';}
+    if(assessmentMode.startsWith('import'))assessment.status='draft';
+    if(bridgeMode==='oversized')state.assessments[0].evidence[0].content='é'.repeat(17000);
+    let providerKey=false;let verified=false;let finishRun:((result:unknown)=>void)|undefined;
+    const messages:{id:string;role:string;text:string;createdAt:string}[]=[];
+    let remediationPlan:Record<string,unknown>|undefined;
+    const currentProfile={kind:'base'};const previousProfile=recoveryMode==='rollback'?{kind:'profile',id:'previous-profile-fixture'}:null;
+    let activationPlan:Record<string,unknown>|null=null;let pendingActivation:Record<string,unknown>|null=null;
+    function makeActivationPlan(kind:'restore'|'rollback'){
+      return {id:'activation-fixture',kind,sourceRecoveryId:kind==='restore'?'recovery-receipt-fixture':null,fromProfile:currentProfile,sourceProfile:kind==='rollback'?previousProfile:currentProfile,targetProfile:{kind:'profile',id:'new-sanitized-fixture'},files:[{name:'openkoda.sqlite',bytes:4096,sha256:'activation-file-fixture-hash'}],digest:'activation-fixture-digest',createdAt:now,expiresAt:new Date(Date.now()+86400000).toISOString(),status:'prepared',message:'Uma cópia sanitizada está pronta para revisão.',effects:['Ativar a cópia na próxima abertura.','Preservar o perfil anterior.'],limits:['Credenciais não são transferidas.','O Kali exige revalidação.','Arquivos externos de projetos não são restaurados.'],restartRequired:true};
+    }
+    if(recoveryMode==='blocked'){activationPlan=makeActivationPlan('restore');activationPlan.status='blocked';activationPlan.message='Integridade da cópia não confirmada; perfil original preservado.';pendingActivation=activationPlan;}
+    type BridgeRun={id:string;assessmentId:string;environmentId:string;tool:string;status:string;startedAt:string;finishedAt:string|null;sourceSha256:string|null;evidenceId?:string;error?:string};
+    let bridgeActive:BridgeRun|null=null;const bridgeRecent:BridgeRun[]=[];
+    let bridgeResolve:((value:unknown)=>void)|undefined;
+    if(bridgeMode==='unknown-error')bridgeRecent.push({id:'bridge-interrupted',assessmentId:assessment.id,environmentId:'environment-fixture',tool:'runtime_diagnostics',status:'unknown',startedAt:now,finishedAt:null,sourceSha256:null,error:'Identidade da sessão ainda não confirmada.'});
+    (window as unknown as {__finishBridge:()=>void}).__finishBridge=()=>{if(bridgeActive){bridgeActive.status='canceled';bridgeActive.finishedAt=now;const run=structuredClone(bridgeActive);bridgeRecent.push(run);bridgeActive=null;bridgeResolve?.({run,result:{canceled:true},cleanupConfirmed:true});}};
+    appWindow.__TAURI_INTERNALS__={invoke:async(command:string,args:{request:{action:string;payload:Record<string,unknown>}})=>{
+      if(command!=='request')throw new Error('Unexpected command');
+      const {action,payload}=args.request;appWindow.__contractCalls.push({action,payload});
+      if(action==='ai.budget.status')return {enabled:false,degraded:false,revision:null,epochId:null,currency:'USD',policy:null,installation:{limitUsd:null,pricedUsageUsd:null,heldUsd:null,assumedChargeUsd:null,remainingUsd:null,unresolvedCount:0},assessment:null,legacyCostsUnknown:false,legacyReviewDigest:'fixture-legacy',knownLegacyRequests:0,unknownCharges:[],unknownChargesTotal:0,recentCharges:[],recentChargesTotal:0,notice:'Controle monetário desativado na fixture.'};
+      if(action==='finding.httpStatus')return {supported:false,findingId:payload.findingId};
+      if(action==='projectPurge.status')return {hasUnresolved:false,hasPartialHistory:false,journals:[],limits:[],confirmationPhrase:'EXCLUIR PROJETO E HISTÓRICO'};
+      if(action==='assessment.scopeStatus')return scope.status(payload.assessmentId);
+      if(action==='snapshot')return structuredClone(state);
+      if(action==='environment.status'||action==='environment.diagnose')return {status:environmentReady?'ready':imageMode==='registered'||imageMode.startsWith('repair')?'degraded':'unavailable',distro:'OpenKoda-Kali',message:'Ambiente de contrato sem executor.',tools:[],executorReady:false,managedRegistration:environmentReady||imageMode==='registered'||imageMode.startsWith('repair'),imageProvisionAvailable:!environmentReady&&imageMode!=='registered'&&!imageMode.startsWith('repair'),repairAvailable:imageMode.startsWith('repair')};
+      if(action==='packages.catalog')return {version:'1',tools:[],inventoryVerified:false,distro:'OpenKoda-Kali'};
+      if(action==='environment.archive.list')return {records:structuredClone(archives)};
+      if(action==='environment.archive.inspectStop'){interrupted.status='incomplete_copy';return structuredClone(interrupted);}
+      if(action==='environment.archive.exportPlan')return {...diskReview,id:'export-review',payload:{backup:disk,target:'fixture.tar',effects:'Exportar arquivos da distribuição de teste'}};
+      if(action==='environment.archive.importPlan')return {...diskReview,id:'import-review',payload:{restore,target:'fixture-clone',distribution:'OpenKoda-Recovery-archive-clone',effects:'Recuperar cópia de teste'}};
+      if(action==='environment.archive.export'||action==='environment.archive.import'){
+        const receipt=action.endsWith('.export')?{operation:{kind:'export',backup:disk},status:'exported',startedAt:now}:{operation:{kind:'import',restore},status:'inactive',startedAt:now};
+        archives.push(receipt);return receipt;
+      }
+      if(action==='plan.approve'){if(payload.digest!==plan.digest)throw new Error('Digest inválido');plan.status='approved';plan.approvedAt=now;return structuredClone(plan);}
+      if(action==='plan.run'){plan.status='running';assessment.status='running';state.executions.push({id:'execution-fixture',planId:plan.id,assessmentId:assessment.id,status:'running',startedAt:now,finishedAt:null,evidenceId:null,message:'Operação em andamento'});return new Promise(resolve=>{finishRun=resolve;});}
+      if(action==='assessment.cancel'){assessment.status='canceled';plan.status='canceled';state.executions[0].status='canceled';state.executions[0].finishedAt=new Date().toISOString();state.executions[0].message='Cancelamento confirmado';finishRun?.(structuredClone(state.executions[0]));return structuredClone(assessment);}
+      if(action==='assessment.reconcile'){
+        if(assessmentMode==='unknown-refusal')throw new Error('Supervisor ainda ativo. A reconciliação permanece bloqueada.');
+        if(payload.id!==assessment.id||payload.acknowledgeUnknownEffects!==true||!String(payload.note).trim())throw new Error('Nota e reconhecimento exigidos.');
+        assessment.status='partial';assessment.summary='Interrupção registrada sem repetir execução; efeitos remotos permanecem não confirmados.';return structuredClone(assessment);
+      }
+      if(action==='evidence.import'){
+        if(assessmentMode==='import-refusal')throw new Error('A avaliação tem atividade pendente; importação recusada.');
+        if(payload.acknowledgeUnverifiedSource!==true)throw new Error('Origem não reconhecida.');
+        const evidence={id:'imported-evidence-fixture',name:String(payload.name),content:JSON.stringify({origin:'user_supplied',sourceVerified:false,sourceDescription:payload.sourceDescription,text:payload.content}),sha256:'imported-fixture-sha',createdAt:now};assessment.evidence.push(evidence);return structuredClone(evidence);
+      }
+      if(action==='candidate.record'){const finding={id:'recorded-fixture',assessmentId:assessment.id,title:String(payload.title),severity:String(payload.severity),confidence:'A validar',status:'candidate',description:String(payload.description),recommendation:String(payload.recommendation),evidenceIds:payload.evidenceIds as string[],createdAt:now};state.findings.push(finding);return structuredClone(finding);}
+      if(action==='finding.validate'){state.findings[0].status='validated';state.validations.push({id:'validation-fixture',findingId:'finding-fixture',assessmentId:assessment.id,method:String(payload.method),expected:String(payload.expected),observed:String(payload.observed),evidence:[{id:'evidence-fixture',sha256:'fixture-hash'}],author:'local-user',createdAt:now});return structuredClone(state.findings[0]);}
+      if(action==='remediation.list')return {plans:remediationPlan?[structuredClone(remediationPlan)]:[]};
+      if(action==='remediation.get')return structuredClone(remediationPlan);
+      if(action==='remediation.prepare'){
+        remediationPlan={scopeRef:scope.ref,id:'remediation-fixture',projectId:'project-fixture',assessmentId:assessment.id,findingId:'finding-fixture',target:assessment.target,relativePath:payload.relativePath,filePath:'D:/Fixture/'+payload.relativePath,before:'permit = true\n',after:payload.after,baseSha256:'before-fixture-hash',afterSha256:'after-fixture-hash',retest:payload.retest,digest:'remediation-fixture-digest',createdAt:now,expiresAt:new Date(Date.now()+600000).toISOString(),status:'proposed',approvedAt:null,appliedAt:null,retestedAt:null,confirmedAt:null,evidenceId:null,passed:null,message:'Um arquivo de contrato será alterado.',limits:['Verificação de texto não comprova segurança completa.']};return structuredClone(remediationPlan);
+      }
+      if(action.startsWith('remediation.')){
+        if(!remediationPlan||payload.id!==remediationPlan.id||payload.digest!==remediationPlan.digest)throw new Error('Plano divergente.');
+        if(action==='remediation.approve'){remediationPlan.status='approved';remediationPlan.approvedAt=now;}
+        if(action==='remediation.apply'){
+          if(remediationMode==='stale'){remediationPlan.status='invalidated';remediationPlan.message='Arquivo mudou desde a revisão. Nenhuma alteração aplicada.';throw new Error(remediationPlan.message as string);}
+          remediationPlan.status='applied';remediationPlan.appliedAt=now;remediationPlan.message='Alteração aplicada; confirmação ainda pendente.';
+        }
+        if(action==='remediation.retest'){remediationPlan.retestScopeRef=scope.ref;remediationPlan.status='retested';remediationPlan.retestedAt=now;remediationPlan.evidenceId='retest-fixture';remediationPlan.passed=remediationMode!=='negative';remediationPlan.message='Condição de reteste registrada.';}
+        if(action==='remediation.confirm'){if(payload.evidenceId!=='retest-fixture')throw new Error('Evidência divergente.');remediationPlan.status='confirmed';remediationPlan.confirmedAt=now;state.findings[0].status='fixed';remediationPlan.message='Correção confirmada com limites.';}
+        return structuredClone(remediationPlan);
+      }
+      if(action==='kali.mcp.status')return {active:structuredClone(bridgeActive),recent:structuredClone(bridgeRecent),hasUnresolved:bridgeRecent.some(run=>run.status==='unknown'),capabilities:['runtime_diagnostics','hash_bytes'],executorReady:false};
+      if(action==='kali.mcp.diagnose'||action==='kali.mcp.hashEvidence'){
+        const run:BridgeRun={id:'bridge-'+action,assessmentId:assessment.id,environmentId:'environment-fixture',tool:action==='kali.mcp.diagnose'?'runtime_diagnostics':'hash_bytes',status:'completed',startedAt:now,finishedAt:now,sourceSha256:action==='kali.mcp.hashEvidence'?'fixture-hash':null,evidenceId:'bridge-evidence-fixture'};
+        if(bridgeMode==='failure'){run.status='failed';run.error='Falha de comunicação com o bridge de teste.';bridgeRecent.push(run);throw new Error(run.error);}
+        if(bridgeMode==='cancel'){run.status='running';run.finishedAt=null;bridgeActive=run;return new Promise(resolve=>{bridgeResolve=resolve;});}
+        bridgeRecent.push(run);return {run,result:action==='kali.mcp.diagnose'?{distribution:'Kali de contrato',python:'fixture',capabilities:['runtime_diagnostics','hash_bytes']}:{algorithm:'sha256',sha256:'fixture-hash',bytes:15},cleanupConfirmed:true};
+      }
+      if(action==='kali.mcp.cancel'){if(!bridgeActive)throw new Error('Nenhuma sessão ativa.');bridgeActive.status='canceling';return {requested:true,runId:bridgeActive.id,status:'canceling'};}
+      if(action==='kali.mcp.reconcile')throw new Error('Identidade da sessão não confirmada; efeito continua desconhecido.');
+      if(action==='ai.status')return {hasApiKey:providerKey,verified,checkedAt:verified?now:null,model:state.settings.model,endpoint:state.settings.endpoint};
+      if(action==='ai.key.save'){providerKey=true;state.settings.hasApiKey=true;return {saved:true};}
+      if(action==='ai.key.remove'){providerKey=false;state.settings.hasApiKey=false;return {removed:true};}
+      if(action==='ai.test'){verified=true;return {verified:true,capability:'text'};}
+      if(action==='ai.models')return {models:['fixture-model']};
+      if(action==='ai.context')return {context:{objective:assessment.objective,target:assessment.target,evidence:[]},digest:'context-fixture-digest',bytes:156,notice:'Fixture: conteúdo destinado ao provedor configurado.'};
+      if(action==='ai.history')return {messages:structuredClone(messages)};
+      if(action==='ai.ask'){if(payload.contextDigest!=='context-fixture-digest'||payload.allowRemote!==true)throw new Error('Contexto sem aprovação');messages.push({id:'user-fixture',role:'user',text:String(payload.message),createdAt:now},{id:'assistant-fixture',role:'assistant',text:'Resposta de contrato sem chamada externa.',createdAt:now});return {text:messages[1].text,usage:{},toolsExecuted:false};}
+      if(action==='backup.list')return {backups:[{id:'backup-fixture',createdAt:now,bytes:8192,verification:'requires-check'}]};
+      if(action==='retention.inventory')return {items:[],journals:[],hasUnresolved:false,blocked:false,limits:[],projectPurgeSupported:false,automaticPurge:false,retentionDays:90};
+      if(action==='backup.verify')return {verified:true,path:'D:/Fixture/backup'};
+      if(action==='backup.restore')return {id:'recovery-receipt-fixture',path:'D:/Fixture/recovery/recovery-receipt-fixture',verified:true,activated:false,message:'Restauração preparada em uma pasta separada; os dados atuais continuam ativos.'};
+      if(action==='activation.status')return {currentProfile,activeProfile:currentProfile,previousProfile,pendingPlan:structuredClone(pendingActivation),restartRequired:pendingActivation?.status==='scheduled',notice:'O processo atual conserva o perfil original.'};
+      if(action==='activation.list')return {plans:activationPlan?[structuredClone(activationPlan)]:[]};
+      if(action==='activation.plan'||action==='activation.rollbackPlan'){
+        if(action==='activation.plan'&&payload.recoveryId!=='recovery-receipt-fixture')throw new Error('Recibo da restauração divergente.');
+        activationPlan=makeActivationPlan(action==='activation.plan'?'restore':'rollback');return structuredClone(activationPlan);
+      }
+      if(action==='activation.schedule'||action==='activation.cancel'){
+        if(payload.id!==activationPlan?.id||payload.digest!==activationPlan?.digest)throw new Error('Plano de ativação divergente.');
+        if(action==='activation.schedule'&&recoveryMode==='schedule-error')throw new Error('SHA-256 da cópia divergiu. Agendamento recusado.');
+        if(action==='activation.schedule'){activationPlan!.status='scheduled';activationPlan!.message='Troca agendada; perfil atual preservado até nova abertura.';pendingActivation=activationPlan;}
+        if(action==='activation.cancel'){activationPlan!.status='canceled';pendingActivation=null;}
+        return structuredClone(activationPlan);
+      }
+      if(action==='environment.plan')return {id:'maintenance-fixture',kind:'provision',environmentId:'environment-fixture',createdAt:now,expiresAt:new Date(Date.now()+600000).toISOString(),payload:{effects:['Criar distribuição dedicada de teste'],source:'fixture',location:'test-only'},digest:'maintenance-fixture-digest',consumed:false};
+      if(action==='environment.provision'){if(payload.planId!=='maintenance-fixture'||payload.digest!=='maintenance-fixture-digest')throw new Error('Plano inválido');if(imageMode==='standard-error')throw new Error('Preparação padrão: tempo de download excedido. Nenhuma distribuição registrada.');return {status:'ready'};}
+      if(action==='environment.image.plan'){
+        if(imageMode==='mismatch')throw new Error('SHA-256 da imagem diverge do manifesto oficial. Nenhuma distribuição registrada.');
+        return {id:'image-plan-fixture',kind:'provision-image',environmentId:'environment-fixture',createdAt:now,expiresAt:new Date(Date.now()+600000).toISOString(),payload:{distro:'OpenKoda-Kali',location:'D:/Fixture/managed-kali',image:{manifestUrl:'https://fixture.example.test/SHA256SUMS',url:'https://fixture.example.test/kali.wsl',sha256:'a'.repeat(64),bytes:247857686,localFile:'D:/Fixture/cache/kali.wsl'},effects:['Importar a imagem verificada no ambiente dedicado'],provenance:'Manifesto oficial verificado pelo backend de contrato',limits:['Fixture; nenhum download real']},digest:'image-plan-fixture-digest',consumed:false};
+      }
+      if(action==='environment.image.provision'){if(payload.planId!=='image-plan-fixture'||payload.digest!=='image-plan-fixture-digest')throw new Error('Plano de imagem inválido');return {status:'ready'};}
+      if(action==='environment.repair.plan')return {id:'repair-plan-fixture',kind:'environment-repair',environmentId:'environment-fixture',createdAt:now,expiresAt:new Date(Date.now()+600000).toISOString(),payload:{distro:'OpenKoda-Kali',environmentId:'environment-fixture',registration:{guid:'managed-fixture',name:'OpenKoda-Kali',basePath:'D:/Fixture/managed-kali',version:2},stateSha256:'state-fixture-hash',maintenanceSha256:'maintenance-fixture-hash',maintenance:{action:'fixture',status:'unknown'},effects:['Encerrar somente OpenKoda-Kali e verificar o estado gerido'],limits:['Sem shutdown global e sem instalação automática de pacotes']},digest:'repair-fixture-digest',consumed:false};
+      if(action==='environment.repair.apply'){
+        if(payload.planId!=='repair-plan-fixture'||payload.digest!=='repair-fixture-digest')throw new Error('Plano de recuperação inválido.');
+        if(imageMode==='repair-error')throw new Error('Tempo de recuperação excedido. O ambiente continua degradado; revise um novo plano.');
+        return {status:'degraded',repair:{status:'completed'},repairAudit:[]};
+      }
+      throw new Error('Ação não implementada no contrato de teste: '+action);
+    }};
+  },{environmentReady,bridgeMode,remediationMode,imageMode,recoveryMode,assessmentMode});
+}
+async function calls(page:Page,action:string){return page.evaluate(name=>(window as unknown as {__contractCalls:{action:string;payload:Record<string,unknown>}[]}).__contractCalls.filter(call=>call.action===name),action);}
+
+test('plano exige revisão explícita e permite cancelar durante a operação',async({page})=>{
+  await nativeFixture(page);await page.goto('/');await page.getByText('Avaliação de contrato',{exact:true}).click();
+  await expect(page.getByRole('button',{name:'Aprovar plano',exact:true})).toBeDisabled();
+  expect(await calls(page,'plan.approve')).toEqual([]);expect(await calls(page,'plan.run')).toEqual([]);
+  await page.getByRole('checkbox',{name:'Revisei o alvo, os efeitos e os limites deste plano e autorizo esta operação.'}).check();
+  await page.getByRole('button',{name:'Aprovar plano',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Executar plano aprovado',exact:true})).toBeEnabled();
+  expect((await calls(page,'plan.approve'))[0].payload).toEqual({id:'plan-fixture',digest:'test-plan-digest'});
+  expect(await calls(page,'plan.run')).toEqual([]);
+  await page.getByRole('button',{name:'Executar plano aprovado',exact:true}).click();
+  await expect(page.locator('.detail-heading .status')).toHaveText('Em execução');
+  await expect(page.getByRole('button',{name:'Pausar',exact:true})).toHaveCount(0);
+  await expect(page.getByText('A operação atual não oferece pausa. Use Cancelar para solicitar o encerramento e aguarde a confirmação do executor.',{exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Cancelar',exact:true}).click();
+  await page.getByRole('button',{name:'Confirmar cancelamento',exact:true}).click();
+  await expect(page.getByText('Cancelada',{exact:true}).first()).toBeVisible();
+  expect(await calls(page,'assessment.cancel')).toHaveLength(1);
+});
+
+test('ambiente preparado não é apresentado como executor disponível',async({page})=>{
+  await nativeFixture(page,true);await page.goto('/');
+  await expect(page.getByRole('button',{name:'Kali preparado',exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Kali pronto para executar',exact:true})).toHaveCount(0);
+  await page.getByRole('button',{name:'Kali preparado',exact:true}).click();
+  await page.getByRole('button',{name:'Ambiente',exact:true}).click();
+  await expect(page.getByText('Ainda não liberado',{exact:true})).toBeVisible();
+});
+
+test('revisão de avaliação desconhecida exige nota e reconhecimento sem repetir execução',async({page})=>{
+  await nativeFixture(page,false,'success','none','available','none','unknown');await page.goto('/');await page.getByText('Avaliação de contrato',{exact:true}).click();
+  const panel=page.locator('.assessment-reconciliation');
+  await expect(panel).toContainText('Efeitos enviados antes da interrupção podem ter ocorrido e não são desfeitos.');
+  await expect(panel.getByRole('button',{name:'Registrar revisão da interrupção',exact:true})).toBeDisabled();
+  await panel.getByLabel('Nota sobre a interrupção',{exact:true}).fill('O processo local encerrou. Não foi possível confirmar os efeitos remotos.');
+  await expect(panel.getByRole('button',{name:'Registrar revisão da interrupção',exact:true})).toBeDisabled();
+  expect(await calls(page,'assessment.reconcile')).toEqual([]);
+  await panel.getByRole('checkbox',{name:'Entendo que efeitos já enviados não são desfeitos e que esta revisão não repete a operação.'}).check();
+  await panel.getByRole('button',{name:'Registrar revisão da interrupção',exact:true}).click();
+  await expect(page.locator('.detail-heading .status')).toHaveText('Parcial');await expect(panel).toHaveCount(0);
+  expect((await calls(page,'assessment.reconcile'))[0].payload).toEqual({id:'assessment-fixture',note:'O processo local encerrou. Não foi possível confirmar os efeitos remotos.',acknowledgeUnknownEffects:true});
+  expect(await calls(page,'plan.run')).toEqual([]);expect(await calls(page,'assessment.start')).toEqual([]);
+});
+
+test('reconciliação recusada mantém estado desconhecido e pede nova confirmação',async({page})=>{
+  await nativeFixture(page,false,'success','none','available','none','unknown-refusal');await page.goto('/');await page.getByText('Avaliação de contrato',{exact:true}).click();
+  const panel=page.locator('.assessment-reconciliation');
+  await panel.getByLabel('Nota sobre a interrupção',{exact:true}).fill('Revisão da interrupção local.');
+  await panel.getByRole('checkbox',{name:'Entendo que efeitos já enviados não são desfeitos e que esta revisão não repete a operação.'}).check();
+  await panel.getByRole('button',{name:'Registrar revisão da interrupção',exact:true}).click();
+  await expect(panel.getByRole('alert')).toContainText('Supervisor ainda ativo');
+  await expect(page.locator('.detail-heading .status')).toHaveText('Efeito desconhecido');
+  await expect(panel.getByRole('button',{name:'Registrar revisão da interrupção',exact:true})).toBeDisabled();
+  expect(await calls(page,'assessment.reconcile')).toHaveLength(1);expect(await calls(page,'plan.run')).toEqual([]);
+});
+
+async function openEvidenceImport(page:Page,mode='import'){
+  await nativeFixture(page,false,'success','none','available','none',mode);await page.goto('/');await page.getByText('Avaliação de contrato',{exact:true}).click();
+  await page.locator('summary').filter({hasText:/^Evidências$/}).click();await page.locator('summary').filter({hasText:/^Importar texto$/}).click();
+  await page.getByLabel('Nome do texto importado',{exact:true}).fill('Trecho de log declarado');await page.getByLabel('Origem declarada',{exact:true}).fill('Texto copiado manualmente do laboratório.');
+}
+
+test('importação preserva texto literal com origem não verificada e sem envio automático',async({page})=>{
+  await openEvidenceImport(page);const literal='<script>window.untrusted=true</script>\n$(Get-Process)\n  espaços preservados  ';
+  await page.getByLabel('Conteúdo textual',{exact:true}).fill(literal);
+  await expect(page.getByRole('button',{name:'Registrar texto com origem declarada',exact:true})).toBeDisabled();expect(await calls(page,'evidence.import')).toEqual([]);
+  await page.getByRole('checkbox',{name:'Declaro a origem deste texto e entendo que ela não foi verificada pelo OpenKoda.'}).check();
+  await page.getByRole('button',{name:'Registrar texto com origem declarada',exact:true}).click();
+  await expect(page.getByText('Texto registrado com origem declarada não verificada. Nenhum conteúdo foi enviado à IA.',{exact:true})).toBeVisible();
+  expect((await calls(page,'evidence.import'))[0].payload).toMatchObject({assessmentId:'assessment-fixture',content:literal,acknowledgeUnverifiedSource:true});
+  await page.locator('summary').filter({hasText:'Trecho de log declarado'}).click();
+  await expect(page.locator('.evidence-item').filter({hasText:'Trecho de log declarado'})).toContainText('"sourceVerified":false');
+  expect(await page.evaluate(()=>(window as unknown as {untrusted?:boolean}).untrusted)).toBeUndefined();
+  expect(await calls(page,'ai.ask')).toEqual([]);expect(await calls(page,'plan.run')).toEqual([]);
+});
+
+test('importação mede bytes UTF-8 e conserva recusa do backend sem repetir',async({page})=>{
+  await openEvidenceImport(page,'import-refusal');await page.getByLabel('Conteúdo textual',{exact:true}).fill('é'.repeat(17000));
+  await page.getByRole('checkbox',{name:'Declaro a origem deste texto e entendo que ela não foi verificada pelo OpenKoda.'}).check();
+  await expect(page.locator('.evidence-import').getByRole('alert')).toContainText('excede 32 KiB');
+  await expect(page.getByRole('button',{name:'Registrar texto com origem declarada',exact:true})).toBeDisabled();expect(await calls(page,'evidence.import')).toEqual([]);
+  await page.getByLabel('Conteúdo textual',{exact:true}).fill('Trecho dentro do limite.');await page.getByRole('button',{name:'Registrar texto com origem declarada',exact:true}).click();
+  await expect(page.locator('.evidence-import').getByRole('alert')).toContainText('importação recusada');
+  expect(await calls(page,'evidence.import')).toHaveLength(1);expect(await calls(page,'ai.ask')).toEqual([]);
+});
+
+test('mensagem exige contexto visível e consentimento específico',async({page})=>{
+  await nativeFixture(page);await page.goto('/');await page.getByText('Avaliação de contrato',{exact:true}).click();
+  await page.locator('summary').filter({hasText:'Conversa com a IA'}).click();
+  await page.getByLabel('Sua mensagem',{exact:true}).fill('Analise os limites da observação.');
+  await expect(page.getByRole('button',{name:'Enviar mensagem',exact:true})).toBeDisabled();
+  await chooseAiData(page.locator('.ai-conversation'));await page.getByRole('button',{name:'Revisar contexto de envio',exact:true}).click();
+  await expect(page.getByLabel('Pacote exato 1',{exact:true})).toContainText('https://fixture.example.test/');
+  await expect(page.getByRole('button',{name:'Enviar mensagem',exact:true})).toBeDisabled();
+  expect(await calls(page,'ai.ask')).toEqual([]);
+  await page.getByRole('checkbox',{name:'Autorizo o envio deste contexto e da mensagem ao provedor configurado.'}).check();
+  await page.getByRole('button',{name:'Enviar mensagem',exact:true}).click();
+  await expect(page.getByText('Resposta de contrato sem chamada externa.',{exact:true})).toBeVisible();
+  expect((await calls(page,'ai.ask'))[0].payload).toMatchObject({contextDigest:'context-fixture-digest',allowRemote:true,evidenceIds:[]});
+  await expect(page.getByRole('button',{name:'Enviar mensagem',exact:true})).toBeDisabled();
+});
+
+test('credencial sai do campo após salvar e teste do provedor é uma ação separada',async({page})=>{
+  await nativeFixture(page);await page.goto('/');await page.getByRole('button',{name:'Configurações',exact:true}).click();
+  const input=page.getByLabel('Chave de API',{exact:true});await expect(input).toHaveAttribute('type','password');
+  await input.fill('fixture-not-a-real-secret');await page.getByRole('button',{name:'Salvar credencial',exact:true}).click();
+  await expect(input).toHaveValue('');expect(await calls(page,'ai.test')).toEqual([]);
+  expect(await page.evaluate(()=>JSON.stringify(localStorage))).not.toContain('fixture-not-a-real-secret');
+  await page.getByRole('button',{name:'Testar conexão',exact:true}).click();
+  await expect(page.getByText(/Conexão verificada/)).toBeVisible();expect(await calls(page,'ai.test')).toHaveLength(1);
+});
+
+test('cópias do Kali mantêm a origem parada após inspeção, exportação e restauração',async({page})=>{
+  await nativeFixture(page,true);await page.goto('/');
+  await page.getByRole('button',{name:'Kali e ferramentas',exact:true}).click();
+  await page.getByRole('button',{name:'Manutenção',exact:true}).click();
+  const panel=page.getByRole('region',{name:'Cópias do Kali'});
+  await panel.getByRole('button',{name:'Consultar cópias do Kali'}).click();
+  await expect(panel.getByText('Parada da origem a conferir')).toBeVisible();
+  const initialProbes=(await calls(page,'environment.status')).length;
+  expect(initialProbes).toBeGreaterThan(0);
+  await panel.getByRole('button',{name:'Conferir se a origem parou'}).click();
+  await expect(panel.getByText('Exportação incompleta')).toBeVisible();
+  await panel.getByRole('button',{name:'Revisar exportação do Kali'}).click();
+  await expect(panel.getByText('TAR · arquivos da distribuição WSL',{exact:true})).toBeVisible();
+  await expect(panel).toContainText('registros e capturas presentes');
+  await expect(panel).not.toContainText('espaço livre');
+  const approval=panel.getByRole('checkbox',{name:/Revisei a origem e o destino/});
+  await expect(approval).toHaveAccessibleName(/todos os arquivos da cópia TAR/);
+  await expect(panel.getByRole('button',{name:'Exportar cópia revisada'})).toBeDisabled();
+  await approval.check();
+  await panel.getByRole('button',{name:'Exportar cópia revisada'}).click();
+  await panel.getByRole('button',{name:'Revisar restauração desta cópia'}).click();
+  await expect(approval).not.toBeChecked();
+  await expect(panel.getByText('TAR · arquivos da distribuição WSL',{exact:true})).toBeVisible();
+  await approval.check();
+  await panel.getByRole('button',{name:'Importar cópia revisada'}).click();
+  await expect(panel.getByText('Acessar os arquivos recuperados')).toBeVisible();
+  expect(await calls(page,'environment.status')).toHaveLength(initialProbes);
+  expect(await calls(page,'environment.archive.inspectStop')).toHaveLength(1);
+  expect(await calls(page,'environment.archive.export')).toHaveLength(1);
+  expect(await calls(page,'environment.archive.import')).toHaveLength(1);
+});
+
+test('cópias do Kali com detalhes ocultos permitem consultar o histórico e exigem nova revisão',async({page})=>{
+  await nativeFixture(page,true,'success','none','archive-metadata');await page.goto('/');
+  await page.getByRole('button',{name:'Kali e ferramentas',exact:true}).click();
+  await page.getByRole('button',{name:'Manutenção',exact:true}).click();
+  const panel=page.getByRole('region',{name:'Cópias do Kali'});
+  await panel.getByRole('button',{name:'Consultar cópias do Kali'}).click();
+  await expect(panel.getByText('Exportando arquivos do Kali')).toBeVisible();
+  await expect(panel.getByRole('button',{name:'Revisar restauração desta cópia'})).toHaveCount(0);
+  await expect(panel.getByText('Identidade da tentativa indisponível.')).toBeVisible();
+  await panel.getByRole('button',{name:'Revisar exportação do Kali'}).click();
+  await expect(panel.getByRole('alert')).toContainText('detalhes da operação estão ocultos');
+  await expect(panel.getByRole('button',{name:'Exportar cópia revisada'})).toHaveCount(0);
+  expect(await calls(page,'environment.archive.export')).toHaveLength(0);
+});
+
+test('cópias do Kali anteriores sem formato exibem VHDX e exigem revisão antes de restaurar',async({page})=>{
+  await nativeFixture(page,true,'success','none','archive-legacy-vhdx');
+  await page.goto('/');
+  await page.getByRole('button',{name:'Kali e ferramentas',exact:true}).click();
+  await page.getByRole('button',{name:'Manutenção',exact:true}).click();
+  const panel=page.getByRole('region',{name:'Cópias do Kali'});
+  await panel.getByRole('button',{name:'Consultar cópias do Kali'}).click();
+  await panel.getByRole('button',{name:'Revisar restauração desta cópia'}).click();
+  await expect(panel.getByText('VHDX · disco virtual',{exact:true})).toBeVisible();
+  await expect(panel).toContainText('O espaço livre pode conter dados já excluídos');
+  await expect(panel.getByRole('checkbox',{name:/conteúdo integral do disco VHDX/})).not.toBeChecked();
+  await expect(panel.getByRole('button',{name:'Importar cópia revisada'})).toBeDisabled();
+  await panel.getByRole('button',{name:'Fechar revisão da cópia'}).click();
+  expect(await calls(page,'environment.archive.import')).toHaveLength(0);
+});
+
+test('preparação do Kali só aplica o plano depois da revisão',async({page})=>{
+  await nativeFixture(page);await page.goto('/');await page.getByRole('button',{name:'Kali e ferramentas',exact:true}).click();
+  await page.getByRole('button',{name:'Ambiente',exact:true}).click();await page.getByRole('button',{name:'Revisar preparação do Kali',exact:true}).click();
+  await expect(page.getByLabel('Detalhes do plano de manutenção')).toContainText('Criar distribuição dedicada de teste');
+  await expect(page.getByRole('button',{name:'Executar operação revisada',exact:true})).toBeDisabled();expect(await calls(page,'environment.provision')).toEqual([]);
+  await page.getByRole('checkbox',{name:'Revisei o ambiente, a origem e os efeitos deste plano e autorizo sua execução.'}).check();
+  await page.getByRole('button',{name:'Executar operação revisada',exact:true}).click();
+  await expect(page.getByText('Preparação encerrada. Consulte o estado verificado do ambiente.',{exact:true})).toBeVisible();
+  expect((await calls(page,'environment.provision'))[0].payload).toEqual({planId:'maintenance-fixture',digest:'maintenance-fixture-digest'});
+});
+
+test('imagem oficial exige escolha explícita e revisão após falha da preparação padrão',async({page})=>{
+  await nativeFixture(page,false,'success','none','standard-error');await page.goto('/');await page.getByRole('button',{name:'Kali e ferramentas',exact:true}).click();
+  await page.getByRole('button',{name:'Ambiente',exact:true}).click();
+  expect(await calls(page,'environment.image.plan')).toEqual([]);
+  await page.getByRole('button',{name:'Revisar preparação do Kali',exact:true}).click();
+  await page.getByRole('checkbox',{name:'Revisei o ambiente, a origem e os efeitos deste plano e autorizo sua execução.'}).check();
+  await page.getByRole('button',{name:'Executar operação revisada',exact:true}).click();
+  await expect(page.locator('.single-page').getByRole('alert')).toContainText('tempo de download excedido');
+  expect(await calls(page,'environment.image.plan')).toEqual([]);
+  await page.getByRole('button',{name:'Preparar com imagem oficial verificada',exact:true}).click();
+  const review=page.getByLabel('Detalhes do plano de manutenção');
+  await expect(review).toContainText('https://fixture.example.test/kali.wsl');
+  await expect(review).toContainText('a'.repeat(64));await expect(review).toContainText('247857686');
+  expect((await calls(page,'environment.image.plan'))[0].payload).toEqual({});
+  expect(await calls(page,'environment.image.provision')).toEqual([]);
+  await expect(page.getByRole('button',{name:'Executar operação revisada',exact:true})).toBeDisabled();
+  await page.screenshot({path:test.info().outputPath('kali-imagem-revisao.png'),fullPage:true});
+  await page.getByRole('checkbox',{name:'Revisei o ambiente, a origem e os efeitos deste plano e autorizo sua execução.'}).check();
+  await page.getByRole('button',{name:'Executar operação revisada',exact:true}).click();
+  await expect(page.getByText('Preparação encerrada. Consulte o estado verificado do ambiente.',{exact:true})).toBeVisible();
+  expect((await calls(page,'environment.image.provision'))[0].payload).toEqual({planId:'image-plan-fixture',digest:'image-plan-fixture-digest'});
+  expect(await calls(page,'environment.provision')).toHaveLength(1);
+});
+
+test('hash divergente da imagem mantém erro e descarta aprovação de um plano anterior',async({page})=>{
+  await nativeFixture(page,false,'success','none','mismatch');await page.goto('/');await page.getByRole('button',{name:'Kali e ferramentas',exact:true}).click();
+  await page.getByRole('button',{name:'Ambiente',exact:true}).click();await page.getByRole('button',{name:'Revisar preparação do Kali',exact:true}).click();
+  await page.getByRole('checkbox',{name:'Revisei o ambiente, a origem e os efeitos deste plano e autorizo sua execução.'}).check();
+  await page.getByRole('button',{name:'Preparar com imagem oficial verificada',exact:true}).click();
+  await expect(page.locator('.single-page').getByRole('alert')).toContainText('SHA-256 da imagem diverge');
+  await expect(page.getByRole('button',{name:'Executar operação revisada',exact:true})).toHaveCount(0);
+  expect(await calls(page,'environment.image.plan')).toHaveLength(1);
+  expect(await calls(page,'environment.image.provision')).toEqual([]);expect(await calls(page,'environment.provision')).toEqual([]);
+});
+
+test('imagem alternativa não é oferecida quando o backend informa registro existente',async({page})=>{
+  await nativeFixture(page,false,'success','none','registered');await page.goto('/');await page.getByRole('button',{name:'Kali e ferramentas',exact:true}).click();
+  await page.getByRole('button',{name:'Ambiente',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'Ambiente requer atenção',exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Preparar com imagem oficial verificada',exact:true})).toHaveCount(0);
+  expect(await calls(page,'environment.image.plan')).toEqual([]);
+});
+
+async function reviewEnvironmentRepair(page:Page,mode='repair'){
+  await nativeFixture(page,false,'success','none',mode);await page.goto('/');await page.getByRole('button',{name:'Kali e ferramentas',exact:true}).click();
+  await page.getByRole('button',{name:'Ambiente',exact:true}).click();
+  expect(await calls(page,'environment.repair.plan')).toEqual([]);expect(await calls(page,'environment.repair.apply')).toEqual([]);
+  await page.getByRole('button',{name:'Revisar recuperação do Kali',exact:true}).click();
+  await expect(page.getByLabel('Detalhes do plano de manutenção')).toContainText('Encerrar somente OpenKoda-Kali');
+}
+
+test('recuperação Kali exige plano explícito e não presume executor pronto',async({page})=>{
+  await reviewEnvironmentRepair(page);
+  await expect(page.getByRole('button',{name:'Executar operação revisada',exact:true})).toBeDisabled();
+  expect(await calls(page,'environment.repair.apply')).toEqual([]);
+  await page.getByRole('checkbox',{name:'Revisei o ambiente, a origem e os efeitos deste plano e autorizo sua execução.'}).check();
+  await page.getByRole('button',{name:'Executar operação revisada',exact:true}).click();
+  await expect(page.getByText('Tentativa de recuperação registrada. Consulte o estado verificado do ambiente.',{exact:true})).toBeVisible();
+  expect((await calls(page,'environment.repair.apply'))[0].payload).toEqual({planId:'repair-plan-fixture',digest:'repair-fixture-digest'});
+  await expect(page.getByRole('button',{name:'Kali requer atenção',exact:true})).toBeVisible();
+  expect(await calls(page,'packages.apply')).toEqual([]);expect(await calls(page,'environment.provision')).toEqual([]);
+});
+
+test('recuperação Kali com erro preserva diagnóstico e impede reenviar o mesmo plano',async({page})=>{
+  await reviewEnvironmentRepair(page,'repair-error');
+  await page.getByRole('checkbox',{name:'Revisei o ambiente, a origem e os efeitos deste plano e autorizo sua execução.'}).check();
+  await page.getByRole('button',{name:'Executar operação revisada',exact:true}).click();
+  await expect(page.locator('.single-page').getByRole('alert')).toContainText('ambiente continua degradado');
+  await expect(page.getByText('Este plano já foi enviado. Consulte o diagnóstico e revise um novo plano antes de outra tentativa.',{exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Executar operação revisada',exact:true})).toBeDisabled();
+  await page.getByRole('button',{name:'Atualizar diagnóstico',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Atualizar diagnóstico',exact:true})).toBeEnabled();
+  expect(await calls(page,'environment.repair.apply')).toHaveLength(1);
+  await expect(page.getByRole('button',{name:'Kali requer atenção',exact:true})).toBeVisible();
+});
+
+async function openRecovery(page:Page,mode='success'){
+  await nativeFixture(page,false,'success','none','available',mode);await page.goto('/');
+  await page.getByRole('button',{name:'Configurações',exact:true}).click();await page.getByRole('button',{name:'Dados e privacidade',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'Ativação de uma cópia',exact:true})).toBeVisible();
+}
+async function stageAndReviewRecovery(page:Page){
+  await page.getByRole('button',{name:'Verificar backup',exact:true}).click();
+  await page.getByRole('button',{name:'Preparar restauração',exact:true}).click();
+  expect(await calls(page,'activation.plan')).toEqual([]);expect(await calls(page,'activation.schedule')).toEqual([]);
+  await page.getByRole('button',{name:'Revisar ativação desta cópia',exact:true}).click();
+  await expect(page.getByLabel('Revisão da ativação')).toContainText('Arquivos externos de projetos não são restaurados.');
+}
+
+test('ativação agenda a cópia revisada para próxima abertura e permite cancelar',async({page})=>{
+  await openRecovery(page);await stageAndReviewRecovery(page);
+  expect((await calls(page,'activation.plan'))[0].payload).toEqual({recoveryId:'recovery-receipt-fixture'});
+  await expect(page.getByRole('button',{name:'Agendar ativação revisada',exact:true})).toBeDisabled();
+  await page.getByRole('checkbox',{name:'Revisei os perfis, os arquivos e os efeitos. Autorizo esta troca na próxima abertura do aplicativo.'}).check();
+  await page.screenshot({path:test.info().outputPath('ativacao-revisao.png'),fullPage:true});
+  await page.getByRole('button',{name:'Agendar ativação revisada',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'Troca pendente',exact:true})).toBeVisible();
+  await expect(page.getByText('O processo atual conserva o perfil original.',{exact:true})).toBeVisible();
+  expect((await calls(page,'activation.schedule'))[0].payload).toEqual({id:'activation-fixture',digest:'activation-fixture-digest'});
+  expect(await calls(page,'settings.save')).toEqual([]);
+  await page.getByRole('button',{name:'Cancelar troca agendada',exact:true}).click();
+  await expect(page.getByText('Agendamento cancelado. O perfil atual foi preservado.',{exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'Troca pendente',exact:true})).toHaveCount(0);
+  expect((await calls(page,'activation.cancel'))[0].payload).toEqual({id:'activation-fixture',digest:'activation-fixture-digest'});
+});
+
+test('ativação recusada por integridade exige nova revisão sem repetir o agendamento',async({page})=>{
+  await openRecovery(page,'schedule-error');await stageAndReviewRecovery(page);
+  await page.getByRole('checkbox',{name:'Revisei os perfis, os arquivos e os efeitos. Autorizo esta troca na próxima abertura do aplicativo.'}).check();
+  await page.getByRole('button',{name:'Agendar ativação revisada',exact:true}).click();
+  await expect(page.locator('.recovery-activation').getByRole('alert')).toContainText('SHA-256 da cópia divergiu');
+  await expect(page.getByRole('button',{name:'Agendar ativação revisada',exact:true})).toBeDisabled();
+  await page.getByRole('button',{name:'Atualizar estado da recuperação',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Atualizar estado da recuperação',exact:true})).toBeEnabled();
+  expect(await calls(page,'activation.schedule')).toHaveLength(1);
+  await expect(page.getByRole('heading',{name:'Troca pendente',exact:true})).toHaveCount(0);
+});
+
+test('retorno ao perfil anterior prepara nova cópia e conserva revisão explícita',async({page})=>{
+  await openRecovery(page,'rollback');
+  expect(await calls(page,'activation.rollbackPlan')).toEqual([]);
+  await page.getByRole('button',{name:'Revisar retorno ao perfil anterior',exact:true}).click();
+  const review=page.getByLabel('Revisão da ativação');
+  await expect(review).toContainText('Perfil previous-profile-fixture');await expect(review).toContainText('Perfil new-sanitized-fixture');
+  await expect(review).toContainText('Credenciais não são transferidas.');
+  await expect(page.getByRole('button',{name:'Agendar ativação revisada',exact:true})).toBeDisabled();
+  expect(await calls(page,'activation.schedule')).toEqual([]);
+  expect((await calls(page,'activation.rollbackPlan'))[0].payload).toEqual({});
+});
+
+test('ativação bloqueada preserva aviso e só pode ser cancelada explicitamente',async({page})=>{
+  await openRecovery(page,'blocked');
+  await expect(page.getByRole('heading',{name:'Agendamento bloqueado',exact:true})).toBeVisible();
+  await expect(page.getByText('Integridade da cópia não confirmada; perfil original preservado.',{exact:true})).toBeVisible();
+  expect(await calls(page,'activation.cancel')).toEqual([]);expect(await calls(page,'activation.schedule')).toEqual([]);
+  await page.getByRole('button',{name:'Cancelar troca agendada',exact:true}).click();
+  await expect(page.getByText('Agendamento cancelado. O perfil atual foi preservado.',{exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'Agendamento bloqueado',exact:true})).toHaveCount(0);
+});
+
+test('candidato só é validado com revisão humana e evidência selecionada',async({page})=>{
+  await nativeFixture(page);await page.goto('/');await page.getByRole('button',{name:'Achados',exact:true}).click();
+  await page.getByText('Candidato de contrato',{exact:true}).click();
+  expect(await calls(page,'finding.validate')).toEqual([]);
+  await page.getByRole('button',{name:'Validar candidato',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Confirmar validação',exact:true})).toBeDisabled();
+  await page.getByLabel('Comportamento esperado',{exact:true}).fill('O cabeçalho deve declarar o contrato esperado.');
+  await page.getByLabel('Comportamento observado',{exact:true}).fill('A evidência registra o cabeçalho fixture.');
+  await page.getByRole('checkbox',{name:'Cabeçalhos de contrato',exact:true}).uncheck();
+  await expect(page.getByRole('button',{name:'Confirmar validação',exact:true})).toBeDisabled();
+  await page.getByRole('checkbox',{name:'Cabeçalhos de contrato',exact:true}).check();
+  await page.getByRole('button',{name:'Confirmar validação',exact:true}).click();
+  await expect(page.getByText('Validado',{exact:true}).first()).toBeVisible();
+  await page.getByRole('button',{name:'Histórico',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'Validação registrada',exact:true})).toBeVisible();
+  expect((await calls(page,'finding.validate'))[0].payload).toMatchObject({id:'finding-fixture',method:'human_review',evidenceIds:['evidence-fixture']});
+});
+
+test('registro manual conserva candidato separado de validação',async({page})=>{
+  await nativeFixture(page);await page.goto('/');await page.getByText('Avaliação de contrato',{exact:true}).click();
+  await page.getByRole('navigation',{name:'Seções',exact:true}).getByRole('button',{name:'Achados',exact:true}).click();
+  await page.getByRole('button',{name:'Registrar candidato',exact:true}).click();
+  await page.getByLabel('Título do candidato',{exact:true}).fill('Observação para revisão');
+  await page.getByLabel('Descrição do candidato',{exact:true}).fill('A observação requer confirmação humana.');
+  await expect(page.getByRole('button',{name:'Salvar candidato',exact:true})).toBeDisabled();
+  await page.getByRole('checkbox',{name:'Cabeçalhos de contrato',exact:true}).check();
+  await page.getByRole('button',{name:'Salvar candidato',exact:true}).click();
+  await expect(page.getByText('Observação para revisão',{exact:true})).toBeVisible();
+  expect((await calls(page,'candidate.record'))[0].payload).toMatchObject({assessmentId:'assessment-fixture',evidenceIds:['evidence-fixture'],severity:'medium'});
+  expect(await calls(page,'finding.validate')).toEqual([]);
+});
+
+test('bridge Kali limita a UI a diagnóstico e hash da evidência selecionada',async({page})=>{
+  await nativeFixture(page,true);await page.goto('/');await page.getByText('Avaliação de contrato',{exact:true}).click();
+  await page.locator('summary').filter({hasText:'Kali: diagnóstico e integridade'}).click();
+  const panel=page.locator('.kali-bridge');
+  expect(await calls(page,'kali.mcp.diagnose')).toEqual([]);expect(await calls(page,'kali.mcp.hashEvidence')).toEqual([]);
+  await panel.getByRole('button',{name:'Diagnosticar Kali nesta avaliação',exact:true}).click();
+  await expect(panel.getByLabel('Resultado do diagnóstico ou hash')).toContainText('Kali de contrato');
+  await expect(panel.getByText('Confirmada',{exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Kali preparado',exact:true})).toBeVisible();
+  await panel.getByLabel('Evidência para verificar no Kali',{exact:true}).selectOption('evidence-fixture');
+  await reviewKaliData(panel,'hash');await panel.getByRole('button',{name:'Verificar hash no Kali',exact:true}).click();
+  await expect(panel.getByLabel('Resultado do diagnóstico ou hash')).toContainText('fixture-hash');
+  expect((await calls(page,'kali.mcp.hashEvidence'))[0].payload).toMatchObject({assessmentId:'assessment-fixture',evidenceId:'evidence-fixture',acknowledgeLocalTransfer:true});
+  expect(await calls(page,'plan.run')).toEqual([]);expect(await calls(page,'ai.ask')).toEqual([]);
+  await page.screenshot({path:test.info().outputPath('kali-bridge.png'),fullPage:true});
+});
+
+test('falha do bridge fica visível e consultar estado não repete a operação',async({page})=>{
+  await nativeFixture(page,true,'failure');await page.goto('/');await page.getByText('Avaliação de contrato',{exact:true}).click();
+  await page.locator('summary').filter({hasText:'Kali: diagnóstico e integridade'}).click();
+  const panel=page.locator('.kali-bridge');
+  await panel.getByRole('button',{name:'Diagnosticar Kali nesta avaliação',exact:true}).click();
+  await expect(panel.getByRole('alert')).toContainText('Falha de comunicação com o bridge de teste.');
+  await expect(panel.getByText('Falhou',{exact:true})).toBeVisible();
+  await panel.getByRole('button',{name:'Consultar estado da conexão',exact:true}).click();
+  await expect(panel.getByRole('button',{name:'Consultar estado da conexão',exact:true})).toBeEnabled();
+  expect(await calls(page,'kali.mcp.diagnose')).toHaveLength(1);
+  await expect(panel.getByText('Concluído',{exact:true})).toHaveCount(0);
+});
+
+test('limite do hash no Kali é medido em bytes UTF-8 antes do envio',async({page})=>{
+  await nativeFixture(page,true,'oversized');await page.goto('/');await page.getByText('Avaliação de contrato',{exact:true}).click();
+  await page.locator('summary').filter({hasText:'Kali: diagnóstico e integridade'}).click();
+  const panel=page.locator('.kali-bridge');
+  await panel.getByLabel('Evidência para verificar no Kali',{exact:true}).selectOption('evidence-fixture');
+  await expect(panel.getByText(/Acima do limite de 32 KiB/)).toBeVisible();
+  await expect(panel.getByRole('button',{name:'Verificar hash no Kali',exact:true})).toBeDisabled();
+  expect(await calls(page,'kali.mcp.hashEvidence')).toEqual([]);
+});
+
+test('cancelamento do bridge permanece solicitado até o processo confirmar término',async({page})=>{
+  await nativeFixture(page,true,'cancel');await page.goto('/');await page.getByText('Avaliação de contrato',{exact:true}).click();
+  await page.locator('summary').filter({hasText:'Kali: diagnóstico e integridade'}).click();
+  const panel=page.locator('.kali-bridge');
+  await panel.getByRole('button',{name:'Diagnosticar Kali nesta avaliação',exact:true}).click();
+  await panel.getByRole('button',{name:'Solicitar cancelamento da sessão',exact:true}).click();
+  await expect(panel.getByRole('button',{name:'Cancelamento solicitado',exact:true})).toBeDisabled();
+  await expect(panel.getByText('Cancelado',{exact:true})).toHaveCount(0);
+  expect(await calls(page,'kali.mcp.cancel')).toHaveLength(1);
+  await page.evaluate(()=>(window as unknown as {__finishBridge:()=>void}).__finishBridge());
+  await expect(panel.getByText('Cancelado',{exact:true}).first()).toBeVisible();
+  await expect(panel.getByText('Confirmada',{exact:true})).toBeVisible();
+  expect(await calls(page,'kali.mcp.diagnose')).toHaveLength(1);
+});
+
+test('sessão desconhecida só tenta reconciliação após ação explícita e preserva recusa',async({page})=>{
+  await nativeFixture(page,true,'unknown-error');await page.goto('/');await page.getByText('Avaliação de contrato',{exact:true}).click();
+  await page.locator('summary').filter({hasText:'Kali: diagnóstico e integridade'}).click();
+  const panel=page.locator('.kali-bridge');
+  await expect(panel.getByText('Efeito desconhecido',{exact:true})).toBeVisible();
+  await expect(panel.getByRole('button',{name:'Diagnosticar Kali nesta avaliação',exact:true})).toBeDisabled();
+  expect(await calls(page,'kali.mcp.reconcile')).toEqual([]);
+  await panel.getByRole('button',{name:'Reconciliar sessão interrompida',exact:true}).click();
+  await expect(panel.getByRole('alert')).toContainText('Identidade da sessão não confirmada');
+  await expect(panel.getByText('Efeito desconhecido',{exact:true})).toBeVisible();
+  expect((await calls(page,'kali.mcp.reconcile'))[0].payload).toEqual({runId:'bridge-interrupted',assessmentId:'assessment-fixture'});
+  expect(await calls(page,'kali.mcp.diagnose')).toEqual([]);
+});
+
+async function prepareRemediation(page:Page,mode='success'){
+  await nativeFixture(page,false,'success',mode);await page.goto('/');
+  await page.getByRole('button',{name:'Achados',exact:true}).click();await page.getByText('Candidato de contrato',{exact:true}).click();
+  await page.getByRole('button',{name:'Correção',exact:true}).click();
+  await page.getByRole('button',{name:'Preparar correção local',exact:true}).click();
+  await page.getByLabel('Caminho relativo do arquivo',{exact:true}).fill('src/access.ts');
+  await page.getByLabel('Conteúdo proposto',{exact:true}).fill('permit = false\n');
+  await page.getByLabel('Condição do reteste',{exact:true}).selectOption('absent');
+  await page.getByLabel('Texto da condição',{exact:true}).fill('permit = true');
+  await page.getByRole('button',{name:'Preparar revisão da alteração',exact:true}).click();
+  await expect(page.getByLabel('Conteúdo original do arquivo',{exact:true})).toContainText('Conteúdo omitido');
+  await expect(page.getByLabel('Conteúdo proposto do arquivo',{exact:true})).toContainText('Conteúdo omitido');
+}
+async function approveRemediation(page:Page){
+  await page.getByRole('button',{name:'Revisar trecho armazenado',exact:true}).click();await page.getByRole('button',{name:'Confirmar leitura desta janela',exact:true}).click();await page.getByRole('checkbox',{name:'Revisei o arquivo, o conteúdo antes e depois e a condição de reteste. Autorizo esta alteração específica.'}).check();
+  await page.getByRole('button',{name:'Aprovar alteração revisada',exact:true}).click();
+}
+
+test('correção exige revisão, aplicação, reteste e confirmação humana separados',async({page})=>{
+  await prepareRemediation(page);
+  await page.screenshot({path:test.info().outputPath('correcao-revisao.png'),fullPage:true});
+  await expect(page.getByRole('button',{name:'Aprovar alteração revisada',exact:true})).toBeDisabled();
+  expect(await calls(page,'remediation.approve')).toEqual([]);expect(await calls(page,'remediation.apply')).toEqual([]);
+  await approveRemediation(page);
+  expect((await calls(page,'remediation.approve'))[0].payload).toEqual({id:'remediation-fixture',digest:'remediation-fixture-digest'});
+  expect(await calls(page,'remediation.apply')).toEqual([]);
+  await page.getByRole('button',{name:'Aplicar alteração aprovada',exact:true}).click();
+  await expect(page.locator('.detail-heading').getByText('Validado',{exact:true})).toBeVisible();
+  expect(await calls(page,'remediation.retest')).toEqual([]);
+  await page.getByRole('button',{name:'Executar reteste de texto ou hash',exact:true}).click();
+  await expect(page.getByText('Atendida',{exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Confirmar correção revisada',exact:true})).toBeDisabled();
+  expect(await calls(page,'remediation.confirm')).toEqual([]);
+  await page.getByLabel('Justificativa da confirmação',{exact:true}).fill('A condição textual revisada passou. A confirmação se limita a esse comportamento observado.');
+  await page.getByRole('checkbox',{name:'Revisei a evidência e os limites do reteste e confirmo a correção deste achado neste alcance.'}).check();
+  await page.getByRole('button',{name:'Confirmar correção revisada',exact:true}).click();
+  await expect(page.locator('.detail-heading').getByText('Corrigido',{exact:true})).toBeVisible();
+  expect((await calls(page,'remediation.confirm'))[0].payload).toMatchObject({id:'remediation-fixture',digest:'remediation-fixture-digest',evidenceId:'retest-fixture'});
+});
+
+test('arquivo alterado após revisão invalida aplicação sem repetição automática',async({page})=>{
+  await prepareRemediation(page,'stale');await approveRemediation(page);
+  await page.getByRole('button',{name:'Aplicar alteração aprovada',exact:true}).click();
+  await expect(page.locator('.remediation').getByRole('alert')).toContainText('Arquivo mudou desde a revisão');
+  await expect(page.getByText('Invalidada',{exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Atualizar histórico de correções',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Atualizar histórico de correções',exact:true})).toBeEnabled();
+  expect(await calls(page,'remediation.apply')).toHaveLength(1);expect(await calls(page,'remediation.retest')).toEqual([]);
+  await expect(page.locator('.detail-heading').getByText('Validado',{exact:true})).toBeVisible();
+});
+
+test('reteste negativo mantém achado validado e bloqueia confirmação de correção',async({page})=>{
+  await prepareRemediation(page,'negative');await approveRemediation(page);
+  await page.getByRole('button',{name:'Aplicar alteração aprovada',exact:true}).click();
+  await page.getByRole('button',{name:'Executar reteste de texto ou hash',exact:true}).click();
+  await expect(page.getByText('Não atendida',{exact:true})).toBeVisible();
+  await expect(page.getByText('A confirmação está bloqueada porque a condição não foi comprovada.',{exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Confirmar correção revisada',exact:true})).toHaveCount(0);
+  expect(await calls(page,'remediation.confirm')).toEqual([]);
+  await expect(page.locator('.detail-heading').getByText('Validado',{exact:true})).toBeVisible();
+});

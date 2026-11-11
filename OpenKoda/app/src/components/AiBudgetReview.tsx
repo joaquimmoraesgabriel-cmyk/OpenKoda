@@ -1,0 +1,32 @@
+import { useEffect, useRef, useState } from 'react';
+import { native, request } from '../api';
+import { BudgetOperation, BudgetReview, BudgetStatus, usd, validBudgetReview } from '../ai-budget';
+import { Payload, errorMessage, shortDate } from '../types';
+import { KeyValue, Notice } from './shared';
+
+export function useBudgetReview(operation:BudgetOperation,payload:Payload|null,assessmentId?:string,revision=''){
+  const [status,setStatus]=useState<BudgetStatus>();const [review,setReview]=useState<BudgetReview>();const [reviewKey,setReviewKey]=useState('');const [ack,setAck]=useState(false);const [pending,setPending]=useState(false);const [error,setError]=useState('');const pendingRef=useRef(false);
+  const key=JSON.stringify([operation,payload,revision,status?.revision,status?.epochId]);const keyRef=useRef(key);keyRef.current=key;
+  function invalidate(){setReview(undefined);setReviewKey('');setAck(false);}
+  async function refresh(){if(!native)return;try{const next=await request<BudgetStatus>('ai.budget.status',assessmentId?{assessmentId}:{});if(typeof next.enabled!=='boolean'||typeof next.degraded!=='boolean'||next.enabled&&!next.degraded&&(!next.installation||next.installation.remainingUsd===null||!next.revision||!next.epochId))throw new Error('O serviço não retornou um estado verificável do orçamento.');setStatus(next);setError('');return next;}catch(e){setStatus(undefined);setError(errorMessage(e));}}
+  useEffect(()=>{if(!native)return;void refresh();const changed=()=>{invalidate();void refresh();};window.addEventListener('openkoda-budget-changed',changed);return()=>window.removeEventListener('openkoda-budget-changed',changed);},[assessmentId]);
+  useEffect(()=>{invalidate();},[key]);
+  async function prepare(){if(!payload||pendingRef.current)return;const original=key;pendingRef.current=true;setPending(true);invalidate();setError('');try{const result=await request<{enabled:boolean;review:BudgetReview|null;notice:string}>('ai.budget.preview',{operation,payload});if(original!==keyRef.current)throw new Error('A solicitação mudou durante a estimativa. Revise novamente.');if(result.enabled){if(!validBudgetReview(result.review))throw new Error('A revisão de custo retornada não pôde ser confirmada.');setReview(result.review);setReviewKey(original);}else await refresh();}catch(e){setError(errorMessage(e));}finally{pendingRef.current=false;setPending(false);}}
+  const expired=!!review&&Date.parse(review.expiresAt)<=Date.now();const fresh=reviewKey===key&&!expired;
+  const ready=!!status&&!status.degraded&&(status.enabled?!!review&&fresh&&ack:true);
+  function authorization():Payload {if(!ready||status?.enabled&&(!review||Date.parse(review.expiresAt)<=Date.now()))throw new Error('Revise o orçamento desta solicitação antes do envio.');return status?.enabled?{budgetReview:{id:review!.id,digest:review!.digest}}:{};}
+  return {status,review,ack,setAck,pending,error,expired,fresh,ready,prepare,refresh,invalidate,authorization,payloadReady:!!payload};
+}
+export default function AiBudgetReview({budget,disabled=false}:{budget:ReturnType<typeof useBudgetReview>;disabled?:boolean}){
+  if(!native)return null;
+  return <section className="ai-budget-review review-sheet" aria-label="Revisão do orçamento da solicitação">
+    <h4>Orçamento desta solicitação</h4>{budget.error&&<div role="alert"><Notice tone="warning">{budget.error}</Notice></div>}
+    {!budget.status?<Notice>O orçamento ainda não foi confirmado. O envio fica bloqueado até consultar seu estado.</Notice>:budget.status.degraded?<Notice tone="warning">O registro de orçamento requer atenção. Nenhuma chamada paga pode ser iniciada neste estado.</Notice>:!budget.status.enabled?<p className="muted">Controle monetário local desativado. Os limites de tokens continuam válidos; esta chamada pode consumir API.</p>:<>
+      <p className="muted">Revise a reserva em USD antes de enviar. A estimativa usa os preços manuais da instalação e não é fatura nem garantia de teto de cobrança do provedor.</p>
+      <KeyValue label="Saldo estimado disponível da instalação">{usd(budget.status.installation?.remainingUsd)}</KeyValue>{budget.status.assessment&&<KeyValue label="Saldo estimado disponível da avaliação">{usd(budget.status.assessment.remainingUsd)}</KeyValue>}
+      <button type="button" className="button" disabled={disabled||budget.pending||!budget.payloadReady} onClick={()=>void budget.prepare()}>Revisar estimativa de custo</button>
+      {budget.review&&<div aria-label="Estimativa de custo revisada"><KeyValue label="Modelo e endpoint"><span className="break-word">{budget.review.model} · {budget.review.endpoint}</span></KeyValue><KeyValue label="Preço por milhão de tokens">Entrada: {usd(budget.review.rates.inputUsdPerMillion)} · saída: {usd(budget.review.rates.outputUsdPerMillion)}</KeyValue><KeyValue label="Origem do preço"><span className="preserve-lines">{budget.review.rates.sourceNote}</span></KeyValue><KeyValue label="Tokens e chamadas">{budget.review.estimatedInputTokens.toLocaleString('pt-BR')} tokens estimados de entrada · até {budget.review.maxOutputTokens.toLocaleString('pt-BR')} de saída · {budget.review.requests} chamada(s)</KeyValue><KeyValue label="Reserva estimada">{usd(budget.review.reservedUsd)}</KeyValue><KeyValue label="Saldos na revisão">Instalação: {usd(budget.review.installationRemainingUsd)} · avaliação: {usd(budget.review.assessmentRemainingUsd)}</KeyValue><KeyValue label="Validade">{shortDate(budget.review.expiresAt)}{budget.expired?' · Expirada':''}</KeyValue><Notice>{budget.review.notice}</Notice><details className="plan-details"><summary>Identidade desta revisão</summary><p className="mono break-word">{budget.review.id} · {budget.review.digest}</p><p className="mono break-word">Período: {budget.review.epochId} · política: {budget.review.policyRevision} · preços: {budget.review.priceRevision}</p>{budget.review.contextDigest&&<p className="mono break-word">Contexto: {budget.review.contextDigest}</p>}</details><label className="check-field"><input type="checkbox" checked={budget.ack} disabled={disabled||budget.pending||!budget.fresh} onChange={e=>budget.setAck(e.target.checked)}/><span>Revisei a reserva estimada em USD desta solicitação e seus limites locais.</span></label></div>}
+    </>}
+    <button type="button" className="button quiet" disabled={disabled||budget.pending} onClick={()=>{budget.invalidate();void budget.refresh();}}>Atualizar estado do orçamento</button>
+  </section>;
+}

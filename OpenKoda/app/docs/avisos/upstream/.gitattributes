@@ -1,0 +1,2 @@
+# Keep the exact publisher bytes checked by distribution-notices.py.
+*.txt -text
