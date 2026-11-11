@@ -653,6 +653,7 @@ try {
     await expect(page.getByRole('button', { name: 'Revisar contexto de envio', exact: true })).toBeDisabled();
     await expect(page.getByRole('button', { name: 'Enviar mensagem', exact: true })).toBeDisabled();
     await screenshot('05-native-context-review.png'); await conversation.click();
+    await openProjectsAndWaitForIpc();
   });
   await gate('E4-investigation-review-only', 'Synthetic local investigation plans enforce fixed roles, budget, consent and digest before any provider request', async () => {
     // This invalid sentinel is created for this isolated profile only. Never call
