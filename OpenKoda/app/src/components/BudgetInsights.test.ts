@@ -1,8 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { BudgetCharge } from '../ai-budget';
-import { usageDays } from './BudgetInsights';
+import { readableAmount, usageDays } from './BudgetInsights';
 
 const today = new Date(2026, 10, 11, 15);
+it('formata dólares com centavos e conserva frações de microdólar registradas',()=>{
+  expect(readableAmount(null)).toBe('Não informado');
+  expect(readableAmount('0.000000')).toBe('USD 0,00');
+  expect(readableAmount('900000.000001')).toBe('USD 900.000,000001');
+  expect(readableAmount('0.250000')).toBe('USD 0,25');
+});
 function charge(date:Date, input:number|null, output:number|null, state='priced'): BudgetCharge {
   return {chargeId:'fixture',model:'synthetic',createdAt:date.toISOString(),state,inputTokens:input,outputTokens:output,reservedUsd:null,assumedChargeUsd:null,pricedUsageUsd:null};
 }

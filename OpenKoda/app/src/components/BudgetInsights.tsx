@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Activity, ArrowRight, ChartNoAxesColumn, Wallet } from 'lucide-react';
 import type { BudgetStatus, BudgetCharge } from '../ai-budget';
-import { usd } from '../ai-budget';
 import { providers } from '../ai-provider';
 import { shortDate } from '../types';
 
@@ -12,9 +11,11 @@ const states: Record<string, string> = {
   unpriced:'Sem tarifa', assumed:'Débito assumido', not_dispatched:'Sem envio',
 };
 
-function readableAmount(value?: string | null) {
-  if (value == null) return 'Não informado';
-  return 'USD ' + value.replace(/(\.\d{2,5}?)0+$/, '$1').replace('.', ',');
+export function readableAmount(value?: string | null) {
+  if (value == null || !/^\d+(?:\.\d{1,6})?$/.test(value)) return 'Não informado';
+  const [whole, fraction = ''] = value.split('.');
+  const decimals = fraction.replace(/0+$/, '').padEnd(2, '0');
+  return 'USD ' + count.format(BigInt(whole)) + ',' + decimals;
 }
 
 export function BudgetOverview({status, onAnalysis, onPolicy}: {status:BudgetStatus; onAnalysis:()=>void; onPolicy:()=>void}) {
@@ -37,9 +38,9 @@ export function BudgetOverview({status, onAnalysis, onPolicy}: {status:BudgetSta
             <div className="balance-fractions"><span>{committedLabel}</span><span>Limite de {readableAmount(balance?.limitUsd)}</span></div></>}
         </div>
         <dl className="usage-balance-lines" aria-label="Composição do orçamento">
-          <div><dt><i className="series-input"/>Estimativa com tokens informados</dt><dd>{usd(balance?.pricedUsageUsd)}</dd></div>
-          <div><dt><i className="series-output"/>Reservas retidas</dt><dd>{usd(balance?.heldUsd)}</dd></div>
-          <div><dt><i className="series-assumed"/>Débitos assumidos</dt><dd>{usd(balance?.assumedChargeUsd)}</dd></div>
+          <div><dt><i className="series-input"/>Estimativa com tokens informados</dt><dd>{readableAmount(balance?.pricedUsageUsd)}</dd></div>
+          <div><dt><i className="series-output"/>Reservas retidas</dt><dd>{readableAmount(balance?.heldUsd)}</dd></div>
+          <div><dt><i className="series-assumed"/>Débitos assumidos</dt><dd>{readableAmount(balance?.assumedChargeUsd)}</dd></div>
         </dl>
       </div>
       <div className="budget-card-footer"><span>Custos pendentes <strong>{balance?.unresolvedCount ?? 'Não informado'}</strong></span>
@@ -130,9 +131,9 @@ export function BudgetAnalytics({status}: {status: BudgetStatus}) {
         <thead><tr><th scope="col">Modelo e data</th><th scope="col">Estado</th><th scope="col">Estimativa</th></tr></thead><tbody>
           {records.map(entry => <tr key={entry.chargeId}><td><details><summary>{entry.model}<small>{shortDate(entry.createdAt)}</small></summary>
             <dl className="charge-values"><dt>Registro</dt><dd>{entry.chargeId}</dd>{entry.endpoint && <><dt>Endpoint</dt><dd>{entry.endpoint}</dd></>}
-              <dt>Reserva original</dt><dd>{usd(entry.reservedUsd)}</dd><dt>Débito assumido</dt><dd>{usd(entry.assumedChargeUsd)}</dd>
+              <dt>Reserva original</dt><dd>{readableAmount(entry.reservedUsd)}</dd><dt>Débito assumido</dt><dd>{readableAmount(entry.assumedChargeUsd)}</dd>
               <dt>Tokens de entrada</dt><dd>{entry.inputTokens ?? 'Não informado'}</dd><dt>Tokens de saída</dt><dd>{entry.outputTokens ?? 'Não informado'}</dd></dl>
-          </details></td><td>{states[entry.state] ?? entry.state}</td><td>{usd(entry.pricedUsageUsd)}</td></tr>)}
+          </details></td><td>{states[entry.state] ?? entry.state}</td><td>{readableAmount(entry.pricedUsageUsd)}</td></tr>)}
         </tbody></table></div>}
     </section>
   </div>;
