@@ -58,9 +58,31 @@
   color: var(--muted);
   font-size: .875rem;
 }
-.project-detail > .tabs { margin: .5rem 0; }
-.project-detail > .content-section, .project-detail > .disclosure { max-width: 65rem; }
-.project-detail > .content-section { border-bottom: 0; }
+.project-detail > .tabs { margin: 1.25rem 0; background: var(--surface); }
+.project-detail { container-type: inline-size; }
+.project-overview {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: clamp(1rem, 1.5vw, 1.5rem);
+}
+.project-overview > :last-child { grid-column: 1 / -1; }
+@container (min-width: 44rem) {
+  .project-overview { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); }
+}
+.project-detail > :is(.content-section, .disclosure), .project-overview > .content-section {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--panel-radius);
+}
+.project-detail > :is(.content-section, .disclosure) { margin: 1rem 0; }
+.project-detail > .content-section, .project-overview > .content-section { min-width: 0; padding: clamp(1rem, 2vw, 2rem); }
+.project-overview p { overflow-wrap: anywhere; }
+.project-detail .target-row { flex-wrap: wrap; }
+.target-copy-action { display: flex; align-items: center; flex-wrap: wrap; gap: .65rem; margin-block-start: 1rem; }
+.target-copy-action .button { padding: .4rem .8rem; min-height: 2.25rem; font-size: .8125rem; }
+.target-copy-action [role="status"] { color: var(--muted); font-size: .8125rem; }
+.project-detail .detail-heading { align-items: center; flex-wrap: wrap; }
+.project-detail .target-row > div { min-width: min(12rem, 100%); }
 .project-detail .detail-heading h1 { overflow-wrap: anywhere; }
 .project-detail .form-page { max-width: 54rem; }
 .project-form-sheet .form-group { margin: 0; max-width: none; }

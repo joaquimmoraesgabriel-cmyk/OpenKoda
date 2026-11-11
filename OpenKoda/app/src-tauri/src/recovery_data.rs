@@ -65,6 +65,13 @@ fn expected(name: &str, version: i64) -> Result<Vec<(&'static str, &'static str)
         schema.push(ENVIRONMENT_SWITCH);
         if version >= 2 { schema.push(crate::environment::REMOVAL_TABLE); }
     }
+    if name=="assistant.sqlite3" && version==1 {
+        for (table,ddl) in &mut schema {match *table {
+            "vault" => *ddl=crate::ai::VAULT_SCHEMA,
+            "connection_check" => *ddl=crate::ai::CHECK_SCHEMA,
+            _ => {}
+        }}
+    }
     if name=="openkoda.sqlite3" && version>=7 {
         schema.extend(crate::work_store::WORK_SCHEMA.iter().copied().filter(|(table,_)|version>=8||*table!="work_ai_dispositions"));
         schema.extend_from_slice(crate::capture::CAPTURE_SCHEMA);
@@ -77,6 +84,7 @@ pub(super) fn verify_schema(db: &Connection, name: &str) -> Result<i64, String> 
     let valid_version = match name {
         "openkoda.sqlite3" => (1..=core::STORE_VERSION).contains(&version),
         "environment.sqlite3" | "environment-history.sqlite3" => (0..=2).contains(&version),
+        "assistant.sqlite3" => (0..=1).contains(&version),
         _ => version == 0,
     };
     if !valid_version { return Err("Versão de banco não reconhecida para a cópia de recuperação.".into()); }
@@ -279,14 +287,28 @@ mod tests {
     }
     #[test]
     fn assistant_excludes_vault_before_scanning_or_writing_and_keeps_history() {
-        let dir=tempfile::tempdir().unwrap();let source=dir.path().join("source.sqlite3");let db=Connection::open(&source).unwrap();
-        for (_,ddl) in ASSISTANT {db.execute_batch(ddl).unwrap();}
-        db.execute("INSERT INTO vault VALUES(1,?1,'revision')",[b"SYNTHETIC-CIPHER".as_slice()]).unwrap();
-        db.execute("INSERT INTO messages VALUES('id','assessment','assistant','historical text','date')",[]).unwrap();drop(db);
-        let prepared=prepare_database(&source,"assistant.sqlite3",&|text|text.contains("SYNTHETIC-CIPHER")).unwrap();let destination=dir.path().join("copy.sqlite3");prepared.write_new(&destination).unwrap();
-        let copy=Connection::open(&destination).unwrap();assert_eq!(copy.query_row("SELECT count(*) FROM vault",[],|r|r.get::<_,u32>(0)).unwrap(),0);
-        assert_eq!(copy.query_row("SELECT text FROM messages",[],|r|r.get::<_,String>(0)).unwrap(),"historical text");
-        assert!(!String::from_utf8_lossy(&fs::read(&destination).unwrap()).contains("SYNTHETIC-CIPHER"));
+        for version in [0,1] {
+            let directory=tempfile::tempdir().unwrap();
+            let source=directory.path().join("source.sqlite3");
+            let db=Connection::open(&source).unwrap();
+            for (_,ddl) in expected("assistant.sqlite3",version).unwrap(){db.execute_batch(ddl).unwrap();}
+            db.pragma_update(None,"user_version",version).unwrap();
+            for id in 1..=if version==0{1}else{3}{
+                db.execute("INSERT INTO vault VALUES(?1,?2,'revision')",rusqlite::params![id,b"SYNTHETIC-CIPHER".as_slice()]).unwrap();
+                db.execute("INSERT INTO connection_check VALUES(?1,'model','endpoint','revision','date')",[id]).unwrap();
+            }
+            db.execute("INSERT INTO messages VALUES('id','assessment','assistant','historical text','date')",[]).unwrap();
+            drop(db);
+            let prepared=prepare_database(&source,"assistant.sqlite3",&|text|text.contains("SYNTHETIC-CIPHER")).unwrap();
+            let destination=directory.path().join("copy.sqlite3");
+            prepared.write_new(&destination).unwrap();
+            let copy=Connection::open(&destination).unwrap();
+            for table in ["vault","connection_check"]{
+                assert_eq!(copy.query_row(&format!("SELECT count(*) FROM {table}"),[],|r|r.get::<_,u32>(0)).unwrap(),0);
+            }
+            assert_eq!(copy.query_row("SELECT text FROM messages",[],|r|r.get::<_,String>(0)).unwrap(),"historical text");
+            assert!(!String::from_utf8_lossy(&fs::read(&destination).unwrap()).contains("SYNTHETIC-CIPHER"));
+        }
     }
     #[test]
     fn managed_material_in_json_keys_nested_strings_and_numbers_is_rejected() {

@@ -55,14 +55,14 @@ impl AiService {
     }
     pub(super) fn operation_propose(&self,payload:Value,store:&Store,work:&mut work::AiWork<'_>)->Result<Value,String>{
         let input:Input=decode(payload)?;
-        if !input.allow_remote{return Err("Revise e autorize o contexto e a mensagem antes de solicitar uma proposta à OpenAI.".into());}
+        if !input.allow_remote{return Err("Revise e autorize o contexto e a mensagem antes de solicitar uma proposta ao provedor.".into());}
         self.validate_operation_selection(&input,store)?;
         let reviewed=self.reviewed_ai_data(store,input.data_review.as_ref(),&input.assessment_id,&input.evidence_ids,&input.context_target_refs,&input.message,"operation_proposal")?;
         if reviewed.packet.context["digest"]!=input.context_digest||serde_json::to_value(&input.allowed_adapters).map_err(failure)?!=json!(reviewed.prepared.options.allowed_adapters)||input.operation_target_ref!=reviewed.prepared.options.operation_target_ref{return Err("data_review_changed: contexto ou opções humanas mudaram.".into());}
         let context=&reviewed.packet.context;
         let scope=context_scope(context)?;
         scope::recheck_selected(store,&scope,AI_METHOD,&input.context_target_refs)?;
-        let cfg=self.config(store,true)?;let (key,revision)=self.credential()?;
+        let cfg=self.config_for(store,Some(&input.assessment_id),true)?;let provider=ProviderId::parse(&cfg.provider)?;let (key,revision)=self.provider_credential(provider)?;
         let message=&reviewed.packet.message;
         let (prompt,instructions,maximum)=&reviewed.packet.prompts[0];
         let request_id=work.direct_request_id()?;let proposal_id=model::id();
@@ -72,11 +72,11 @@ impl AiService {
         let plan_base = if can_offer_graph {
             store.work_read(|conn,state|crate::workflow::suggestion_base(conn,state,&input.assessment_id))?
         } else {None};
-        let mut audit=json!({"id":proposal_id,"requestId":request_id,"assessmentId":input.assessment_id,"contextDigest":input.context_digest,"allowedAdapters":input.allowed_adapters,"status":"pending","model":cfg.model,"endpoint":ENDPOINT,"createdAt":model::now(),"toolsExecuted":false,"requiresHumanReview":true});
+        let mut audit=json!({"id":proposal_id,"requestId":request_id,"assessmentId":input.assessment_id,"contextDigest":input.context_digest,"allowedAdapters":input.allowed_adapters,"status":"pending","model":cfg.model,"endpoint":cfg.endpoint,"createdAt":model::now(),"toolsExecuted":false,"requiresHumanReview":true});
         if let Some(target)=&input.operation_target_ref{audit["operationTargetRef"]=json!(target);}
         if !input.context_target_refs.is_empty(){audit["contextTargetRefs"]=json!(input.context_target_refs);}
         let history=format!("Solicitação de proposta de operação, sem execução: {message}\nOpções humanas: {}",serde_json::to_string(&input.allowed_adapters).map_err(failure)?);
-        let answer=self.complete_locked(&cfg.model,&key,&revision,&input.assessment_id,prompt,instructions,Some(&history),*maximum,Some(&request_id),json!({"operationProposal":audit}),input.budget_review.as_ref(),0,Some((store,&scope,&input.context_target_refs)),Some(data::DataDispatch{review:&reviewed.prepared.review,spec:&reviewed.packet.spec,acknowledge_sensitive:input.acknowledge_sensitive,admitted_context:None}),work::RequestWork::Live(work));
+        let answer=self.complete_locked(provider,&cfg.model,&key,&revision,&input.assessment_id,prompt,instructions,Some(&history),*maximum,Some(&request_id),json!({"operationProposal":audit}),input.budget_review.as_ref(),0,Some((store,&scope,&input.context_target_refs)),Some(data::DataDispatch{review:&reviewed.prepared.review,spec:&reviewed.packet.spec,acknowledge_sensitive:input.acknowledge_sensitive,admitted_context:None}),work::RequestWork::Live(work));
         let answer=match answer {
             Ok(value)=>value,
             Err(error)=>{
@@ -102,7 +102,7 @@ impl AiService {
                 return Err(format!("A resposta da solicitação {request_id} não respeitou o esquema ou as opções permitidas. Histórico e consumo preservados; nenhuma operação foi preparada."));
             }
         };
-        let mut proposal=json!({"id":proposal_id,"requestId":request_id,"responseId":answer["responseId"],"assessmentId":input.assessment_id,"contextDigest":input.context_digest,"adapter":suggestion.adapter,"rationale":suggestion.rationale,"question":suggestion.question,"model":cfg.model,"endpoint":ENDPOINT,"usage":answer["usage"],"toolsExecuted":false,"requiresHumanReview":true,"availabilityVerified":false,"notice":"Sugestão da IA dentro das opções selecionadas. Nenhum plano, aprovação ou execução foi criado. A pessoa deve preparar e revisar a operação no fluxo normal; prontidão do ambiente e parâmetros serão verificados pelo núcleo."});
+        let mut proposal=json!({"id":proposal_id,"requestId":request_id,"responseId":answer["responseId"],"assessmentId":input.assessment_id,"contextDigest":input.context_digest,"adapter":suggestion.adapter,"rationale":suggestion.rationale,"question":suggestion.question,"model":cfg.model,"endpoint":cfg.endpoint,"usage":answer["usage"],"toolsExecuted":false,"requiresHumanReview":true,"availabilityVerified":false,"notice":"Sugestão da IA dentro das opções selecionadas. Nenhum plano, aprovação ou execução foi criado. A pessoa deve preparar e revisar a operação no fluxo normal; prontidão do ambiente e parâmetros serão verificados pelo núcleo."});
         if let Some(target)=&input.operation_target_ref{proposal["operationTargetRef"]=json!(target);}
         if suggestion.plan_change.is_some() {
             if !can_offer_graph || native_observation(suggestion.adapter).is_none() {
@@ -135,7 +135,7 @@ impl AiService {
         let(prompt,instructions,maximum)=&reviewed.packet.prompts[0];
         self.data_policy.check_review(store,&reviewed.prepared.review,&reviewed.packet.spec)?;
         let _=key;
-        Ok((vec![budget::Spec::new("operation_proposal",&input.assessment_id,model,revision,prompt,instructions,*maximum)?.bind_data(&reviewed.prepared.review.digest)?],Some(input.context_digest)))
+        Ok((vec![budget::Spec::for_provider(ProviderId::from_endpoint(reviewed.packet.spec.destination_context["endpoint"].as_str().ok_or("Destino ausente.")?)?,"operation_proposal",&input.assessment_id,model,revision,prompt,instructions,*maximum)?.bind_data(&reviewed.prepared.review.digest)?],Some(input.context_digest)))
     }
 
     fn validate_operation_selection(&self,input:&Input,store:&Store)->Result<(),String>{
@@ -225,7 +225,7 @@ mod tests {
     const KEY:&str="synthetic-proposal-key-not-real-123456";
     struct Fake {calls:Mutex<Vec<String>>,responses:Mutex<VecDeque<Result<Value,String>>>}
     impl Fake {fn new(responses:Vec<Result<Value,String>>)->Arc<Self>{Arc::new(Self{calls:Mutex::new(vec![]),responses:Mutex::new(responses.into())})}}
-    impl Provider for Fake {fn response(&self,_:&str,key:&str,prompt:&str,instructions:&str,max_output:u32)->Result<Value,String>{assert_eq!(key,KEY);assert_eq!(max_output,2048);assert!(instructions.contains("Não execute"));self.calls.lock().unwrap().push(prompt.into());self.responses.lock().unwrap().pop_front().expect("Unexpected provider request")}}
+    impl Provider for Fake {fn response(&self,_:ProviderId,_:&str,key:&str,prompt:&str,instructions:&str,max_output:u32)->Result<Value,String>{assert_eq!(key,KEY);assert_eq!(max_output,2048);assert!(instructions.contains("Não execute"));self.calls.lock().unwrap().push(prompt.into());self.responses.lock().unwrap().pop_front().expect("Unexpected provider request")}}
     fn response(text:&str)->Result<Value,String>{Ok(json!({"id":"synthetic-response","status":"completed","model":"fixture-model","output":[{"type":"message","content":[{"type":"output_text","text":text}]}],"usage":{"input_tokens":17,"output_tokens":23}}))}
     struct Fixture {_dir:tempfile::TempDir,root:PathBuf,store:Store,ai:AiService,id:String,evidence:String}
     impl Fixture {
@@ -361,7 +361,7 @@ mod tests {
     }
     #[test]fn changed_context_while_provider_runs_marks_response_stale_without_preparing_work(){
         struct Blocking {start:std::sync::mpsc::Sender<()>,release:Mutex<std::sync::mpsc::Receiver<()>>,calls:AtomicUsize}
-        impl Provider for Blocking{fn response(&self,_:&str,_:&str,_:&str,_:&str,_:u32)->Result<Value,String>{self.calls.fetch_add(1,Ordering::SeqCst);self.start.send(()).unwrap();self.release.lock().unwrap().recv_timeout(Duration::from_secs(10)).unwrap();response(r#"{"adapter":"http.headers.v1","rationale":"Prior context only"}"#)}}
+        impl Provider for Blocking{fn response(&self,_:ProviderId,_:&str,_:&str,_:&str,_:&str,_:u32)->Result<Value,String>{self.calls.fetch_add(1,Ordering::SeqCst);self.start.send(()).unwrap();self.release.lock().unwrap().recv_timeout(Duration::from_secs(10)).unwrap();response(r#"{"adapter":"http.headers.v1","rationale":"Prior context only"}"#)}}
         let(tx,rx)=std::sync::mpsc::channel();let(release,wait)=std::sync::mpsc::channel();let provider=Arc::new(Blocking{start:tx,release:Mutex::new(wait),calls:AtomicUsize::new(0)});let f=Fixture::new("web",provider.clone());let input=f.input(vec!["http.headers.v1"]);
         std::thread::scope(|scope|{let task=scope.spawn(||f.call(input));rx.recv_timeout(Duration::from_secs(10)).unwrap();assert!(f.ai.save_settings(json!({"model":"another"}),&f.store).is_err());assert!(f.ai.handle("ai.key.remove",json!({}),&f.store).is_err());f.store.mutate(|s|{s.assessments[0].coverage.push("Changed during provider response".into());Ok(())}).unwrap();release.send(()).unwrap();assert!(task.join().unwrap().unwrap_err().contains("contexto mudou"));});
         let history=f.ai.handle("ai.history",json!({"assessmentId":f.id}),&f.store).unwrap();assert_eq!(history["requests"][0]["operationProposal"]["status"],"stale");assert_eq!(history["requests"][0]["status"],"completed");assert_eq!(history["messages"].as_array().unwrap().len(),2);assert!(f.store.snapshot().unwrap().plans.is_empty());assert_eq!(provider.calls.load(Ordering::SeqCst),1);

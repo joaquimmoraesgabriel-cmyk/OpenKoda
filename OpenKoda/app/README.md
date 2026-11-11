@@ -1,5 +1,15 @@
 # OpenKoda desktop
 
+**0.1.14 para Windows x64.** O ícone da instalação usa o K da barra lateral. Perfil permite escolher um nome e uma cor para o avatar e consultar a atividade das avaliações. Em Configurações, Avaliações e Achados, o menu e o conteúdo têm rolagens independentes. [Instalador local](releases/0.1.14-local-20261111/OpenKoda_0.1.14_x64-setup.exe)
+
+Em **Configurações → IA e modelos**, escolha OpenAI, OpenRouter ou Groq e salve a credencial desse provedor. Selecione um modelo do catálogo retornado pela API e use **Salvar alterações** para torná-lo o padrão. Você também pode escolher o modelo ao criar uma avaliação ou alterá-lo antes de revisar um envio. A lista pode incluir modelos de áudio, imagem e outros tipos. As operações de IA do OpenKoda usam modelos que geram texto.
+
+**Uso e orçamento** reúne o saldo do orçamento local, as reservas e as estimativas em dólares. Em **Análises**, filtre os registros por provedor e modelo. As tarifas manuais são específicas dessa combinação. Registros de preços da versão anterior continuam associados à OpenAI.
+
+Em **Projetos**, **Copiar alvo** copia o caminho ou endereço cadastrado. Esse controle, o botão **Nova avaliação** e a consulta de modelos adaptam três componentes gratuitos do Prestige UI. As animações respeitam a preferência de movimento do aplicativo e do sistema. [Componentes de origem](https://github.com/vora-aryan/Prestige-UI/tree/08f1452a8c3e92f5ba6409cde52c5e6ff7d60cb2) · [Licença incluída no instalador](docs/avisos/Prestige-UI-LICENSE.txt)
+
+A 0.1.14 lê os projetos e as configurações da 0.1.13. Para voltar à versão anterior depois de cadastrar outro provedor ou salvar uma escolha de modelo por avaliação, use um backup feito antes da atualização.
+
 **0.1.13 para Windows x64.** A Visão geral reúne a atividade das avaliações, as revisões pendentes e os projetos recentes. A barra lateral permanece acessível durante a rolagem. **Perfil** mostra os dados da área de trabalho deste dispositivo. [Instalador local sem assinatura](releases/0.1.13-local-20261111/OpenKoda_0.1.13_x64-setup.exe)
 
 Em **Projetos → Novo projeto**, use **Escolher pasta** para apontar para o código no computador. Projetos da modalidade **Arquivos** também permitem escolher um arquivo individual. A modalidade Web/API recebe uma URL e a de rede recebe o endereço autorizado.

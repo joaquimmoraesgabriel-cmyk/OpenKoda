@@ -5,17 +5,17 @@ use crate::data_policy::{AdmittedDataContext,DataCategory,DataDestination,DataOp
 use crate::data_projection::{DataRedactor, RedactedText, RedactionMode};
 use serde::{Deserialize, Serialize};
 
-pub(crate) struct AiDataRedactor { key:Option<Zeroizing<String>>, mode:RedactionMode }
+pub(crate) struct AiDataRedactor { keys:Vec<Zeroizing<String>>, mode:RedactionMode }
 impl DataRedactor for AiDataRedactor {
     fn mode(&self)->RedactionMode { self.mode.clone() }
-    fn contains_managed_secret(&self,text:&str)->bool { self.key.as_ref().is_some_and(|key|text.contains(key.as_str())) }
+    fn contains_managed_secret(&self,text:&str)->bool { self.keys.iter().any(|key|text.contains(key.as_str())) }
     fn redact(&self,text:&str)->RedactedText {
         if matches!(self.mode,RedactionMode::MetadataOnly) {
             return RedactedText{text:"[Texto indisponível: proteção local da credencial não pôde ser verificada.]".into(),changed:!text.is_empty(),secret_material:false};
         }
-        let projected=redact(text,self.key.as_deref().map(String::as_str));
+        let projected=AiService::redact_keys(text,&self.keys);
         let changed=projected!=text;
-        let secret_material=self.key.as_ref().is_some_and(|key|text.contains(key.as_str()))
+        let secret_material=self.keys.iter().any(|key|text.contains(key.as_str()))
             ||(changed&&projected.contains("[REDACTED"));
         RedactedText{text:projected,changed,secret_material}
     }
@@ -30,8 +30,8 @@ impl AiService {
         let state=store.snapshot().unwrap();let assessment=state.assessments.iter().find(|a|a.id==aid).unwrap();let pid=assessment.project_id.clone();
         crate::data_policy::test_support::authorize(store,service,aid,&redactor,&external,None).unwrap();
         let state=store.snapshot().unwrap();
-        if let Some(reference)=state.credential_references.iter().rev().find(|r|r.project_id==pid&&r.kind==crate::credential_refs::CredentialKind::ProviderReference&&!r.revoked){return reference.reference_id.clone();}
-        let identity=self.provider_identity(store).unwrap();
+        let identity=self.identity_for(store,Some(aid)).unwrap();
+        if let Some(reference)=state.credential_references.iter().rev().find(|r|r.project_id==pid&&r.provider_slot_ref.as_ref().is_some_and(|p|p.slot_id==identity.slot_id)&&!r.revoked){return reference.reference_id.clone();}
         let result=service.handle("credential.reference.create",json!({"projectId":pid,"expectedStateDigest":crate::credential_refs::state_digest(&state,&pid),"idempotencyKey":model::id(),"kind":"provider_reference","label":"Synthetic provider reference","purpose":"Offline fake provider tests","providerSlotId":identity.slot_id}),store,&redactor,&external,Some(&identity)).unwrap();
         result["reference"]["id"].as_str().or_else(||result["reference"]["referenceId"].as_str()).expect("reference identity").into()
     }
@@ -51,7 +51,7 @@ mod tests {
     use std::sync::atomic::{AtomicUsize,Ordering};
     const KEY:&str="synthetic-data-policy-key-not-real-555";
     struct Fake{calls:AtomicUsize,prompts:Mutex<Vec<String>>}
-    impl Provider for Fake{fn response(&self,_:&str,key:&str,prompt:&str,_:&str,_:u32)->Result<Value,String>{assert_eq!(key,KEY);self.calls.fetch_add(1,Ordering::SeqCst);self.prompts.lock().unwrap().push(prompt.into());Ok(json!({"id":"synthetic-data-response","status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":"Synthetic bounded response"}]}],"usage":{"input_tokens":3,"output_tokens":4}}))}}
+    impl Provider for Fake{fn response(&self,_:ProviderId,_:&str,key:&str,prompt:&str,_:&str,_:u32)->Result<Value,String>{assert_eq!(key,KEY);self.calls.fetch_add(1,Ordering::SeqCst);self.prompts.lock().unwrap().push(prompt.into());Ok(json!({"id":"synthetic-data-response","status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":"Synthetic bounded response"}]}],"usage":{"input_tokens":3,"output_tokens":4}}))}}
     struct Fixture{_dir:tempfile::TempDir,store:Store,ai:AiService,fake:Arc<Fake>,aid:String}
     impl Fixture{
         fn new()->Self{
@@ -110,7 +110,7 @@ mod tests {
     }
     #[test]fn data_revocation_during_provider_keeps_first_charge_and_blocks_next_perspective(){
         struct Blocking{calls:AtomicUsize,started:std::sync::mpsc::Sender<()>,release:Mutex<std::sync::mpsc::Receiver<()>>}
-        impl Provider for Blocking{fn response(&self,_:&str,_:&str,_:&str,_:&str,_:u32)->Result<Value,String>{self.calls.fetch_add(1,Ordering::SeqCst);self.started.send(()).unwrap();self.release.lock().unwrap().recv_timeout(Duration::from_secs(10)).unwrap();Ok(json!({"id":"inflight-data-response","status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":"Result admitted before revocation"}]}],"usage":{"input_tokens":7,"output_tokens":8}}))}}
+        impl Provider for Blocking{fn response(&self,_:ProviderId,_:&str,_:&str,_:&str,_:&str,_:u32)->Result<Value,String>{self.calls.fetch_add(1,Ordering::SeqCst);self.started.send(()).unwrap();self.release.lock().unwrap().recv_timeout(Duration::from_secs(10)).unwrap();Ok(json!({"id":"inflight-data-response","status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":"Result admitted before revocation"}]}],"usage":{"input_tokens":7,"output_tokens":8}}))}}
         let mut f=Fixture::new();let(started,ready)=std::sync::mpsc::channel();let(release,wait)=std::sync::mpsc::channel();let provider=Arc::new(Blocking{calls:AtomicUsize::new(0),started,release:Mutex::new(wait)});
         f.ai=AiService::with_provider(f.store.root.clone(),provider.clone()).unwrap();
         let input=f.ai.test_data_input(&f.store,"investigation",json!({"assessmentId":f.aid,"evidenceIds":[],"message":"Independent synthetic views","perspectives":["evidence","counterevidence"],"maxOutputTokensPerRequest":512,"maxTotalTokens":100000}));
@@ -178,23 +178,34 @@ impl AiService {
     /// Snapshot a redactor without the inference lease. Status, cancellation
     /// and revocation remain reachable during a provider call or vault failure.
     pub(crate) fn data_redactor(&self)->AiDataRedactor {
-        let available=self.db.lock().ok().and_then(|db|db.query_row("SELECT revision FROM vault WHERE id=1",[],|r|r.get::<_,String>(0)).optional().ok());
-        match available {
-            Some(None)=>AiDataRedactor{key:None,mode:RedactionMode::NoCredentialConfigured},
-            Some(Some(_))=>match self.credential(){
-                Ok((key,_))=>AiDataRedactor{key:Some(key),mode:RedactionMode::Ready},
-                Err(_)=>AiDataRedactor{key:None,mode:RedactionMode::MetadataOnly},
-            },
-            None=>AiDataRedactor{key:None,mode:RedactionMode::MetadataOnly},
+        match self.all_keys() {
+            Ok(keys)=>{let mode=if keys.is_empty(){RedactionMode::NoCredentialConfigured}else{RedactionMode::Ready};AiDataRedactor{keys,mode}},
+            Err(_)=>AiDataRedactor{keys:vec![],mode:RedactionMode::MetadataOnly}
         }
     }
-
-    pub(crate) fn provider_identity(&self,store:&Store)->Result<crate::credential_refs::ProviderCredentialIdentity,String>{
-        let state=store.snapshot()?;
-        let slot=crate::credential_refs::provider_slot(&state).ok_or("credential_reference_changed: configure a conexão ou crie a referência de provedor.")?;
-        let cfg=&state.settings;
+    pub(crate) fn provider_identities(&self,store:&Store)->Result<Vec<crate::credential_refs::ProviderCredentialIdentity>,String>{
+        let snapshot=store.snapshot()?;
         let db=self.db.lock().map_err(failure)?;
-        let revision:Option<String>=db.query_row("SELECT revision FROM vault WHERE id=1",[],|r|r.get(0)).optional().map_err(failure)?;
+        snapshot.provider_slots.iter().map(|slot|{
+            let p=ProviderId::parse(&slot.provider)?;
+            let row:Option<(String,Option<String>)>=db.query_row(
+                "SELECT v.revision,c.model FROM vault v LEFT JOIN connection_check c ON c.id=v.id AND c.revision=v.revision AND c.endpoint=?2 WHERE v.id=?1",
+                params![p.slot(),p.endpoint()],|r|Ok((r.get(0)?,r.get(1)?))).optional().map_err(failure)?;
+            let available=row.is_some();
+            let (revision,checked_model)=row.unwrap_or_default();
+            let model=if snapshot.settings.provider==p.id(){snapshot.settings.model.clone()}else{checked_model.clone().unwrap_or_default()};
+            Ok(crate::credential_refs::ProviderCredentialIdentity{slot_id:slot.id.clone(),revision,available,connection_verified:checked_model.as_ref()==Some(&model),model,endpoint:p.endpoint().into()})
+        }).collect()
+    }
+    pub(super) fn identity_for(&self,store:&Store,assessment:Option<&str>)->Result<crate::credential_refs::ProviderCredentialIdentity,String>{
+        self.identity_in(&store.snapshot()?,assessment)
+    }
+    fn identity_in(&self,state:&model::Snapshot,assessment:Option<&str>)->Result<crate::credential_refs::ProviderCredentialIdentity,String>{
+        let cfg=Self::config_in(state,assessment,false)?;
+        let provider=ProviderId::parse(&cfg.provider)?;
+        let slot=crate::credential_refs::provider_slot(state,provider).ok_or("credential_reference_changed: configure a credencial deste provedor.")?;
+        let revision=self.revision(provider)?;
+        let db=self.db.lock().map_err(failure)?;
         let verified:bool=db.query_row("SELECT EXISTS(SELECT 1 FROM connection_check WHERE model=?1 AND endpoint=?2 AND revision=?3)",params![cfg.model,cfg.endpoint.trim_end_matches('/'),revision.as_deref().unwrap_or("")],|r|r.get(0)).map_err(failure)?;
         Ok(crate::credential_refs::ProviderCredentialIdentity{slot_id:slot.id.clone(),revision:revision.clone().unwrap_or_default(),available:revision.is_some(),model:cfg.model.clone(),endpoint:cfg.endpoint.trim_end_matches('/').into(),connection_verified:verified})
     }
@@ -207,7 +218,9 @@ impl AiService {
         let _lease=self.inference.try_lock().map_err(|_|"Aguarde a inferência para revisar o pacote de dados.")?;
         let packet=self.build_ai_packet(store,context_input,&message,options.clone())?;
         let review=self.data_policy.prepare_use(store,packet.spec.clone())?;
-        let public=json!({"context":packet.context["context"],"digest":packet.context["digest"],"bytes":packet.prompts.iter().map(|p|p.0.len()).sum::<usize>(),"endpoint":ENDPOINT,"sourceFilesIncluded":packet.context["sourceFilesIncluded"],"dataReview":if review.decision.allowed{json!(review.review_ref)}else{Value::Null},"packetPreview":{"schema":"openkoda.ai-packet-preview.v1","operation":options.operation,"model":packet.spec.destination_context["model"],"endpoint":ENDPOINT,"requestEndpoint":format!("{ENDPOINT}/responses"),"prompts":packet.prompts.iter().enumerate().map(|(i,(prompt,instructions,max))|json!({"index":i,"perspective":options.perspectives.get(i),"prompt":prompt,"instructions":instructions,"maxOutputTokens":max})).collect::<Vec<_>>(),"selection":packet.spec.selection,"policyVersions":review.decision.versions,"credentialRef":packet.spec.credential,"requiresSensitiveConfirmation":review.requires_sensitive_confirmation},"canSend":review.decision.allowed,"reasonCodes":review.decision.reason_codes});
+        let endpoint=packet.spec.destination_context["endpoint"].as_str().ok_or("Destino da revisão ausente.")?;
+        let provider=ProviderId::from_endpoint(endpoint)?;
+        let public=json!({"context":packet.context["context"],"digest":packet.context["digest"],"bytes":packet.prompts.iter().map(|p|p.0.len()).sum::<usize>(),"endpoint":endpoint,"sourceFilesIncluded":packet.context["sourceFilesIncluded"],"dataReview":if review.decision.allowed{json!(review.review_ref)}else{Value::Null},"packetPreview":{"schema":"openkoda.ai-packet-preview.v1","operation":options.operation,"model":packet.spec.destination_context["model"],"endpoint":endpoint,"requestEndpoint":provider.inference_url(),"prompts":packet.prompts.iter().enumerate().map(|(i,(prompt,instructions,max))|json!({"index":i,"perspective":options.perspectives.get(i),"prompt":prompt,"instructions":instructions,"maxOutputTokens":max})).collect::<Vec<_>>(),"selection":packet.spec.selection,"policyVersions":review.decision.versions,"credentialRef":packet.spec.credential,"requiresSensitiveConfirmation":review.requires_sensitive_confirmation},"canSend":review.decision.allowed,"reasonCodes":review.decision.reason_codes});
         if review.decision.allowed {
             let metadata_bytes=serde_json::to_vec(&packet.spec).map_err(failure)?.len().saturating_add(serde_json::to_vec(&options).map_err(failure)?.len()).saturating_add(1024);
             let prepared=PreparedAiData{review:review.review_ref.clone(),options,spec:packet.spec,assessment_id:packet.context["context"]["assessmentId"].as_str().ok_or("Avaliação ausente do pacote.")?.into(),context_digest:packet.context["digest"].as_str().unwrap_or_default().into(),raw_message_sha256:packet.raw_message_sha256,projected_message_sha256:digest(&packet.message),metadata_bytes};
@@ -238,8 +251,9 @@ impl AiService {
         let assessment=state.assessments.iter().find(|a|a.id==input.assessment_id).ok_or("Avaliação não encontrada.")?;
         let reference=scope::current_ref(&state,&assessment.id)?.ok_or("scope_unreviewed: revise o escopo antes do pacote.")?;
         scope::check_selected_work(&state,&assessment.id,AI_METHOD,Some(&reference),&input.context_target_refs)?;
-        let identity=self.provider_identity(store)?;
+        let identity=self.identity_in(&state,Some(&assessment.id))?;
         if !identity.available{return Err("Configure a credencial do provedor antes da revisão de envio.".into());}
+        if !crate::ai_provider::valid_model(&identity.model){return Err("Selecione um modelo antes da revisão de envio.".into());}
         let credential=crate::credential_refs::resolve_use(&state,&assessment.project_id,&options.credential_reference_id,&identity)?;
         let redactor=self.data_redactor();
         if matches!(redactor.mode(),RedactionMode::MetadataOnly){return Err("data_redactor_unavailable: proteção da credencial indisponível.".into());}

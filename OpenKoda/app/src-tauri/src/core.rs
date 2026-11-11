@@ -281,6 +281,7 @@ impl Store {
         let key = payload.as_object_mut().and_then(|fields| fields.remove("idempotencyKey"))
             .map(decode::<String>).transpose()?;
         let mut input: AssessmentInput = decode(payload)?;
+        if let Some(selection) = &input.ai_selection { selection.validate()?; }
         let intent = if let Some(key) = key {
             // The typed shape fixes JSON field order, including the scope window.
             // Methods form a set. Duplicates are still rejected by initialize.
@@ -321,7 +322,7 @@ impl Store {
             let mut assessment = Assessment { id:assessment_id.clone(), project_id:input.project_id.clone(), title, kind:input.kind, target, objective,
                 status:"draft".into(), created_at:now(), updated_at:now(),
                 events:vec![event("Rascunho criado. Nenhuma operação foi iniciada.", "info")],
-                evidence:vec![], coverage:vec![], summary:String::new(), scope_id:None };
+                evidence:vec![], coverage:vec![], summary:String::new(), scope_id:None, ai_selection:input.ai_selection };
             crate::scope::initialize(s,&mut assessment,input.scope.as_ref())?;
             s.assessments.push(assessment.clone());
             if let Some((key, digest)) = &intent {
@@ -557,6 +558,7 @@ pub fn validate_snapshot(s:&Snapshot)->Result<(),String>{
     let mut all_evidence_ids=std::collections::HashSet::new();
     let mut event_ids=std::collections::HashSet::new();
     for a in &s.assessments {
+        if let Some(selection)=&a.ai_selection {selection.validate()?;}
         valid_id(&a.id)?;
         let project=s.projects.iter().find(|p|p.id==a.project_id).ok_or("Avaliação sem projeto.")?;
         if !ids.insert(&a.id) || (!crate::scope_targets::is_combined(s,&a.id) && (a.kind!=project.kind || a.target!=project.target)) {return Err("Vínculo ou escopo de avaliação inválido no armazenamento.".into());}
@@ -624,7 +626,7 @@ struct IdInput { id:String }
 struct ProjectInput { name:String,kind:String,target:String,#[serde(default)]description:String }
 #[derive(Deserialize, serde::Serialize)]
 #[serde(rename_all="camelCase",deny_unknown_fields)]
-struct AssessmentInput { project_id:String,title:String,kind:String,target:String,objective:String,#[serde(default)]scope:Option<crate::scope::CreationScope> }
+struct AssessmentInput { project_id:String,title:String,kind:String,target:String,objective:String,#[serde(default)]scope:Option<crate::scope::CreationScope>, #[serde(default,skip_serializing_if="Option::is_none")] ai_selection:Option<crate::ai_provider::AiSelection> }
 #[derive(Deserialize)]
 #[serde(rename_all="camelCase",deny_unknown_fields)]
 struct EvidenceInput {assessment_id:String,name:String,source_description:String,content:String,acknowledge_unverified_source:bool,#[serde(default)]context_target_refs:Vec<crate::scope_targets::ScopeTargetRef>}

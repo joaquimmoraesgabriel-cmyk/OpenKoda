@@ -1,6 +1,7 @@
 pub mod core;
 mod close_guard;
 pub mod model;
+pub mod ai_provider;
 pub mod ai;
 pub mod environment;
 pub mod executor;
@@ -120,8 +121,11 @@ async fn request(
             ensure_purge_access(&services,&request.action)?;
             if data_policy::DataPolicyService::mutates(&request.action)&&!matches!(request.action.as_str(),"data.policy.revoke"|"credential.reference.revoke"|"data.review.cancel"|"data.session.select"){allow_new_work(&services)?;}
             let redactor=services.ai.data_redactor();
-            let provider=services.ai.provider_identity(&store).ok();
-            return services.data_policy.handle(&request.action,request.payload,&store,&redactor,&data_host::JournalResolver{store:&store},provider.as_ref());
+            if credential_refs::supports(&request.action){
+                let providers=services.ai.provider_identities(&store)?;
+                return credential_refs::handle(&request.action,request.payload,&store,&redactor,&providers);
+            }
+            return services.data_policy.handle(&request.action,request.payload,&store,&redactor,&data_host::JournalResolver{store:&store},None);
         }
         if request.action=="kali.data.prepare"{
             let _lease=services.environment_gate.try_read().map_err(|_|"Revisão de dados indisponível durante manutenção.")?;
@@ -333,10 +337,9 @@ async fn request(
         if matches!(action.as_str(),"assessment.create"|"evidence.import"){allow_new_work(&services)?;}
         let mut result=if action=="snapshot"{
             if !request.payload.as_object().is_some_and(|payload|payload.is_empty()){return Err("Esta ação não recebe campos.".into());}
-            serde_json::json!({"settings":{"hasApiKey":services.ai.has_key()}})
+            serde_json::json!({"settings":{"hasApiKey":services.ai.has_selected_key(&store)}})
         }else if action=="settings.save"{services.ai.save_settings(request.payload,&store)?}else{store.handle(request)?};
-        if action=="snapshot" { result["settings"]["hasApiKey"]=serde_json::Value::Bool(services.ai.has_key()); }
-        if action=="settings.save" { result["hasApiKey"]=serde_json::Value::Bool(services.ai.has_key()); }
+        if action=="settings.save" { result["hasApiKey"]=serde_json::Value::Bool(services.ai.has_selected_key(&store)); }
         Ok(result)
         })();
         if work_runtime::should_wake(&public_action,result.is_ok()){work_runtime::wake(services.clone(),store.clone());}

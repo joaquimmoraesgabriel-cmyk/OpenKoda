@@ -1,4 +1,4 @@
-//! Host-only OpenAI connection and per-assessment context. Model output has no execution authority.
+//! Host-only provider connection and per-assessment context. Model output has no execution authority.
 use crate::{core::Store, model::{self, Finding}};
 use reqwest::blocking::Client;
 use rusqlite::{params, Connection, OptionalExtension};
@@ -9,6 +9,7 @@ use std::{io::Read, path::PathBuf, sync::{Arc, Mutex}, time::Duration};
 use zeroize::Zeroizing;
 use crate::scope::{self, ScopeRef};
 use crate::scope_targets::{self, ScopeTargetRef};
+use crate::ai_provider::{ProviderId,AiSelection};
 const AI_METHOD:&str="ai.remote-review.v1";
 
 #[path = "investigation.rs"]
@@ -32,23 +33,45 @@ pub(crate) fn validate_investigation_record(value:&Value)->Result<(),String>{inv
 #[cfg(all(test,windows))]
 #[path = "combined_ai_tests.rs"]
 mod combined_tests;
+#[cfg(all(test,windows))]
+#[path="provider_selection_tests.rs"]
+mod provider_selection_tests;
 
+#[cfg(test)]
 const ENDPOINT: &str = "https://api.openai.com/v1";
 const MAX_RESPONSE: u64 = 2 * 1024 * 1024;
 const MAX_CONTEXT: usize = 48 * 1024;
 
 pub struct AiService { db: Mutex<Connection>, inference: Mutex<()>, provider:Arc<dyn Provider>, investigation_active:Mutex<Option<investigation::Active>>, budget:budget::Ledger, data_policy:Arc<crate::data_policy::DataPolicyService>, data_reviews:Mutex<std::collections::HashMap<String,data::PreparedAiData>>, local_closure_reviews:Mutex<std::collections::HashMap<String,local_closure::PreparedClosure>>, arbiter:Arc<crate::work_supervisor::WorkArbiter> }
 
-trait Provider:Send+Sync {
-    fn response(&self,model:&str,key:&str,prompt:&str,instructions:&str,max_output_tokens:u32)->Result<Value,String>;
+pub(crate) const VAULT_SCHEMA:&str="CREATE TABLE vault (id INTEGER PRIMARY KEY CHECK(id IN (1,2,3)), cipher BLOB NOT NULL, revision TEXT NOT NULL)";
+pub(crate) const CHECK_SCHEMA:&str="CREATE TABLE connection_check (id INTEGER PRIMARY KEY CHECK(id IN (1,2,3)), model TEXT NOT NULL, endpoint TEXT NOT NULL, revision TEXT NOT NULL, checked TEXT NOT NULL)";
+
+fn expand_provider_slots(tx:&rusqlite::Transaction<'_>)->Result<(),String>{
+    let version:i64=tx.query_row("PRAGMA user_version",[],|r|r.get(0)).map_err(failure)?;
+    if version==1{return Ok(());}
+    if version!=0{return Err("Versão do vault de IA não suportada.".into());}
+    tx.execute_batch("ALTER TABLE vault RENAME TO old_vault; ALTER TABLE connection_check RENAME TO old_check;").map_err(failure)?;
+    tx.execute_batch(VAULT_SCHEMA).map_err(failure)?;
+    tx.execute_batch(CHECK_SCHEMA).map_err(failure)?;
+    tx.execute_batch("INSERT INTO vault SELECT * FROM old_vault; INSERT INTO connection_check SELECT * FROM old_check;
+        DROP TABLE old_vault; DROP TABLE old_check; PRAGMA user_version=1;").map_err(failure)
 }
-struct OpenAiProvider;
-impl Provider for OpenAiProvider {
-    fn response(&self,model:&str,key:&str,prompt:&str,instructions:&str,max_output_tokens:u32)->Result<Value,String>{
-        let response=client()?.post(format!("{ENDPOINT}/responses")).bearer_auth(key).json(&json!({
-            "model":model,"instructions":instructions,"input":[{"role":"user","content":prompt}],"store":false,"max_output_tokens":max_output_tokens
-        })).send().map_err(network_error)?;
-        read_response(response)
+
+trait Provider:Send+Sync {
+    fn response(&self,provider:ProviderId,model:&str,key:&str,prompt:&str,instructions:&str,max_output_tokens:u32)->Result<Value,String>;
+    fn models(&self,provider:ProviderId,key:&str)->Result<Vec<String>,String>{
+        let response=client()?.get(provider.catalog_url()).bearer_auth(key).send().map_err(network_error)?;
+        let body=read_bounded_response(response,16*1024*1024)?;
+        crate::ai_provider::catalog(&body)
+    }
+}
+struct HttpProvider;
+impl Provider for HttpProvider {
+    fn response(&self,provider:ProviderId,model:&str,key:&str,prompt:&str,instructions:&str,max_output_tokens:u32)->Result<Value,String>{
+        let body=provider.body(model,prompt,instructions,max_output_tokens);
+        let response=client()?.post(provider.inference_url()).bearer_auth(key).json(&body).send().map_err(network_error)?;
+        provider.normalize(read_bounded_response(response,MAX_RESPONSE)?)
     }
 }
 
@@ -68,7 +91,13 @@ struct AskInput { assessment_id: String, evidence_ids: Vec<String>, context_dige
 struct TestInput {#[serde(default)]budget_review:Option<budget::Consent>}
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct KeyInput { key: String }
+struct KeyInput { key: String, provider:Option<ProviderId> }
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ProviderInput { provider:Option<ProviderId> }
+#[derive(Deserialize)]
+#[serde(rename_all="camelCase",deny_unknown_fields)]
+struct AssessmentSelection { assessment_id:String, ai_selection:Option<AiSelection> }
 #[derive(Deserialize)]
 #[serde(rename_all="camelCase", deny_unknown_fields)]
 struct CandidateInput { assessment_id: String, title: String, description: String, severity: String, evidence_ids: Vec<String>, #[serde(default)] recommendation: String }
@@ -89,10 +118,10 @@ pub(crate) fn request_unknown_acknowledged(details:&str)->bool {
 
 impl AiService {
     pub fn new(root: PathBuf) -> Result<Self,String> {
-        Self::open_profile(root,Arc::new(OpenAiProvider),budget::Ledger::profile_only())
+        Self::open_profile(root,Arc::new(HttpProvider),budget::Ledger::profile_only())
     }
     pub fn new_with_budget_root(root:PathBuf,installation_root:PathBuf)->Result<Self,String>{
-        Self::open_profile(root,Arc::new(OpenAiProvider),budget::Ledger::open(&installation_root))
+        Self::open_profile(root,Arc::new(HttpProvider),budget::Ledger::open(&installation_root))
     }
     fn with_provider(root:PathBuf,provider:Arc<dyn Provider>)->Result<Self,String>{
         let ledger=budget::Ledger::open(&root);Self::open_profile(root,provider,ledger)
@@ -118,11 +147,29 @@ impl AiService {
     pub fn with_data_policy(mut self, service:Arc<crate::data_policy::DataPolicyService>)->Self { self.data_policy=service; self }
 
     pub fn supports(action: &str) -> bool {
-        matches!(action, "ai.status"|"ai.key.save"|"ai.key.remove"|"ai.models"|"ai.test"|"ai.context"|"ai.ask"|"ai.history"|"ai.request.reconcile"|"candidate.record")||investigation::supports(action)||planning::supports(action)||budget::supports(action)
+        matches!(action, "ai.selection.save"|"ai.status"|"ai.key.save"|"ai.key.remove"|"ai.models"|"ai.test"|"ai.context"|"ai.ask"|"ai.history"|"ai.request.reconcile"|"candidate.record")||investigation::supports(action)||planning::supports(action)||budget::supports(action)
     }
 
-    pub fn has_key(&self) -> bool {
-        self.db.lock().ok().and_then(|db| db.query_row("SELECT 1 FROM vault WHERE id=1", [], |_| Ok(())).optional().ok()).flatten().is_some()
+    fn selected_provider(&self,requested:Option<ProviderId>,store:&Store)->Result<ProviderId,String>{
+        match requested {Some(p)=>Ok(p),None=>ProviderId::parse(&self.config_for(store,None,false)?.provider)}
+    }
+    fn revision(&self,provider:ProviderId)->Result<Option<String>,String>{
+        self.db.lock().map_err(failure)?.query_row("SELECT revision FROM vault WHERE id=?1",[provider.slot()],|r|r.get(0)).optional().map_err(failure)
+    }
+    pub fn has_selected_key(&self,store:&Store)->bool{
+        self.selected_provider(None,store).and_then(|p|self.revision(p)).ok().flatten().is_some()
+    }
+    fn all_keys(&self)->Result<Vec<Zeroizing<String>>,String>{
+        let db=self.db.lock().map_err(failure)?;
+        let mut q=db.prepare("SELECT cipher FROM vault ORDER BY id").map_err(failure)?;
+        let keys=q.query_map([],|r|r.get::<_,Vec<u8>>(0)).map_err(failure)?;
+        let mut keys=keys.map(|cipher|Self::decrypt_key(&cipher.map_err(failure)?)).collect::<Result<Vec<_>,String>>()?;
+        keys.sort_by_key(|key|std::cmp::Reverse(key.len()));
+        Ok(keys)
+    }
+    fn redact_keys(text:&str,keys:&[Zeroizing<String>])->String{
+        let result=keys.iter().fold(text.to_owned(),|s,key|s.replace(key.as_str(),"[REDACTED]"));
+        redact(&result,None)
     }
 
     /// Provider configuration shares the dispatch lease with inference and key
@@ -136,19 +183,19 @@ impl AiService {
     /// Sharing this lease prevents credential rotation during preview/capture.
     pub(crate) fn with_local_redactor<T>(&self,operation:impl FnOnce(&dyn Fn(&str)->String)->Result<T,String>)->Result<T,String>{
         let _lease=self.inference.try_lock().map_err(|_|"Aguarde a solicitação de IA antes de revisar uma captura local.")?;
-        let key=if self.has_key(){Some(self.credential()?.0)}else{None};
-        operation(&|text|redact(text,key.as_deref().map(String::as_str)))
+        let keys=self.all_keys()?;
+        operation(&|text|Self::redact_keys(text,&keys))
     }
 
     /// Revocation must remain reachable while inference owns its long lease.
-    /// Only copy the current credential for local redaction; this grants no
+    /// Only copy the managed credentials for local redaction; this grants no
     /// provider/capture capability and never returns credential bytes.
     pub(crate) fn with_revocation_redactor<T>(&self,operation:impl FnOnce(&dyn Fn(&str)->String)->Result<T,String>)->Result<T,String>{
         // Losing the provider credential must not prevent withdrawing authority.
-        // If unavailable, retain generic secret redaction instead of inferring
-        // permission or hiding a failure of the independent scope store.
-        let key=self.credential().ok().map(|(key,_)|key);
-        operation(&|text|redact(text,key.as_deref().map(String::as_str)))
+        // A damaged vault suppresses the free-text rationale while the
+        // independent scope store can still withdraw authority.
+        let redactor=self.data_redactor();
+        operation(&|text|crate::data_projection::DataRedactor::redact(&redactor,text).text)
     }
 
     pub fn handle(&self, action: &str, payload: Value, store: &Store) -> Result<Value,String> {
@@ -164,64 +211,77 @@ impl AiService {
             "ai.key.save" => {
                 let _lease=self.inference.try_lock().map_err(|_|"Aguarde a solicitação em andamento antes de trocar a credencial.".to_string())?;
                 let input: KeyInput = decode(payload)?;
+                let provider=self.selected_provider(input.provider,store)?;
                 let key = Zeroizing::new(input.key);
                 if key.len() < 16 || key.len() > 512 || !key.bytes().all(|c| c.is_ascii_graphic()) { return Err("Informe uma chave de API válida, sem espaços.".into()); }
                 let cipher = protect(key.as_bytes(), false)?;
+                crate::credential_refs::ensure_provider_slot(store,provider)?;
                 let mut db = self.db.lock().map_err(failure)?;
                 let tx = db.transaction().map_err(failure)?;
-                tx.execute("INSERT INTO vault VALUES(1,?1,?2) ON CONFLICT(id) DO UPDATE SET cipher=excluded.cipher, revision=excluded.revision", params![cipher,model::id()]).map_err(failure)?;
-                tx.execute("DELETE FROM connection_check", []).map_err(failure)?;
+                if provider!=ProviderId::OpenAI {expand_provider_slots(&tx)?;}
+                tx.execute("INSERT INTO vault VALUES(?3,?1,?2) ON CONFLICT(id) DO UPDATE SET cipher=excluded.cipher, revision=excluded.revision", params![cipher,model::id(),provider.slot()]).map_err(failure)?;
+                tx.execute("DELETE FROM connection_check WHERE id=?1", [provider.slot()]).map_err(failure)?;
                 tx.commit().map_err(failure)?;
-                drop(db);
-                crate::credential_refs::ensure_provider_slot(store)?;
                 Ok(json!({"hasApiKey":true,"verified":false}))
             }
             "ai.key.remove" => {
                 let _lease=self.inference.try_lock().map_err(|_|"Aguarde a solicitação em andamento antes de remover a credencial.".to_string())?;
-                empty(&payload)?;
+                let input:ProviderInput=decode(payload)?;
+                let provider=self.selected_provider(input.provider,store)?;
                 let mut db = self.db.lock().map_err(failure)?;
                 let tx = db.transaction().map_err(failure)?;
-                tx.execute("DELETE FROM vault", []).map_err(failure)?;
-                tx.execute("DELETE FROM connection_check", []).map_err(failure)?;
+                tx.execute("DELETE FROM vault WHERE id=?1", [provider.slot()]).map_err(failure)?;
+                tx.execute("DELETE FROM connection_check WHERE id=?1", [provider.slot()]).map_err(failure)?;
                 tx.commit().map_err(failure)?;
                 Ok(json!({"hasApiKey":false,"verified":false}))
             }
-            "ai.status" => { empty(&payload)?; self.status(store) }
+            "ai.selection.save"=>{
+                let _lease=self.inference.try_lock().map_err(|_|"Aguarde a solicitação de IA antes de alterar o modelo.")?;
+                if payload.get("aiSelection").is_none(){return Err("Escolha um modelo ou o padrão da instalação.".into());}
+                let input:AssessmentSelection=decode(payload)?;
+                if let Some(selection)=&input.ai_selection {selection.validate()?;}
+                store.mutate(|state|{
+                    let a=state.assessments.iter_mut().find(|a|a.id==input.assessment_id).ok_or("Avaliação não encontrada.")?;
+                    if !state.projects.iter().any(|p|p.id==a.project_id&&!p.archived){return Err("Projeto arquivado.".into());}
+                    a.ai_selection=input.ai_selection;
+                    Ok(json!({"assessmentId":a.id,"aiSelection":a.ai_selection}))
+                })
+            }
+            "ai.status" => { let input:ProviderInput=decode(payload)?; self.provider_status(store,input.provider) }
             "ai.models" => {
-                empty(&payload)?;
+                let input:ProviderInput=decode(payload)?;
+                let provider=self.selected_provider(input.provider,store)?;
                 let _work=work.as_ref().ok_or("work_owned_operation")?;
-                let (key,_) = self.credential()?;
-                self.config(store, false)?;
-                let response = client()?.get(format!("{ENDPOINT}/models")).bearer_auth(key.as_str()).send().map_err(network_error)?;
-                let body = read_response(response)?;
-                let mut names: Vec<&str> = body.get("data").and_then(Value::as_array).ok_or("Catálogo de modelos inválido.")?.iter().filter_map(|v| v.get("id").and_then(Value::as_str)).filter(|s| s.len() <= 160).take(1000).collect();
-                names.sort_unstable();
-                Ok(json!({"models":names,"note":"Estar no catálogo não comprova suporte a Responses ou ferramentas."}))
+                let (key,_) = self.provider_credential(provider)?;
+                let models=self.provider.models(provider,&key)?;
+                Ok(json!({"provider":provider,"models":models,"note":"O catálogo inclui os modelos disponíveis para a chave. O teste de conexão verifica a geração de texto pelo modelo selecionado."}))
             }
             "ai.test" => {
                 let input:TestInput=decode(payload)?;
-                let cfg = self.config(store, true)?;
-                let (key, revision) = self.credential()?;
-                let answer = self.complete_locked(&cfg.model, &key, &revision, "connection-test", budget::TEST_PROMPT, budget::TEST_INSTRUCTIONS, None,2048,None,json!({}),input.budget_review.as_ref(),0,None,None,work::RequestWork::Live(work.as_deref_mut().ok_or("work_owned_operation")?))?;
+                let cfg = self.config_for(store,None,true)?;
+                let provider=ProviderId::parse(&cfg.provider)?;
+                let (key, revision) = self.provider_credential(provider)?;
+                let answer = self.complete_locked(provider,&cfg.model, &key, &revision, "connection-test", budget::TEST_PROMPT, budget::TEST_INSTRUCTIONS, None,2048,None,json!({}),input.budget_review.as_ref(),0,None,None,work::RequestWork::Live(work.as_deref_mut().ok_or("work_owned_operation")?))?;
                 // Never attach a successful result to settings or credentials changed during the request.
-                let current = self.config(store,true)?;
-                let (_, current_revision) = self.credential()?;
-                if current.model != cfg.model || current_revision != revision { return Err("A configuração mudou durante o teste. Teste a conexão novamente.".into()); }
-                self.db.lock().map_err(failure)?.execute("INSERT INTO connection_check VALUES(1,?1,?2,?3,?4) ON CONFLICT(id) DO UPDATE SET model=excluded.model, endpoint=excluded.endpoint, revision=excluded.revision, checked=excluded.checked", params![cfg.model, ENDPOINT, revision, model::now()]).map_err(failure)?;
-                Ok(json!({"verified":true,"model":cfg.model,"endpoint":ENDPOINT,"capability":"text","usage":answer["usage"],"budget":answer["budget"],"checkedAt":model::now()}))
+                let current = self.config_for(store,None,true)?;
+                let (_, current_revision) = self.provider_credential(provider)?;
+                if current.provider!=cfg.provider || current.model != cfg.model || current_revision != revision { return Err("A configuração mudou durante o teste. Teste a conexão novamente.".into()); }
+                self.db.lock().map_err(failure)?.execute("INSERT INTO connection_check VALUES(?5,?1,?2,?3,?4) ON CONFLICT(id) DO UPDATE SET model=excluded.model, endpoint=excluded.endpoint, revision=excluded.revision, checked=excluded.checked", params![cfg.model, cfg.endpoint, revision, model::now(),provider.slot()]).map_err(failure)?;
+                Ok(json!({"verified":true,"model":cfg.model,"endpoint":cfg.endpoint,"capability":"text","usage":answer["usage"],"budget":answer["budget"],"checkedAt":model::now()}))
             }
             "ai.context" => if payload.get("operation").is_some(){self.prepare_ai_data(payload,store)}else{Err("data_review_required: escolha a operação e revise o pacote de dados antes de obter o contexto.".into())},
             "ai.ask" => {
                 let input: AskInput = decode(payload)?;
-                if !input.allow_remote { return Err("Revise e autorize o contexto antes de enviá-lo à OpenAI.".into()); }
+                if !input.allow_remote { return Err("Revise e autorize o contexto antes de enviá-lo ao provedor.".into()); }
                 if input.data_review.is_none(){return Err("data_review_required: revise o pacote completo antes de enviar.".into());}
-                let cfg = self.config(store, true)?;
-                let (key,revision) = self.credential()?;
+                let cfg=self.config_for(store,Some(&input.assessment_id),true)?;
+                let provider=ProviderId::parse(&cfg.provider)?;
+                let (key,revision)=self.provider_credential(provider)?;
                 let reviewed=self.reviewed_ai_data(store,input.data_review.as_ref(),&input.assessment_id,&input.evidence_ids,&input.context_target_refs,&input.message,"ask")?;
                 if reviewed.packet.context["digest"]!=input.context_digest{return Err("data_review_changed: o contexto mudou.".into());}
                 let scope=context_scope(&reviewed.packet.context)?;
                 let (prompt,instructions,maximum)=&reviewed.packet.prompts[0];
-                let answer = self.complete_locked(&cfg.model, &key, &revision, &input.assessment_id, prompt,instructions, Some(&reviewed.packet.message),*maximum,None,json!({}),input.budget_review.as_ref(),0,Some((store,&scope,&input.context_target_refs)),Some(data::DataDispatch{review:&reviewed.prepared.review,spec:&reviewed.packet.spec,acknowledge_sensitive:input.acknowledge_sensitive,admitted_context:None}),work::RequestWork::Live(work.as_deref_mut().ok_or("work_owned_operation")?))?;
+                let answer = self.complete_locked(provider,&cfg.model, &key, &revision, &input.assessment_id, prompt,instructions, Some(&reviewed.packet.message),*maximum,None,json!({}),input.budget_review.as_ref(),0,Some((store,&scope,&input.context_target_refs)),Some(data::DataDispatch{review:&reviewed.prepared.review,spec:&reviewed.packet.spec,acknowledge_sensitive:input.acknowledge_sensitive,admitted_context:None}),work::RequestWork::Live(work.as_deref_mut().ok_or("work_owned_operation")?))?;
                 Ok(answer)
             }
             "ai.history" => {
@@ -232,10 +292,10 @@ impl AiService {
                 let rows = q.query_map([&input.assessment_id], |r| Ok(json!({"id":r.get::<_,String>(0)?,"role":r.get::<_,String>(1)?,"text":r.get::<_,String>(2)?,"createdAt":r.get::<_,String>(3)?}))).map_err(failure)?;
                 let mut messages = rows.collect::<Result<Vec<_>,_>>().map_err(failure)?;
                 messages.reverse();
-                let mut q=db.prepare("SELECT id,model,status,created,input_tokens,output_tokens,details FROM requests WHERE assessment=?1 ORDER BY rowid DESC LIMIT 100").map_err(failure)?;
+                let mut q=db.prepare("SELECT id,model,status,created,input_tokens,output_tokens,details,endpoint FROM requests WHERE assessment=?1 ORDER BY rowid DESC LIMIT 100").map_err(failure)?;
                 let requests=q.query_map([&input.assessment_id],|r|{
                     let details:String=r.get(6)?;let body:Value=serde_json::from_str(&details).unwrap_or(Value::Null);
-                    Ok(json!({"id":r.get::<_,String>(0)?,"model":r.get::<_,String>(1)?,"status":r.get::<_,String>(2)?,"createdAt":r.get::<_,String>(3)?,"inputTokens":r.get::<_,Option<i64>>(4)?,"outputTokens":r.get::<_,Option<i64>>(5)?,"unknownAcknowledged":request_unknown_acknowledged(&details),"resolution":body.get("resolution"),"operationProposal":body.get("operationProposal"),"budget":body.get("budget"),"scopeRef":body.get("scopeRef"),"contextTargetRefs":body.get("contextTargetRefs"),"dataReviewRef":body.get("dataReviewRef"),"dataUseReceiptRef":body.get("dataUseReceiptRef"),"dataPolicyRef":body.get("dataPolicyRef"),"dataBinding":body.get("dataBinding"),"providerCredentialRef":body.get("providerCredentialRef"),"dataReceiptStatus":if body.get("dataUseReceiptRef").is_some(){"recorded"}else{"legacy_no_data_policy_receipt"}}))
+                    Ok(json!({"id":r.get::<_,String>(0)?,"endpoint":r.get::<_,String>(7)?,"model":r.get::<_,String>(1)?,"status":r.get::<_,String>(2)?,"createdAt":r.get::<_,String>(3)?,"inputTokens":r.get::<_,Option<i64>>(4)?,"outputTokens":r.get::<_,Option<i64>>(5)?,"unknownAcknowledged":request_unknown_acknowledged(&details),"resolution":body.get("resolution"),"operationProposal":body.get("operationProposal"),"budget":body.get("budget"),"scopeRef":body.get("scopeRef"),"contextTargetRefs":body.get("contextTargetRefs"),"dataReviewRef":body.get("dataReviewRef"),"dataUseReceiptRef":body.get("dataUseReceiptRef"),"dataPolicyRef":body.get("dataPolicyRef"),"dataBinding":body.get("dataBinding"),"providerCredentialRef":body.get("providerCredentialRef"),"dataReceiptStatus":if body.get("dataUseReceiptRef").is_some(){"recorded"}else{"legacy_no_data_policy_receipt"}}))
                 }).map_err(failure)?.collect::<Result<Vec<_>,_>>().map_err(failure)?;
                 Ok(json!({"messages":messages,"requests":requests,"limit":100,"historySentToProvider":false}))
             }
@@ -266,29 +326,49 @@ impl AiService {
         Ok(json!({"id":input.request_id,"assessmentId":input.assessment_id,"status":"unknown","unknownAcknowledged":true,"resolution":details["resolution"],"repeated":false}))
     }
 
-    fn credential(&self) -> Result<(Zeroizing<String>,String),String> {
-        let record: Option<(Vec<u8>,String)> = self.db.lock().map_err(failure)?.query_row("SELECT cipher,revision FROM vault WHERE id=1", [], |r| Ok((r.get(0)?,r.get(1)?))).optional().map_err(failure)?;
-        let (cipher,revision) = record.ok_or("Configure a chave da OpenAI nas Configurações. Ela permanece no vault do Windows.")?;
-        let clear = Zeroizing::new(protect(&cipher,true)?);
-        let key = Zeroizing::new(String::from_utf8(clear.to_vec()).map_err(|_| "Credencial inválida no vault.")?);
-        Ok((key,revision))
+    fn decrypt_key(cipher:&[u8])->Result<Zeroizing<String>,String>{
+        let clear=Zeroizing::new(protect(cipher,true)?);
+        Ok(Zeroizing::new(String::from_utf8(clear.to_vec()).map_err(|_|"Credencial inválida no vault.")?))
     }
+    fn provider_credential(&self,provider:ProviderId)->Result<(Zeroizing<String>,String),String>{
+        let record:Option<(Vec<u8>,String)>=self.db.lock().map_err(failure)?.query_row(
+            "SELECT cipher,revision FROM vault WHERE id=?1",[provider.slot()],|r|Ok((r.get(0)?,r.get(1)?))).optional().map_err(failure)?;
+        let (cipher,revision)=record.ok_or("Configure uma chave para este provedor nas Configurações.")?;
+        Ok((Self::decrypt_key(&cipher)?,revision))
+    }
+    #[cfg(test)]
+    fn credential(&self)->Result<(Zeroizing<String>,String),String>{ self.provider_credential(ProviderId::OpenAI) }
 
-    fn config(&self, store:&Store, require_model:bool) -> Result<model::Settings,String> {
-        let cfg = store.snapshot()?.settings;
-        if cfg.provider != "openai" || cfg.endpoint.trim_end_matches('/') != ENDPOINT { return Err("Esta integração aceita somente OpenAI em https://api.openai.com/v1. A chave não será enviada a outro endpoint.".into()); }
-        if require_model && cfg.model.trim().is_empty() { return Err("Selecione e salve um modelo antes de conectar.".into()); }
+    fn config_for(&self,store:&Store,assessment:Option<&str>,require_model:bool)->Result<model::Settings,String>{
+        Self::config_in(&store.snapshot()?,assessment,require_model)
+    }
+    fn config_in(state:&model::Snapshot,assessment:Option<&str>,require_model:bool)->Result<model::Settings,String>{
+        let mut cfg=state.settings.clone();
+        if let Some(id)=assessment {
+            let a=state.assessments.iter().find(|a|a.id==id).ok_or("Avaliação não encontrada.")?;
+            if let Some(selection)=&a.ai_selection {
+                selection.validate()?;
+                cfg.provider=selection.provider.id().into();
+                cfg.endpoint=selection.provider.endpoint().into();
+                cfg.model=selection.model.clone();
+            }
+        }
+        let provider=ProviderId::parse(&cfg.provider)?;
+        if cfg.endpoint.trim_end_matches('/')!=provider.endpoint(){return Err("O endpoint não corresponde ao provedor selecionado.".into());}
+        cfg.endpoint=provider.endpoint().into();
+        if require_model&&!crate::ai_provider::valid_model(&cfg.model){return Err("Selecione e salve um modelo antes de conectar.".into());}
         Ok(cfg)
     }
-
-    fn status(&self, store:&Store) -> Result<Value,String> {
-        let cfg = store.snapshot()?.settings;
-        let db = self.db.lock().map_err(failure)?;
-        let revision: Option<String> = db.query_row("SELECT revision FROM vault WHERE id=1",[],|r| r.get(0)).optional().map_err(failure)?;
-        let checked: Option<String> = db.query_row("SELECT checked FROM connection_check WHERE model=?1 AND endpoint=?2 AND revision=?3",params![cfg.model,cfg.endpoint.trim_end_matches('/'),revision.as_deref().unwrap_or("")],|r|r.get(0)).optional().map_err(failure)?;
-        Ok(json!({"hasApiKey":revision.is_some(),"verified":checked.is_some() && cfg.provider=="openai","checkedAt":checked,"endpoint":cfg.endpoint,"model":cfg.model,"capability":"text","vault":"Windows DPAPI (usuário atual)","maxOutputTokens":2048,"maxRequestsPerAssessment":100}))
+    fn provider_status(&self,store:&Store,requested:Option<ProviderId>)->Result<Value,String>{
+        let cfg=store.snapshot()?.settings;
+        let provider=match requested{Some(p)=>p,None=>ProviderId::parse(&cfg.provider)?};
+        let selected_model=if cfg.provider==provider.id(){cfg.model.as_str()}else{""};
+        let revision=self.revision(provider)?;
+        let db=self.db.lock().map_err(failure)?;
+        let checked:Option<String>=db.query_row("SELECT checked FROM connection_check WHERE id=?1 AND model=?2 AND endpoint=?3 AND revision=?4",
+            params![provider.slot(),selected_model,provider.endpoint(),revision.as_deref().unwrap_or("")],|r|r.get(0)).optional().map_err(failure)?;
+        Ok(json!({"provider":provider,"hasApiKey":revision.is_some(),"verified":checked.is_some(),"checkedAt":checked,"endpoint":provider.endpoint(),"model":selected_model,"capability":"text","vault":"Windows DPAPI (usuário atual)","maxOutputTokens":2048,"maxRequestsPerAssessment":100}))
     }
-
     #[cfg(test)]
     pub(crate) fn test_context_projection(&self,store:&Store,payload:Value)->Result<Value,String>{
         // Tests of the pure internal projection remain separate from the IPC
@@ -332,14 +412,15 @@ impl AiService {
         // Bind consent to the reviewed revision, never to the mutable freeze event.
         // Omission preserves the exact context shape of historical assessments.
         if let Some(reference)=scope::current_ref(&state,&a.id)?{context["scopeRef"]=json!(reference);}
-        if self.has_key() {
-            let (key,_) = self.credential()?;
-            // Exact credential replacement also covers unknown labels/encodings in selected text.
-            context = serde_json::from_str(&context.to_string().replace(key.as_str(),"[REDACTED]")).map_err(failure)?;
-        }
+        fn scrub(value:&mut Value,keys:&[Zeroizing<String>]){match value{
+            Value::String(text)=>*text=AiService::redact_keys(text,keys),
+            Value::Array(values)=>values.iter_mut().for_each(|v|scrub(v,keys)),
+            Value::Object(fields)=>fields.values_mut().for_each(|v|scrub(v,keys)), _=>{}
+        }}
+        scrub(&mut context,&self.all_keys()?);
         let raw = context.to_string();
         if raw.len() > MAX_CONTEXT { return Err("Contexto excede 48 KiB. Selecione menos evidências; nenhum arquivo foi enviado.".into()); }
-        Ok(json!({"context":context,"digest":digest(&raw),"bytes":raw.len(),"endpoint":ENDPOINT,"sourceFilesIncluded":source_files_included,"notice":"Somente este contexto e a mensagem serão enviados. Revise dados sensíveis; a redação automática não identifica todos os segredos."}))
+        Ok(json!({"context":context,"digest":digest(&raw),"bytes":raw.len(),"endpoint":a.ai_selection.as_ref().map_or(state.settings.endpoint.as_str(),|sel|sel.provider.endpoint()),"sourceFilesIncluded":source_files_included,"notice":"Somente este contexto e a mensagem serão enviados. Revise dados sensíveis; a redação automática não identifica todos os segredos."}))
     }
 
     fn ask_prompt(&self,input:&AskInput,store:&Store,key:&str)->Result<(String,String,Value),String>{
@@ -356,21 +437,21 @@ impl AiService {
     #[cfg(test)]
     fn complete_reviewed(&self, model:&str, key:&str, revision:&str, assessment:&str, prompt:&str, instructions:&str, history_message:Option<&str>,review:Option<&budget::Consent>) -> Result<Value,String> {
         let _lease = self.inference.try_lock().map_err(|_|"Já existe uma solicitação à IA em andamento. Aguarde antes de enviar outra.".to_string())?;
-        self.complete_locked(model,key,revision,assessment,prompt,instructions,history_message,2048,None,json!({}),review,0,None,None,work::RequestWork::Fixture)
+        self.complete_locked(ProviderId::OpenAI,model,key,revision,assessment,prompt,instructions,history_message,2048,None,json!({}),review,0,None,None,work::RequestWork::Fixture)
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn complete_locked(&self,model:&str,key:&str,revision:&str,assessment:&str,prompt:&str,instructions:&str,history_message:Option<&str>,max_output_tokens:u32,request_id:Option<&str>,mut initial_details:Value,budget_review:Option<&budget::Consent>,budget_slot:usize,authority:Option<(&Store,&ScopeRef,&[ScopeTargetRef])>,data:Option<data::DataDispatch<'_>>,mut work:work::RequestWork<'_,'_>)->Result<Value,String>{
+    fn complete_locked(&self,provider:ProviderId,model:&str,key:&str,revision:&str,assessment:&str,prompt:&str,instructions:&str,history_message:Option<&str>,max_output_tokens:u32,request_id:Option<&str>,mut initial_details:Value,budget_review:Option<&budget::Consent>,budget_slot:usize,authority:Option<(&Store,&ScopeRef,&[ScopeTargetRef])>,data:Option<data::DataDispatch<'_>>,mut work:work::RequestWork<'_,'_>)->Result<Value,String>{
         // Removal/rotation shares this gate. A credential copied before revocation cannot dispatch.
-        let current_revision:Option<String>=self.db.lock().map_err(failure)?.query_row("SELECT revision FROM vault WHERE id=1",[],|r|r.get(0)).optional().map_err(failure)?;
+        let current_revision=self.revision(provider)?;
         if current_revision.as_deref()!=Some(revision) {return Err("A credencial mudou antes do envio. Revise a conexão e tente novamente.".into());}
         let id = work.request_id(request_id)?;
         let since=if assessment=="connection-test" {(chrono::Utc::now()-chrono::Duration::hours(1)).to_rfc3339()}else{String::new()};
         let count:i64 = self.db.lock().map_err(failure)?.query_row("SELECT COUNT(*) FROM requests WHERE assessment=?1 AND created>=?2",params![assessment,since],|r|r.get(0)).map_err(failure)?;
         if count >= if assessment=="connection-test" {20}else{100} { return Err(if assessment=="connection-test" {"Limite de 20 testes de conexão por hora atingido. Aguarde antes de tentar novamente."}else{"Limite de 100 solicitações por avaliação atingido. Revise o consumo antes de abrir outra avaliação."}.into()); }
-        if redact(model,Some(key))!=model{return Err("Identificador do modelo contém dado sensível.".into());}
+        if Self::redact_keys(model,&self.all_keys()?)!=model{return Err("Identificador do modelo contém dado sensível.".into());}
         let operation=if assessment=="connection-test"{"test"}else if initial_details.get("investigationId").is_some(){"investigation"}else if initial_details.get("operationProposal").is_some(){"operation_proposal"}else{"ask"};
-        if assessment!="connection-test"&&authority.is_none(){return Err("scope_unreviewed: revise o escopo antes de enviar à OpenAI.".into());}
+        if assessment!="connection-test"&&authority.is_none(){return Err("scope_unreviewed: revise o escopo antes de enviar ao provedor.".into());}
         if assessment!="connection-test"&&data.is_none(){return Err("data_review_required: revise o pacote completo antes de enviar.".into());}
         if let Some((store,reference,targets))=authority{
             if reference.assessment_id!=assessment{return Err("scope_state_changed: referência fora da avaliação.".into());}
@@ -378,11 +459,11 @@ impl AiService {
             initial_details["scopeRef"]=json!(reference);
             if !targets.is_empty(){initial_details["contextTargetRefs"]=json!(targets);}
         }
-        let mut spec=budget::Spec::new(operation,assessment,model,revision,prompt,instructions,max_output_tokens)?;
+        let mut spec=budget::Spec::for_provider(provider,operation,assessment,model,revision,prompt,instructions,max_output_tokens)?;
         if let Some(data)=&data{
             let index=data.admitted_context.map(|(_,i)|i).unwrap_or(0);
             let request=data.spec.requests.iter().find(|r|r.index==index).ok_or("data_review_changed: perspectiva fora do pacote.")?;
-            if request.output_sha256!=digest(prompt)||request.output_bytes!=prompt.len() as u64||data.spec.credential.as_ref().is_none_or(|c|c.revision!=revision)||data.spec.destination_context["model"]!=model||data.spec.destination_context["endpoint"]!=ENDPOINT{return Err("data_review_changed: pacote ou credencial mudou antes da reserva.".into());}
+            if request.output_sha256!=digest(prompt)||request.output_bytes!=prompt.len() as u64||data.spec.credential.as_ref().is_none_or(|c|c.revision!=revision)||data.spec.destination_context["model"]!=model||data.spec.destination_context["endpoint"]!=provider.endpoint(){return Err("data_review_changed: pacote ou credencial mudou antes da reserva.".into());}
             spec=spec.bind_data(&data.review.digest)?;
         }
         // A missing or stale financial confirmation is a pure rejection. It
@@ -398,7 +479,7 @@ impl AiService {
                 if let Some(data)=&data{initial_details["dataBinding"]=json!({"selection":data.spec.selection,"subjects":data.spec.subjects,"humanText":data.spec.human_text});initial_details["providerCredentialRef"]=json!(data.spec.credential);}
             }
             initial_details["budget"]=self.budget.reserve(&id,&spec,budget_review,budget_slot)?;
-            let intent=self.db.lock().map_err(failure)?.execute("INSERT INTO requests(id,assessment,endpoint,model,revision,context_hash,status,created,details) VALUES(?1,?2,?3,?4,?5,?6,'pending',?7,?8)",params![id,assessment,ENDPOINT,model,revision,digest(prompt),model::now(),initial_details.to_string()]).map_err(failure);
+            let intent=self.db.lock().map_err(failure)?.execute("INSERT INTO requests(id,assessment,endpoint,model,revision,context_hash,status,created,details) VALUES(?1,?2,?3,?4,?5,?6,'pending',?7,?8)",params![id,assessment,provider.endpoint(),model,revision,digest(prompt),model::now(),initial_details.to_string()]).map_err(failure);
             if let Err(error)=intent{let _=self.budget.not_sent(&id);return Err(error);}Ok(())
         };
         let receipt=if let (Some((store,reference,targets)),Some(data))=(authority,data.as_ref()){
@@ -412,7 +493,7 @@ impl AiService {
         let mut dispatch=||->Result<(),String>{
             work.bind(self,&id,initial_details.get("investigationId").and_then(Value::as_str))?;
             if let (Some((store,reference,targets)),Some(data),Some(receipt))=(authority,data.as_ref(),receipt.as_ref()){
-                let identity=self.provider_identity(store)?;
+                let identity=self.identity_for(store,Some(assessment))?;
                 if !identity.available||identity.revision!=revision||data.spec.credential.as_ref().is_none_or(|c|c.slot_id!=identity.slot_id){return Err("credential_reference_changed: conexão mudou antes do envio.".into());}
                 self.data_policy.before_dispatch(store,receipt,data.spec,Some(crate::data_policy::OperationalScope{assessment_id:assessment,method:AI_METHOD,expected:reference,targets}),||{work.before_dispatch(store)?;self.budget.dispatched(&id)})
             }else{self.budget.dispatched(&id)}
@@ -423,7 +504,7 @@ impl AiService {
             if let (Some((store,_,_)),Some(receipt))=(authority,receipt.as_ref()){self.data_policy.finish(store,receipt,crate::data_policy::DataUseOutcome::NotSent,vec![])?;}
             return Err(error);
         }
-        let raw_result=self.provider.response(model,key,prompt,instructions,max_output_tokens);
+        let raw_result=self.provider.response(provider,model,key,prompt,instructions,max_output_tokens);
         let result=self.commit_response(&id,assessment,key,history_message,raw_result);
         if let (Some((store,_,_)),Some(receipt))=(authority,receipt.as_ref()){
             let status:String=self.db.lock().map_err(failure)?.query_row("SELECT status FROM requests WHERE id=?1",[&id],|r|r.get(0)).map_err(failure)?;
@@ -442,7 +523,11 @@ impl AiService {
         let provider_incomplete=raw_result.as_ref().ok().is_some_and(|v|v["status"]=="incomplete");
         let provider_not_terminal=raw_result.as_ref().ok().is_some_and(|v|!matches!(v["status"].as_str(),Some("completed"|"incomplete"|"failed"|"cancelled")));
         let transport_unknown=raw_result.as_ref().err().is_some_and(|e:&String|e.starts_with("Falha de conexão")||e.starts_with("Resposta"));
-        let result=raw_result.and_then(|body|parse_completion(body,key));
+        let result=raw_result.and_then(|body|parse_completion(body,key)).and_then(|mut answer|{
+            let keys=self.all_keys()?;
+            if let Some(text)=answer["text"].as_str(){answer["text"]=json!(Self::redact_keys(text,&keys));}
+            Ok(answer)
+        });
         let status=if result.is_ok(){"completed"}else if provider_incomplete{"incomplete"}else if transport_unknown||provider_not_terminal{"unknown"}else{"failed"};
         let mut db=self.db.lock().map_err(failure)?;
         let tx=db.transaction().map_err(failure)?;
@@ -488,14 +573,14 @@ fn empty(v:&Value)->Result<(),String> { if v.as_object().is_some_and(|v|v.is_emp
 fn check_assessment(store:&Store,id:&str)->Result<(),String> { if store.snapshot()?.assessments.iter().any(|a|a.id==id) {Ok(())} else {Err("Avaliação não encontrada.".into())} }
 fn clean_text(s:&str,max:usize,label:&str)->Result<String,String> { let s=s.trim(); if s.is_empty() || s.len()>max || s.contains('\0') {Err(format!("{label} vazio ou muito longo."))} else {Ok(s.into())} }
 fn client()->Result<Client,String> { Client::builder().https_only(true).redirect(reqwest::redirect::Policy::none()).no_proxy().timeout(Duration::from_secs(90)).connect_timeout(Duration::from_secs(15)).build().map_err(|_|"Não foi possível preparar a conexão HTTPS.".into()) }
-fn network_error(_:reqwest::Error)->String { "Falha de conexão com a OpenAI. Confira a rede e tente novamente; nenhuma solicitação será repetida automaticamente.".into() }
-fn read_response(mut response:reqwest::blocking::Response)->Result<Value,String> {
+fn network_error(_:reqwest::Error)->String { "Falha de conexão com o provedor de IA. Confira a rede e tente novamente; nenhuma solicitação será repetida automaticamente.".into() }
+fn read_bounded_response(mut response:reqwest::blocking::Response,limit:u64)->Result<Value,String> {
     let status=response.status();
-    if !status.is_success() { return Err(match status.as_u16() {401=>"A OpenAI recusou a credencial.",403=>"A credencial não tem acesso ao recurso.",429=>"Limite ou saldo da API atingido; confira sua conta.",_=>"A OpenAI não concluiu a solicitação."}.into()); }
+    if !status.is_success() { return Err(match status.as_u16() {401=>"O provedor recusou a credencial.",403=>"A credencial não tem acesso ao recurso.",429=>"Limite ou saldo da API atingido; confira sua conta.",_=>"O provedor não concluiu a solicitação."}.into()); }
     let mut raw=String::new();
-    (&mut response).take(MAX_RESPONSE+1).read_to_string(&mut raw).map_err(|_|"Resposta inválida da OpenAI.")?;
-    if raw.len() as u64>MAX_RESPONSE {return Err("Resposta excedeu o limite de 2 MiB.".into());}
-    serde_json::from_str(&raw).map_err(|_|"Resposta da OpenAI não é JSON válido.".into())
+    (&mut response).take(limit+1).read_to_string(&mut raw).map_err(|_|"Resposta inválida do provedor.")?;
+    if raw.len() as u64>limit {return Err("Resposta excedeu o limite de tamanho.".into());}
+    serde_json::from_str(&raw).map_err(|_|"Resposta do provedor não é JSON válido.".into())
 }
 fn parse_completion(body:Value,key:&str)->Result<Value,String> {
     if body["status"]!="completed" {return Err("A resposta ficou incompleta ou foi interrompida. Nenhuma conclusão foi registrada.".into());}
@@ -583,7 +668,7 @@ mod tests {
     #[test] fn incomplete_usage_and_uncertain_transport_are_durable() {
         let dir=tempfile::tempdir().unwrap();let ai=AiService::new(dir.path().to_owned()).unwrap();pending(&ai,"incomplete");pending(&ai,"network");
         assert!(ai.commit_response("incomplete","fixture","sentinel",None,Ok(json!({"id":"fixture-response","status":"incomplete","incomplete_details":{"reason":"max_output_tokens"},"usage":{"input_tokens":42,"output_tokens":2048}}))).is_err());
-        assert!(ai.commit_response("network","fixture","sentinel",None,Err("Falha de conexão com a OpenAI.".into())).is_err());
+        assert!(ai.commit_response("network","fixture","sentinel",None,Err("Falha de conexão com o provedor de IA.".into())).is_err());
         let db=ai.db.lock().unwrap();
         let row:(String,i64,i64)=db.query_row("SELECT status,input_tokens,output_tokens FROM requests WHERE id='incomplete'",[],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?))).unwrap();assert_eq!(row,("incomplete".into(),42,2048));
         assert_eq!(db.query_row("SELECT status FROM requests WHERE id='network'",[],|r|r.get::<_,String>(0)).unwrap(),"unknown");

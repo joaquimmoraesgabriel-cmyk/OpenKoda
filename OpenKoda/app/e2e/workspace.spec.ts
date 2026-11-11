@@ -10,6 +10,20 @@ test('visão geral reflete os dados e abre o projeto ou a avaliação correta', 
   await page.getByLabel('Alvo', { exact: true }).fill('https://portal.example.test');
   await page.getByRole('button', { name: 'Criar projeto', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Portal de teste' })).toBeVisible();
+  // Keep the workstation clipboard untouched while exercising the button and its fallback.
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: {
+      writeText: async (value: string) => { document.body.dataset.copiedTarget = value; }
+    }});
+  });
+  const copyTarget = page.getByRole('button', {name: 'Copiar alvo'});
+  await copyTarget.focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('body')).toHaveAttribute('data-copied-target', 'https://portal.example.test');
+  await expect(page.getByText('Alvo copiado.', {exact: true})).toBeVisible();
+  await page.evaluate(() => Object.defineProperty(navigator, 'clipboard', {configurable: true, value: undefined}));
+  await copyTarget.click();
+  await expect(page.getByText('Selecione o alvo acima e copie manualmente.')).toBeVisible();
   await page.evaluate(async () => {
     const path = '/src/api.ts';
     const { request } = await import(path);
@@ -28,8 +42,9 @@ test('visão geral reflete os dados e abre o projeto ou a avaliação correta', 
   await expect(page.getByRole('heading', { name: 'Verificar portal' })).toBeVisible();
   const nav = page.getByRole('navigation', { name: 'Navegação principal' });
   const main = page.getByRole('main');
-  await main.evaluate(element => element.scrollTo(0, element.scrollHeight));
-  await expect.poll(() => main.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
+  const detail = main.getByRole('region', { name: 'Detalhes da avaliação' });
+  await detail.evaluate(element => element.scrollTo(0, element.scrollHeight));
+  await expect.poll(() => detail.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
   await nav.getByRole('button', { name: 'Nova avaliação', exact: true }).click();
   await expect(main.getByRole('heading', { name: 'Nova avaliação', exact: true })).toBeInViewport();
   await expect(main).toBeFocused();

@@ -8,7 +8,7 @@ export type AssessmentStatus = 'draft' | 'preparing' | 'planning' | 'awaiting_ap
 export interface Project { additionalTargets?:ProjectTarget[]; id: string; name: string; kind: Kind; target: string; description: string; createdAt: string; archived?: boolean }
 export interface ActivityEvent { id: string; at: string; message: string; kind: string }
 export type Evidence = import('./data-policy').EvidenceView;
-export interface Assessment { scopeId?:string; id: string; projectId: string; title: string; kind: Kind; target: string; objective: string; status: AssessmentStatus; createdAt: string; updatedAt: string; events: ActivityEvent[]; evidence: Evidence[]; coverage: string[]; summary: string }
+export interface Assessment { aiSelection?:import('./ai-provider').AiSelection|null; scopeId?:string; id: string; projectId: string; title: string; kind: Kind; target: string; objective: string; status: AssessmentStatus; createdAt: string; updatedAt: string; events: ActivityEvent[]; evidence: Evidence[]; coverage: string[]; summary: string }
 export interface Finding { id: string; assessmentId: string; title: string; severity: 'low' | 'medium' | 'high' | 'critical'; confidence: string; status: 'candidate' | 'validated' | 'dismissed' | 'fixed'; description: string; recommendation: string; evidenceIds: string[]; createdAt: string }
 export interface Settings { provider: string; endpoint: string; model: string; mode: string; theme: string; language: string; retentionDays: number; timeoutSeconds: number; outputLimitKiB: number; hasApiKey: boolean }
 export interface InputFile { path:string; size:number; sha256:string }

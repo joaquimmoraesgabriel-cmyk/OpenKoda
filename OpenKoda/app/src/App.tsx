@@ -86,6 +86,7 @@ export default function App() {
     const content = main.current;
     if (!content) return;
     content.scrollTo(0, 0);
+    content.querySelector('.detail-pane')?.scrollTo(0, 0);
     // Preserve autofocus in the newly opened form and the initial skip-link order.
     if (!content.contains(document.activeElement)) content.focus({ preventScroll: true });
   }, [pageKey]);

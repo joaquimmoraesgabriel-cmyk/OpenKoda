@@ -98,13 +98,21 @@ fn normalize_sql(sql:&str)->String {sql.chars().filter(|c|!c.is_ascii_whitespace
 fn schema(db:&Connection,expected:&[(&str,&str)])->Result<String,String>{
     let version:i64=db.query_row("PRAGMA user_version",[],|r|r.get(0)).map_err(failure)?;
     let expected_version=if expected.iter().any(|(name,_)|*name=="app_state"){core::STORE_VERSION}else{0};
-    if version!=expected_version{return Err("Versão de banco não reconhecida para expurgo; dados preservados.".into());}
+    let multi_provider=version==1&&expected.iter().any(|(name,_)|*name=="vault");
+    if version!=expected_version&&!multi_provider{return Err("Versão de banco não reconhecida para expurgo; dados preservados.".into());}
     let integrity:String=db.query_row("PRAGMA quick_check",[],|r|r.get(0)).map_err(failure)?;
     if integrity!="ok"{return Err("Banco inconsistente; nenhum registro será expurgado.".into());}
     // SQLite itself derives the exact implicit indexes from trusted, versioned
     // DDL. Accepting names by prefix would miss changed UNIQUE constraints.
     let reference=Connection::open_in_memory().map_err(failure)?;
-    for (_,ddl) in expected{reference.execute_batch(ddl).map_err(failure)?;}
+    for (table,ddl) in expected {
+        let ddl=match (*table,multi_provider){
+            ("vault",true)=>crate::ai::VAULT_SCHEMA,
+            ("connection_check",true)=>crate::ai::CHECK_SCHEMA,
+            _=>ddl
+        };
+        reference.execute_batch(ddl).map_err(failure)?;
+    }
     fn objects(db:&Connection)->Result<Vec<(String,String,String,Option<String>)>,String>{
         let mut statement=db.prepare("SELECT type,name,tbl_name,sql FROM sqlite_master ORDER BY type,name").map_err(failure)?;
         let rows=statement.query_map([],|r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,String>(2)?,r.get::<_,Option<String>>(3)?.map(|s|normalize_sql(&s))))).map_err(failure)?;
@@ -697,7 +705,10 @@ mod tests {
 
     #[test]
     fn reviewed_purge_removes_complete_selected_graph_preserves_other_graph_and_exclusions() {
-        let f=fixture();let other=inventory(&f,&f.other);let originals=f.files.iter().map(|p|fs::read(p).unwrap()).collect::<Vec<_>>();
+        let f=fixture();let originals=f.files.iter().map(|p|fs::read(p).unwrap()).collect::<Vec<_>>();
+        let ai=AiService::new(f.store.root.clone()).unwrap();
+        ai.handle("ai.key.save",json!({"provider":"groq","key":"synthetic-purge-groq-key"}),&f.store).unwrap();drop(ai);
+        let other=inventory(&f,&f.other);
         let vault:Vec<u8>=db(&f,Database::Assistant).query_row("SELECT cipher FROM vault WHERE id=1",[],|r|r.get(0)).unwrap();let p=plan(&f);
         for sentinel in ["SECRET-SENTINEL","secure=false","synthetic-key-for-offline-purge-fixture"]{assert!(!p.to_string().contains(sentinel));}
         assert_eq!(p["counts"]["projects"],1);assert_eq!(p["counts"]["assessments"],1);assert_eq!(p["counts"]["plans"],1);assert_eq!(p["counts"]["executions"],1);assert_eq!(p["counts"]["remediations"],1);assert_eq!(p["counts"]["investigations"],1);
@@ -705,6 +716,7 @@ mod tests {
         assert_eq!(inventory(&f,&f.other),other);let snapshot=f.store.snapshot().unwrap();assert!(!snapshot.projects.iter().any(|v|v.id==f.project));assert!(!snapshot.assessments.iter().any(|v|v.id==f.assessment));assert!(!snapshot.data_subject_generations.iter().any(|g|g.subject.assessment_id()==f.assessment));core::validate_snapshot(&snapshot).unwrap();
         for table in ["messages","investigations","remediation_plans","bridge_runs"]{assert_eq!(row_count(&f,table),1);}assert_eq!(row_count(&f,"requests"),2);
         let after:Vec<u8>=db(&f,Database::Assistant).query_row("SELECT cipher FROM vault WHERE id=1",[],|r|r.get(0)).unwrap();assert_eq!(after,vault);
+        assert_eq!(db(&f,Database::Assistant).query_row("SELECT COUNT(*) FROM vault",[],|r|r.get::<_,u32>(0)).unwrap(),2);
         assert_eq!(db(&f,Database::Assistant).query_row("SELECT count(*) FROM connection_check",[],|r|r.get::<_,i64>(0)).unwrap(),1);
         for (path,bytes) in f.files.iter().zip(originals){assert_eq!(fs::read(path).unwrap(),bytes);}for name in ["backups","exports"]{assert_eq!(fs::read(f.store.root.join(name).join("preserve-fixture.txt")).unwrap(),b"excluded copy");}
         assert!(f.purge.handle("projectPurge.apply",confirmation(&p),&f.store).is_err());assert_eq!(inventory(&f,&f.other),other);

@@ -6,7 +6,7 @@ const KEY:&str="synthetic-combined-ai-fixture-key-not-real";
 struct Fake{calls:AtomicUsize,prompts:Mutex<Vec<String>>,answer:String}
 impl Fake{fn new(answer:&str)->Arc<Self>{Arc::new(Self{calls:AtomicUsize::new(0),prompts:Mutex::new(vec![]),answer:answer.into()})}}
 impl Provider for Fake{
-    fn response(&self,_:&str,key:&str,prompt:&str,_:&str,_:u32)->Result<Value,String>{
+    fn response(&self,_:ProviderId,_:&str,key:&str,prompt:&str,_:&str,_:u32)->Result<Value,String>{
         assert_eq!(key,KEY);self.calls.fetch_add(1,Ordering::SeqCst);self.prompts.lock().unwrap().push(prompt.into());
         Ok(json!({"id":model::id(),"status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":self.answer}]}],"usage":{"input_tokens":11,"output_tokens":13}}))
     }

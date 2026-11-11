@@ -52,7 +52,7 @@ export default function Settings({settings, projects, action, busy, dataRequest=
   const [edits, setEdits] = useState<Partial<Draft>>({});
   const [saved, setSaved] = useState<Section>();
   const [saveError, setSaveError] = useState('');
-  const menu = useRef<HTMLElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
   const committed = {...settings, ...useDeviceAppearance()};
   const draft = {...committed, ...edits};
   const activeFields = fields[section] ?? [];
@@ -63,7 +63,7 @@ export default function Settings({settings, projects, action, busy, dataRequest=
     setSection(next);
     setSaved(undefined);
     setSaveError('');
-    menu.current?.closest('main')?.scrollTo({top: 0});
+    panel.current?.scrollTo({top: 0});
   }
 
   useEffect(() => {
@@ -119,7 +119,7 @@ export default function Settings({settings, projects, action, busy, dataRequest=
 
   return <div className="settings-layout">
     <h1 className="settings-page-title">Configurações</h1>
-    <aside className="settings-menu" ref={menu}>
+    <aside className="settings-menu">
       <nav aria-label="Categorias de configuração">
         {groups.map(group => <div className="settings-group" key={group.name}>
           <h2>{group.name}</h2>
@@ -130,7 +130,7 @@ export default function Settings({settings, projects, action, busy, dataRequest=
         </div>)}
       </nav>
     </aside>
-    <div className="settings-content" aria-label={section}>
+    <div className="settings-content" ref={panel} role="region" aria-label={`Conteúdo de ${section}`} tabIndex={0}>
       <section className="settings-sheet" aria-label={section}>
         <h2 className="settings-section-title">{section}</h2>
         {section === 'Aparência' && <form onSubmit={save}>
@@ -142,7 +142,7 @@ export default function Settings({settings, projects, action, busy, dataRequest=
           <HostConnectivity/>
         </>}
         {section === 'IA e modelos' && <>
-          <form onSubmit={save}><AiConnection draft={draft} dirty={dirty} change={change} action={action} busy={busy}/>{saveActions}</form>
+          <form onSubmit={save}><AiConnection key={draft.provider} draft={draft} dirty={dirty} change={change} action={action} busy={busy}/>{saveActions}</form>
           <AiLocalClosure action={action} busy={busy}/>
         </>}
         {section === 'Uso e orçamento' && <AiBudgetSettings action={action} busy={busy}/>}

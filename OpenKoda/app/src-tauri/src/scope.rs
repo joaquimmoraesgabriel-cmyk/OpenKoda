@@ -296,7 +296,7 @@ pub fn handle(action:&str,payload:Value,store:&Store,redact:impl Fn(&str)->Strin
             let request=hash(&payload);let p:DeriveCommit=decode(payload)?;if !p.acknowledge_new_assessment{return Err(err("scope_ack_required"));}let _guard=store.scope_gate.lock().map_err(|_|err("scope_busy"))?;let work=admitted_work(store,&p.assessment_id)?;
             let(result,replayed)=store.mutate(|s|{if let Some(r)=replay(s,action,&p.assessment_id,&p.idempotency_key,&request)?{return Ok((r,true));}let input=Derive{assessment_id:p.assessment_id.clone(),expected_state_digest:p.expected_state_digest.clone(),title:p.title.clone(),copy_fields:p.copy_fields.clone(),objective:p.objective.clone(),methods:p.methods.clone(),window:p.window.clone()};let v=derive_preview(s,&input,&work)?;
                 if v["canCreate"]!=true{return Err(err("assessment_work_active"));}if v["reviewDigest"]!=p.review_digest{return Err(err("scope_review_changed"));}let source=assessment(s,&p.assessment_id)?.clone();let proposed:ScopeBody=decode(v["proposal"]["body"].clone())?;let source_ref=current_ref(s,&source.id)?;let at=model::now();
-                let mut a=Assessment{id:model::id(),project_id:source.project_id.clone(),title:v["proposal"]["title"].as_str().unwrap().into(),kind:source.kind.clone(),target:source.target.clone(),objective:proposed.objective.clone(),status:"draft".into(),created_at:at.clone(),updated_at:at.clone(),events:vec![model::event(format!("Rascunho derivado da avaliação {}; configuração ainda não revisada e nenhuma prova ou autorização copiada.",source.id),"info")],evidence:vec![],coverage:vec![],summary:String::new(),scope_id:None};
+                let mut a=Assessment{id:model::id(),project_id:source.project_id.clone(),title:v["proposal"]["title"].as_str().unwrap().into(),kind:source.kind.clone(),target:source.target.clone(),objective:proposed.objective.clone(),status:"draft".into(),created_at:at.clone(),updated_at:at.clone(),events:vec![model::event(format!("Rascunho derivado da avaliação {}; configuração ainda não revisada e nenhuma prova ou autorização copiada.",source.id),"info")],evidence:vec![],coverage:vec![],summary:String::new(),scope_id:None,ai_selection:None};
                 initialize(s,&mut a,None)?;let r=revision(&a.id,proposed,None,false);let b=s.assessment_scopes.iter_mut().find(|b|b.assessment_id==a.id).unwrap();b.current_revision_id=Some(r.id.clone());b.origin=Some(ScopeOrigin{source_assessment_id:source.id.clone(),source_legacy_digest:if source_ref.is_none(){Some(hash(&json!({"id":source.id,"projectId":source.project_id,"objective":source.objective,"kind":source.kind,"target":source.target})))}else{None},source_scope:source_ref,copy_fields:p.copy_fields.clone(),created_at:at});s.scope_revisions.push(r);let aid=a.id.clone();s.assessments.push(a);let result=scope_result(s,&aid)?;receipt(s,action,&source.id,&p.idempotency_key,&request,result.clone());Ok((result,false))
             })?;Ok(json!({"created":!replayed,"replayed":replayed,"assessmentId":result.assessment_id,"scopeStatus":status(store,&result.assessment_id)?}))
         },
@@ -309,7 +309,7 @@ pub fn handle(action:&str,payload:Value,store:&Store,redact:impl Fn(&str)->Strin
 }
 #[derive(Clone,Serialize,Deserialize)]
 #[serde(rename_all="camelCase",deny_unknown_fields)]
-struct CombinedCreate {project_id:String,title:String,objective:String,window:ScopeWindow,selection:TargetSetInput,project_catalog_digest:String,idempotency_key:String}
+struct CombinedCreate {#[serde(default,skip_serializing_if="Option::is_none")]ai_selection:Option<crate::ai_provider::AiSelection>,project_id:String,title:String,objective:String,window:ScopeWindow,selection:TargetSetInput,project_catalog_digest:String,idempotency_key:String}
 #[derive(Clone,Serialize,Deserialize)]
 #[serde(rename_all="camelCase",deny_unknown_fields)]
 struct CombinedEdit {assessment_id:String,expected_state_digest:String,project_catalog_digest:String,objective:String,window:ScopeWindow,selection:TargetSetInput}
@@ -322,7 +322,9 @@ fn catalog_expected(p:&model::Project,wanted:&str)->Result<(),String>{if scope_t
 fn combined_create_preview(s:&Snapshot,p:&CombinedCreate)->Result<Value,String>{
     core::valid_id(&p.project_id)?;core::valid_id(&p.idempotency_key)?;let project=s.projects.iter().find(|v|v.id==p.project_id).ok_or_else(||err("scope_project_missing"))?;catalog_expected(project,&p.project_catalog_digest)?;
     let aid=scope_targets::derived_id("openkoda.combined-assessment.v1",&[&p.project_id,&p.idempotency_key]);let proposed=combined_body(project,&aid,&p.objective,&p.window,&p.selection)?;let title=text(&p.title,160)?;
-    let proposal=json!({"projectId":p.project_id,"title":title,"body":proposed});let review=hash(&json!({"action":"assessment.combinedCreate","assessmentId":aid,"catalogDigest":p.project_catalog_digest,"proposal":proposal}));
+    let mut proposal=json!({"projectId":p.project_id,"title":title,"body":proposed});
+    if let Some(selection)=&p.ai_selection{selection.validate()?;proposal["aiSelection"]=json!(selection);}
+    let review=hash(&json!({"action":"assessment.combinedCreate","assessmentId":aid,"catalogDigest":p.project_catalog_digest,"proposal":proposal}));
     Ok(json!({"assessmentId":aid,"proposal":proposal,"reviewDigest":review,"canCommit":!s.assessments.iter().any(|a|a.id==aid),"reasonCodes":[],"limits":scope_targets::LIMITS}))
 }
 fn combined_edit_preview(s:&Snapshot,p:&CombinedEdit,work:&[Value])->Result<Value,String>{
@@ -348,10 +350,10 @@ fn combined_derive_preview(s:&Snapshot,p:&CombinedDerive,work:&[Value])->Result<
     let proposal=json!({"projectId":a.project_id,"title":text(&p.title,160)?,"body":body,"copyFields":p.copy_fields});
     Ok(json!({"sourceAssessmentId":a.id,"assessmentId":aid,"expectedStateDigest":p.expected_state_digest,"proposal":proposal,"reviewDigest":hash(&json!({"action":"assessment.combinedDeriveCreate","assessmentId":aid,"stateDigest":p.expected_state_digest,"catalogDigest":p.project_catalog_digest,"proposal":proposal})),"canCreate":status["actions"]["canDerive"]==true&&!s.assessments.iter().any(|a|a.id==aid),"reasonCodes":status["actions"]["reasonCodes"],"limits":scope_targets::LIMITS}))
 }
-fn insert_combined(s:&mut Snapshot,aid:&str,pid:&str,title:&str,body:ScopeBody,origin:Option<ScopeOrigin>)->Result<ScopeResult,String>{
+fn insert_combined(s:&mut Snapshot,aid:&str,pid:&str,title:&str,body:ScopeBody,origin:Option<ScopeOrigin>,selection:Option<crate::ai_provider::AiSelection>)->Result<ScopeResult,String>{
     if s.assessments.iter().any(|a|a.id==aid){return Err(err("scope_idempotency_conflict"));}
     let at=model::now();let reviewed=origin.is_none();let r=revision(aid,body.clone(),None,reviewed);let b=AssessmentScope{id:model::id(),assessment_id:aid.into(),generation:1,current_revision_id:Some(r.id.clone()),frozen:None,revocation:None,origin};
-    let a=Assessment{id:aid.into(),project_id:pid.into(),title:title.into(),kind:body.kind,target:body.target,objective:body.objective,status:"draft".into(),created_at:at.clone(),updated_at:at,events:vec![model::event(if reviewed{"Escopo combinado revisado. Nenhum plano, aprovação ou operação foi criado."}else{"Rascunho combinado derivado. Configuração ainda não revisada; nenhuma prova ou autorização herdada."},"info")],evidence:vec![],coverage:vec![],summary:String::new(),scope_id:Some(b.id.clone())};s.assessments.push(a);s.assessment_scopes.push(b);s.scope_revisions.push(r);scope_result(s,aid)
+    let a=Assessment{id:aid.into(),project_id:pid.into(),title:title.into(),kind:body.kind,target:body.target,objective:body.objective,status:"draft".into(),created_at:at.clone(),updated_at:at,events:vec![model::event(if reviewed{"Escopo combinado revisado. Nenhum plano, aprovação ou operação foi criado."}else{"Rascunho combinado derivado. Configuração ainda não revisada; nenhuma prova ou autorização herdada."},"info")],evidence:vec![],coverage:vec![],summary:String::new(),ai_selection:selection,scope_id:Some(b.id.clone())};s.assessments.push(a);s.assessment_scopes.push(b);s.scope_revisions.push(r);scope_result(s,aid)
 }
 fn commit_fields(payload:&mut Value,ack:&str,has_key_in_proposal:bool)->Result<(String,String),String>{
     let object=payload.as_object_mut().ok_or_else(||err("scope_invalid_input"))?;
@@ -436,7 +438,7 @@ impl CombinedDerivationCommit {
             let body = decode(preview["proposal"]["body"].clone())?;
             let result = insert_combined(
                 snapshot, preview["assessmentId"].as_str().unwrap(), &project_id,
-                preview["proposal"]["title"].as_str().unwrap(), body, Some(origin),
+                preview["proposal"]["title"].as_str().unwrap(), body, Some(origin), None,
             )?;
             receipt(snapshot, COMBINED_DERIVE_CREATE, source_id, &input.idempotency_key, &self.digest, result.clone());
             Ok((result, false))
@@ -462,7 +464,7 @@ fn handle_combined(action:&str,mut payload:Value,store:&Store)->Result<Value,Str
         "assessment.combinedDerivePreview"=>{let p:CombinedDerive=decode(payload)?;combined_derive_preview(&store.snapshot()?,&p,&admitted_work(store,&p.assessment_id)?)},
         "assessment.combinedCreate"=>{
             let request=hash(&payload);let(review,key)=commit_fields(&mut payload,"acknowledgeScope",true)?;let p:CombinedCreate=decode(payload)?;let aid=scope_targets::derived_id("openkoda.combined-assessment.v1",&[&p.project_id,&p.idempotency_key]);let _guard=store.scope_gate.lock().map_err(|_|err("scope_busy"))?;
-            let(result,replayed)=store.mutate(|s|{if let Some(r)=replay(s,action,&aid,&key,&request)?{return Ok((r,true));}let v=combined_create_preview(s,&p)?;if v["canCommit"]!=true{return Err(err("scope_idempotency_conflict"));}if v["reviewDigest"]!=review{return Err(err("scope_review_changed"));}let body:ScopeBody=decode(v["proposal"]["body"].clone())?;let result=insert_combined(s,&aid,&p.project_id,v["proposal"]["title"].as_str().unwrap(),body,None)?;receipt(s,action,&aid,&key,&request,result.clone());Ok((result,false))})?;
+            let(result,replayed)=store.mutate(|s|{if let Some(r)=replay(s,action,&aid,&key,&request)?{return Ok((r,true));}let v=combined_create_preview(s,&p)?;if v["canCommit"]!=true{return Err(err("scope_idempotency_conflict"));}if v["reviewDigest"]!=review{return Err(err("scope_review_changed"));}let body:ScopeBody=decode(v["proposal"]["body"].clone())?;let result=insert_combined(s,&aid,&p.project_id,v["proposal"]["title"].as_str().unwrap(),body,None,p.ai_selection.clone())?;receipt(s,action,&aid,&key,&request,result.clone());Ok((result,false))})?;
             Ok(json!({"created":!replayed,"replayed":replayed,"assessmentId":result.assessment_id,"scopeStatus":status(store,&result.assessment_id)?}))
         },
         "assessment.combinedScopeSave"=>{

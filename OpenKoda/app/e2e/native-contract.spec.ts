@@ -38,7 +38,9 @@ async function nativeFixture(page:Page, environmentReady=false, bridgeMode='succ
     if(assessmentMode.startsWith('unknown')){assessment.status='unknown';plan.status='unknown';}
     if(assessmentMode.startsWith('import'))assessment.status='draft';
     if(bridgeMode==='oversized')state.assessments[0].evidence[0].content='é'.repeat(17000);
-    let providerKey=false;let verified=false;let finishRun:((result:unknown)=>void)|undefined;
+    const providerKeys=new Set<string>();let verified=false;
+    const catalogs:Record<string,string[]>={openai:['fixture-model'],openrouter:['example/model-a','example/model-b',...Array.from({length:24},(_,i)=>'fixture/model-'+i)],groq:['example-chat']};
+    let finishRun:((result:unknown)=>void)|undefined;
     const messages:{id:string;role:string;text:string;createdAt:string}[]=[];
     let remediationPlan:Record<string,unknown>|undefined;
     const currentProfile={kind:'base'};const previousProfile=recoveryMode==='rollback'?{kind:'profile',id:'previous-profile-fixture'}:null;
@@ -164,11 +166,17 @@ async function nativeFixture(page:Page, environmentReady=false, bridgeMode='succ
       }
       if(action==='kali.mcp.cancel'){if(!bridgeActive)throw new Error('Nenhuma sessão ativa.');bridgeActive.status='canceling';return {requested:true,runId:bridgeActive.id,status:'canceling'};}
       if(action==='kali.mcp.reconcile')throw new Error('Identidade da sessão não confirmada; efeito continua desconhecido.');
-      if(action==='ai.status')return {hasApiKey:providerKey,verified,checkedAt:verified?now:null,model:state.settings.model,endpoint:state.settings.endpoint};
-      if(action==='ai.key.save'){providerKey=true;state.settings.hasApiKey=true;return {saved:true};}
-      if(action==='ai.key.remove'){providerKey=false;state.settings.hasApiKey=false;return {removed:true};}
+      if(action==='settings.save'){Object.assign(state.settings,payload);state.settings.hasApiKey=providerKeys.has(state.settings.provider);verified=false;return state.settings;}
+      if(action==='ai.selection.save'){Object.assign(assessment,{aiSelection:payload.aiSelection});return {ok:true};}
+      const provider=String(payload.provider??state.settings.provider);
+      if(action==='ai.status')return {provider,hasApiKey:providerKeys.has(provider),verified,checkedAt:verified?now:null,model:state.settings.model,endpoint:state.settings.endpoint};
+      if(action==='ai.key.save'){providerKeys.add(provider);state.settings.hasApiKey=providerKeys.has(state.settings.provider);return {saved:true};}
+      if(action==='ai.key.remove'){providerKeys.delete(provider);state.settings.hasApiKey=providerKeys.has(state.settings.provider);return {removed:true};}
       if(action==='ai.test'){verified=true;return {verified:true,capability:'text'};}
-      if(action==='ai.models')return {models:['fixture-model']};
+      if(action==='ai.models'){
+        if(!providerKeys.has(provider))throw new Error('Credencial indisponível para este provedor.');
+        return {models:catalogs[provider]??[]};
+      }
       if(action==='ai.context')return {context:{objective:assessment.objective,target:assessment.target,evidence:[]},digest:'context-fixture-digest',bytes:156,notice:'Fixture: conteúdo destinado ao provedor configurado.'};
       if(action==='ai.history')return {messages:structuredClone(messages)};
       if(action==='ai.ask'){if(payload.contextDigest!=='context-fixture-digest'||payload.allowRemote!==true)throw new Error('Contexto sem aprovação');messages.push({id:'user-fixture',role:'user',text:String(payload.message),createdAt:now},{id:'assistant-fixture',role:'assistant',text:'Resposta de contrato sem chamada externa.',createdAt:now});return {text:messages[1].text,usage:{},toolsExecuted:false};}
@@ -318,6 +326,66 @@ test('credencial sai do campo após salvar e teste do provedor é uma ação sep
   expect(await page.evaluate(()=>JSON.stringify(localStorage))).not.toContain('fixture-not-a-real-secret');
   await page.getByRole('button',{name:'Testar conexão',exact:true}).click();
   await expect(page.getByText(/Conexão verificada/)).toBeVisible();expect(await calls(page,'ai.test')).toHaveLength(1);
+});
+
+test('catálogo da chave alimenta configurações, rascunhos e modelo usado em uma avaliação',async({page})=>{
+  await nativeFixture(page);await page.goto('/');
+  await page.getByRole('button',{name:'Configurações',exact:true}).click();
+  await page.getByRole('button',{name:'IA e modelos',exact:true}).click();
+  await page.getByLabel('Provedor',{exact:true}).selectOption('openrouter');
+  await expect(page.getByLabel('Endpoint',{exact:true})).toHaveValue('https://openrouter.ai/api/v1');
+  await expect(page.getByLabel('Modelo',{exact:true})).toBeDisabled();
+  await page.getByLabel('Chave de API',{exact:true}).fill('synthetic-not-a-key');
+  await page.getByRole('button',{name:'Salvar credencial',exact:true}).click();
+  const model=page.getByLabel('Modelo',{exact:true});
+  await expect(model).toBeEnabled();
+  const filter=page.getByLabel('Filtrar modelos',{exact:true});
+  await filter.fill('nenhum-modelo-existe');
+  await expect(page.getByRole('status').filter({hasText:'Nenhum modelo corresponde ao filtro.'})).toBeVisible();
+  await filter.fill('example/');
+  await expect(model.locator('option')).toHaveCount(3);
+  await model.selectOption('example/model-a');
+  await page.getByRole('button',{name:'Salvar alterações',exact:true}).click();
+  expect((await calls(page,'ai.key.save'))[0].payload.provider).toBe('openrouter');
+  expect((await calls(page,'ai.models')).every(call=>call.payload.provider==='openrouter')).toBe(true);
+  expect(await calls(page,'ai.test')).toEqual([]);
+  await page.getByRole('button',{name:'Nova avaliação',exact:true}).click();
+  await page.getByLabel('Modelo da avaliação',{exact:true}).selectOption('custom');
+  await expect(model).toHaveValue('example/model-a');
+  await model.selectOption('example/model-b');
+  await page.getByRole('button',{name:'Combinar fontes e alvos',exact:true}).click();
+  await page.getByLabel('Modelo da avaliação',{exact:true}).selectOption('custom');
+  await model.selectOption('example/model-b');
+  await openAssessmentList(page);
+  await page.getByRole('button',{name:/Avaliação de contrato/}).first().click();
+  const conversation=page.locator('details.disclosure').filter({has:page.locator('summary').filter({hasText:'Conversa com a IA'})});
+  await conversation.locator('summary').first().click();
+  const picker=conversation.getByRole('region',{name:'Modelo desta avaliação'});
+  await picker.getByRole('button',{name:'Alterar modelo'}).click();
+  await picker.getByLabel('Modelo da avaliação',{exact:true}).selectOption('custom');
+  await picker.getByLabel('Modelo',{exact:true}).selectOption('example/model-b');
+  await picker.getByRole('button',{name:'Aplicar nesta avaliação'}).click();
+  await expect(picker).toContainText('OpenRouter · example/model-b');
+  expect((await calls(page,'ai.selection.save'))[0].payload).toEqual({assessmentId:'assessment-fixture',aiSelection:{provider:'openrouter',model:'example/model-b'}});
+  expect(await calls(page,'ai.ask')).toEqual([]);
+});
+
+test('trocar o provedor e descartar a escolha limpam a chave ainda não salva',async({page})=>{
+  await nativeFixture(page);await page.goto('/');
+  await page.getByRole('button',{name:'Configurações',exact:true}).click();
+  await page.getByRole('button',{name:'IA e modelos',exact:true}).click();
+  const provider=page.getByLabel('Provedor',{exact:true});
+  const credential=page.getByLabel('Chave de API',{exact:true});
+  await credential.fill('synthetic-openai-entry');
+  await provider.selectOption('groq');
+  await expect(credential).toHaveValue('');
+  await expect(page.getByRole('button',{name:'Salvar credencial'})).toBeDisabled();
+  await credential.fill('synthetic-groq-entry');
+  await page.getByRole('button',{name:'Descartar',exact:true}).click();
+  await expect(provider).toHaveValue('openai');
+  await expect(credential).toHaveValue('');
+  expect(await calls(page,'ai.key.save')).toEqual([]);
+  expect(await calls(page,'ai.models')).toEqual([]);
 });
 
 test('cópias do Kali mantêm a origem parada após inspeção, exportação e restauração',async({page})=>{

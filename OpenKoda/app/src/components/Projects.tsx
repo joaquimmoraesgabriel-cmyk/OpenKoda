@@ -6,6 +6,7 @@ import AssessmentComparison from './AssessmentComparison';
 import CredentialReferences from './CredentialReferences';
 import DataPolicy from './DataPolicy';
 import ProjectTargetField from './ProjectTargetField';
+import CopyTargetButton from './CopyTargetButton';
 import ProjectTargets from './ProjectTargets';
 import './Projects.css';
 
@@ -117,7 +118,29 @@ export default function Projects({ projects, assessments, action, onNewAssessmen
     </form> : project && <>
       <div className="detail-heading"><div><h1 tabIndex={-1}>{project.name}</h1><p>Projeto local · {kindLabels[project.kind]}</p></div><button className="button primary" onClick={() => onNewAssessment(project.id)}><Play size={16}/>Nova avaliação neste projeto</button></div>
       <Tabs items={['Visão geral','Alvos e escopo','Avaliações','Configurações']} selected={tab} onChange={setTab}/>
-      {tab==='Visão geral'&&<><section className="content-section"><h2>Alvo cadastrado</h2><div className="target-row"><KindIcon kind={project.kind}/><div><strong>{project.name}</strong><p className="break-word">{project.target}</p></div><span className="muted">{kindLabels[project.kind]}</span></div></section><section className="content-section"><h2>Fontes e alvos</h2><p>Cada avaliação escolhe as entradas do catálogo e os métodos permitidos.</p>{project.description&&<p className="muted preserve-lines">{project.description}</p>}<button className="text-button" onClick={()=>setTab('Alvos e escopo')}>Revisar escopo</button></section><section className="content-section"><h2>Últimas avaliações</h2>{history.length?history.slice(0,4).map(a=><button className="history-row" key={a.id} onClick={()=>onOpenAssessment(a.id)}><Play size={17}/><strong>{a.title}</strong><Status value={a.status}/></button>):<p className="muted">As avaliações deste projeto aparecerão aqui.</p>}</section></>}
+      {tab === 'Visão geral' && <div className="project-overview">
+        <section className="content-section">
+          <h2>Alvo cadastrado</h2>
+          <div className="target-row">
+            <KindIcon kind={project.kind}/>
+            <div><strong>{project.name}</strong><p className="break-word">{project.target}</p></div>
+            <span className="muted">{kindLabels[project.kind]}</span>
+          </div>
+          <CopyTargetButton key={project.id} target={project.target}/>
+        </section>
+        <section className="content-section">
+          <h2>Fontes e alvos</h2>
+          {project.description && <p className="preserve-lines">{project.description}</p>}
+          <p className="muted">Cada avaliação escolhe as entradas do catálogo e os métodos permitidos.</p>
+          <button className="text-button" onClick={() => setTab('Alvos e escopo')}>Revisar escopo</button>
+        </section>
+        <section className="content-section">
+          <h2>Últimas avaliações</h2>
+          {history.length ? history.slice(0, 4).map(a => <button className="history-row" key={a.id} onClick={() => onOpenAssessment(a.id)}>
+            <Play size={17}/><strong>{a.title}</strong><Status value={a.status}/>
+          </button>) : <p className="muted">As avaliações deste projeto aparecerão aqui.</p>}
+        </section>
+      </div>}
         {tab==='Alvos e escopo'&&<ProjectTargets key={project.id} project={project} action={action} busy={busy}/>}
         {tab==='Avaliações'&&<section className="content-section">{history.length?history.map(a=><button key={a.id} className="history-row" onClick={()=>onOpenAssessment(a.id)}><Play size={17}/><strong>{a.title}</strong><Status value={a.status}/></button>):<Empty title="Nenhuma avaliação neste projeto" description="Crie uma avaliação para definir o objetivo e revisar o trabalho." action={<button className="button primary" onClick={()=>onNewAssessment(project.id)}>Nova avaliação neste projeto</button>}/>}</section>}
         {tab==='Avaliações'&&<AssessmentComparison key={project.id} projectId={project.id} assessments={history}/>}

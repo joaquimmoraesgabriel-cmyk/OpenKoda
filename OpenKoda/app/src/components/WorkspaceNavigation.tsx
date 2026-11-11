@@ -27,7 +27,9 @@ export default function WorkspaceNavigation({ view, onNavigate, onCreateAssessme
   ));
   return <aside className="workspace-sidebar">
     <div className="workspace-wordmark" aria-label="OpenKoda">
-      <span className="workspace-monogram" aria-hidden="true"><i/></span><span>OpenKoda</span>
+      <svg viewBox="0 0 26 24" width="26" height="24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3.5 3.5v17M21.5 3.5l-9 8.5 9 8.5"/>
+      </svg><span>OpenKoda</span>
     </div>
     <nav aria-label="Navegação principal">
       <div className="workspace-nav-primary">

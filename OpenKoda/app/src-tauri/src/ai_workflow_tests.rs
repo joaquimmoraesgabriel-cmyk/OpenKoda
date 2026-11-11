@@ -8,7 +8,7 @@ mod local_closure;
 const KEY:&str="synthetic-workflow-provider-key-not-real";
 struct Fake {store:Arc<Store>,calls:AtomicUsize,answers:Mutex<VecDeque<Result<Value,String>>>,block:Mutex<Option<(std::sync::mpsc::Sender<()>,std::sync::mpsc::Receiver<()>)>>}
 impl Provider for Fake {
-    fn response(&self,_:&str,key:&str,_:&str,_:&str,_:u32)->Result<Value,String>{
+    fn response(&self,_:ProviderId,_:&str,key:&str,_:&str,_:&str,_:u32)->Result<Value,String>{
         assert_eq!(key,KEY);self.calls.fetch_add(1,Ordering::SeqCst);
         let bound:u64=self.store.work_read(|db,_|db.query_row("SELECT count(*) FROM work_leases WHERE state='bound' AND effect_kind='ai_investigation'",[],|r|r.get(0)).map_err(failure)).unwrap();assert_eq!(bound,1);
         if let Some((started,wait))=self.block.lock().unwrap().take(){started.send(()).unwrap();wait.recv_timeout(Duration::from_secs(10)).unwrap();}

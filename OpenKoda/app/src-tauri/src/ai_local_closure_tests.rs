@@ -69,7 +69,7 @@ fn local_closure_fits_reserved_metadata_when_unrelated_commands_fill_ordinary_qu
 }
 
 struct DirectFake{calls:AtomicUsize}
-impl Provider for DirectFake{fn response(&self,_:&str,key:&str,_:&str,_:&str,_:u32)->Result<Value,String>{assert_eq!(key,KEY);self.calls.fetch_add(1,Ordering::SeqCst);Err("Falha de conexão: synthetic direct timeout".into())}}
+impl Provider for DirectFake{fn response(&self,_:ProviderId,_:&str,key:&str,_:&str,_:&str,_:u32)->Result<Value,String>{assert_eq!(key,KEY);self.calls.fetch_add(1,Ordering::SeqCst);Err("Falha de conexão: synthetic direct timeout".into())}}
 
 #[test]
 fn direct_connection_test_closure_uses_nullable_assessment_and_keeps_financial_rows(){

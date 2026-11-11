@@ -24,13 +24,13 @@ impl AiTerminalProof{
         }Ok(())
     }
 }
-struct TerminalRequest{assessment:String,model:String,revision:String,context:String,status:String,details:Value,not_sent:bool}
+struct TerminalRequest{assessment:String,endpoint:String,model:String,revision:String,context:String,status:String,details:Value,not_sent:bool}
 fn terminal_request(ai:&AiService,id:&str)->Result<Option<TerminalRequest>,String>{
     let row:Option<(String,String,String,String,String,String,String,Option<i64>,Option<i64>)>=ai.db.lock().map_err(failure)?.query_row("SELECT assessment,endpoint,model,revision,context_hash,status,details,input_tokens,output_tokens FROM requests WHERE id=?1",[id],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?,r.get(5)?,r.get(6)?,r.get(7)?,r.get(8)?))).optional().map_err(failure)?;
     let Some((assessment,endpoint,model,revision,context,status,raw,input,output))=row else{return Ok(None);};
     if !matches!(status.as_str(),"completed"|"incomplete"|"failed"){return Ok(None);}
     let details:Value=serde_json::from_str(&raw).map_err(failure)?;
-    if !details.is_object()||endpoint!=ENDPOINT||model.is_empty()||revision.is_empty()||!crate::workflow::valid_hash(&context)||input.is_some_and(|n|n<0)||output.is_some_and(|n|n<0){return Err(recovery_error());}
+    if !details.is_object()||ProviderId::from_endpoint(&endpoint).is_err()||model.is_empty()||revision.is_empty()||!crate::workflow::valid_hash(&context)||input.is_some_and(|n|n<0)||output.is_some_and(|n|n<0){return Err(recovery_error());}
     let not_sent=status=="failed"&&details["notDispatched"]==true;
     if not_sent{
         if input!=Some(0)||output!=Some(0)||details.get("providerStatus").is_some()||details.get("responseId").is_some(){return Err(recovery_error());}
@@ -39,7 +39,7 @@ fn terminal_request(ai:&AiService,id:&str)->Result<Option<TerminalRequest>,Strin
         if !matches!(remote,Some("completed"|"incomplete"|"failed"|"cancelled")){return Ok(None);}
         if status=="completed"&&remote!=Some("completed")||status=="incomplete"&&remote!=Some("incomplete")||details["responseId"].as_str().is_none_or(|id|id.is_empty()||id.len()>256||!id.bytes().all(|b|b.is_ascii_graphic()))||!details["endedAt"].as_str().is_some_and(crate::workflow::valid_time){return Err(recovery_error());}
     }
-    Ok(Some(TerminalRequest{assessment,model,revision,context,status,details,not_sent}))
+    Ok(Some(TerminalRequest{assessment,endpoint,model,revision,context,status,details,not_sent}))
 }
 fn outcome(request:&TerminalRequest)->DataUseOutcome{if request.not_sent{DataUseOutcome::NotSent}else if request.status=="completed"{DataUseOutcome::Completed}else{DataUseOutcome::Failed}}
 
@@ -73,7 +73,7 @@ impl AiService{
             }
             (EffectRef::AiInvestigation{id},EffectOwnerKind::AiInvestigationIntent)=>{
                 let mut plan=self.load_investigation(id)?;
-                if plan.assessment_id!=candidate.owner.assessment_id.as_deref().ok_or_else(recovery_error)?||plan.endpoint!=ENDPOINT{return Err(recovery_error());}
+                if plan.assessment_id!=candidate.owner.assessment_id.as_deref().ok_or_else(recovery_error)?||ProviderId::from_endpoint(&plan.endpoint).is_err(){return Err(recovery_error());}
                 let found=snapshot.data_use_receipts.iter().filter(|r|r.effect.id==*id).collect::<Vec<_>>();if found.len()!=1{return Err(recovery_error());}let parent=found[0];
                 if parent.effect.kind!="investigation"||parent.assessment_id!=candidate.owner.assessment_id||parent.operation!=DataOperation::AiInvestigation||parent.destination!=DataDestination::RemoteAi||parent.parent_receipt_ref.is_some()||parent.request_index.is_some()||Some(&parent.review_ref)!=plan.data_review.as_ref()||Some(&receipt_reference(parent))!=plan.data_use_receipt_ref.as_ref()||parent.scope_ref!=plan.scope_ref||parent.credential.as_ref().is_none_or(|c|c.revision!=plan.credential_revision)||parent.events.is_empty(){return Err(recovery_error());}
                 // Require explicit provider termination (or explicit NotSent)
@@ -81,7 +81,7 @@ impl AiService{
                 for step in &plan.results{
                     if step.status=="failed_before_dispatch"{continue;}
                     let Some(request)=terminal_request(self,&step.request_id)?else{return Ok(None);};
-                    if request.assessment!=plan.assessment_id||request.model!=plan.model||request.revision!=plan.credential_revision{return Err(recovery_error());}
+                    if request.assessment!=plan.assessment_id||request.endpoint!=plan.endpoint||request.model!=plan.model||request.revision!=plan.credential_revision{return Err(recovery_error());}
                 }
                 let children=self.inspect_recovery_children(&plan,snapshot,parent)?;
                 let mut changed=false;

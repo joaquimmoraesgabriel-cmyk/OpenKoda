@@ -36,12 +36,12 @@ pub(crate) fn has_unresolved_work(root:&std::path::Path)->Result<bool,String>{
 enum Kind { Request, Investigation(String), Catalog }
 /// Only this backend constructs this proof, after checking the exact old
 /// unbound lease and its journals. It is never serialized or accepted over IPC.
-pub(crate) struct AiNotStartedProof {owner:EffectOwner,boot_id:String,request_model:Option<String>}
+pub(crate) struct AiNotStartedProof {owner:EffectOwner,boot_id:String,request_model:Option<(String,String)>}
 impl AiNotStartedProof {
     pub(crate) fn owner(&self)->&EffectOwner{&self.owner}
     pub(crate) fn boot_id(&self)->&str{&self.boot_id}
-    pub(super) fn request_identity(&self)->Option<(&str,&str,Option<&str>)>{
-        (self.owner.kind==EffectOwnerKind::AiRequestIntent).then(||(self.owner.id.as_str(),self.owner.assessment_id.as_deref().unwrap_or("connection-test"),self.request_model.as_deref()))
+    pub(super) fn request_identity(&self)->Option<(&str,&str,Option<(&str,&str)>)>{
+        (self.owner.kind==EffectOwnerKind::AiRequestIntent).then(||(self.owner.id.as_str(),self.owner.assessment_id.as_deref().unwrap_or("connection-test"),self.request_model.as_ref().map(|(e,m)|(e.as_str(),m.as_str()))))
     }
     pub(super) fn fingerprint(&self)->String{digest(&json!({"schema":"openkoda.ai-not-started-proof.v1","owner":self.owner,"bootId":self.boot_id}).to_string())}
 }
@@ -171,8 +171,8 @@ impl AiService {
                 if let Some((assessment,endpoint,model,status,raw,input,output))=row{
                     let details:Value=serde_json::from_str(&raw).map_err(failure)?;
                     let recorded_not_sent=status=="failed"&&details["notDispatched"]==true;
-                    if assessment!=expected||endpoint!=ENDPOINT||(!matches!(status.as_str(),"pending"|"unknown")&&!recorded_not_sent)||details.get("providerStatus").is_some()||details.get("responseId").is_some()||details.get("usageUnknown").is_some()||details.get("investigationId").is_some()||(input.is_some()||output.is_some())&&!(recorded_not_sent&&input==Some(0)&&output==Some(0)){return Err("work_reconciliation_required: histórico da IA não comprova ausência de envio.".into());}
-                    request_model=Some(model);
+                    if assessment!=expected||ProviderId::from_endpoint(&endpoint).is_err()||(!matches!(status.as_str(),"pending"|"unknown")&&!recorded_not_sent)||details.get("providerStatus").is_some()||details.get("responseId").is_some()||details.get("usageUnknown").is_some()||details.get("investigationId").is_some()||(input.is_some()||output.is_some())&&!(recorded_not_sent&&input==Some(0)&&output==Some(0)){return Err("work_reconciliation_required: histórico da IA não comprova ausência de envio.".into());}
+                    request_model=Some((endpoint,model));
                     let reference=details.get("dataUseReceiptRef").map(|v|serde_json::from_value::<crate::data_policy::DataUseReceiptRef>(v.clone()).map_err(failure)).transpose()?;
                     if candidate.owner.assessment_id.is_some()&&reference.is_none(){return Err("work_reconciliation_required: recibo de dados da intenção não encontrado.".into());}
                     reference
@@ -240,7 +240,7 @@ mod tests {
     const KEY:&str="synthetic-ai-work-fixture-key-not-real";
     struct Fake {store:Arc<Store>,arbiter:Arc<WorkArbiter>,answers:Mutex<VecDeque<Result<Value,String>>>,calls:AtomicUsize,bindings:Mutex<Vec<(String,String)>>}
     impl Provider for Fake {
-        fn response(&self,_:&str,key:&str,_:&str,_:&str,_:u32)->Result<Value,String>{
+        fn response(&self,_:ProviderId,_:&str,key:&str,_:&str,_:&str,_:u32)->Result<Value,String>{
             assert_eq!(key,KEY);self.calls.fetch_add(1,Ordering::SeqCst);
             let binding=self.store.work_read(|db,_|db.query_row("SELECT effect_kind,effect_id FROM work_leases WHERE state='bound'",[],|r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?))).map_err(failure)).unwrap();
             self.bindings.lock().unwrap().push(binding);

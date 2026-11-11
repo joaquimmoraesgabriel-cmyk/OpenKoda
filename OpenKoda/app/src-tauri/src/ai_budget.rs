@@ -23,7 +23,7 @@ fn add(a:u64,b:u64)->Result<u64,String>{a.checked_add(b).ok_or_else(||err("overf
 #[derive(Clone,Debug,Serialize,Deserialize)]#[serde(rename_all="camelCase",deny_unknown_fields)]
 pub(crate) struct Consent {pub id:String,pub digest:String}
 #[derive(Clone,Serialize,Deserialize)]#[serde(rename_all="camelCase",deny_unknown_fields)]
-struct PriceInput {model:String,input_usd_per_million:String,output_usd_per_million:String,source_note:String}
+struct PriceInput {#[serde(default,skip_serializing_if="Option::is_none")]provider:Option<ProviderId>,model:String,input_usd_per_million:String,output_usd_per_million:String,source_note:String}
 #[derive(Clone,Serialize,Deserialize)]#[serde(rename_all="camelCase",deny_unknown_fields)]
 struct Price {fields:PriceInput,revision:String}
 #[derive(Clone,Serialize,Deserialize)]#[serde(rename_all="camelCase",deny_unknown_fields)]
@@ -35,10 +35,12 @@ struct InstallationMarker {schema:String,installation_id:String}
 #[derive(Clone,Serialize,Deserialize)]#[serde(rename_all="camelCase",deny_unknown_fields)]
 pub(super) struct Spec {operation:String,assessment:String,model:String,endpoint:String,credential_hash:String,fingerprint:String,estimated_input_tokens:u64,max_output_tokens:u32}
 impl Spec {
-    pub(super) fn new(operation:&str,assessment:&str,model:&str,revision:&str,prompt:&str,instructions:&str,output:u32)->Result<Self,String>{
+    #[cfg(test)]
+    pub(super) fn new(operation:&str,assessment:&str,model:&str,revision:&str,prompt:&str,instructions:&str,output:u32)->Result<Self,String>{Self::for_provider(ProviderId::OpenAI,operation,assessment,model,revision,prompt,instructions,output)}
+    pub(super) fn for_provider(provider:ProviderId,operation:&str,assessment:&str,model:&str,revision:&str,prompt:&str,instructions:&str,output:u32)->Result<Self,String>{
         let bytes=prompt.len().checked_add(instructions.len()).and_then(|n|n.checked_add(1024)).ok_or_else(||err("overflow"))?;
         if bytes>256*1024||!(1..=2048).contains(&output){return Err("Entrada ou saída excede a reserva suportada.".into());}
-        Ok(Self{operation:operation.into(),assessment:assessment.into(),model:model.into(),endpoint:ENDPOINT.into(),credential_hash:digest(revision),fingerprint:digest(&json!({"operation":operation,"assessment":assessment,"model":model,"endpoint":ENDPOINT,"revisionHash":digest(revision),"promptHash":digest(prompt),"instructionsHash":digest(instructions),"maxOutputTokens":output}).to_string()),estimated_input_tokens:bytes as u64,max_output_tokens:output})
+        Ok(Self{operation:operation.into(),assessment:assessment.into(),model:model.into(),endpoint:provider.endpoint().into(),credential_hash:digest(revision),fingerprint:digest(&json!({"operation":operation,"assessment":assessment,"model":model,"endpoint":provider.endpoint(),"revisionHash":digest(revision),"promptHash":digest(prompt),"instructionsHash":digest(instructions),"maxOutputTokens":output}).to_string()),estimated_input_tokens:bytes as u64,max_output_tokens:output})
     }
     /// Bind the financial review to the independently reviewed data package.
     /// Only a digest enters the global ledger; context, IDs and secret values
@@ -112,7 +114,9 @@ impl Ledger {
         if input.enabled&&(installation.is_none_or(|v|v==0)||assessment.is_none_or(|v|v==0)||assessment>installation){return Err("Ativação exige limites USD positivos por avaliação e instalação, sem ultrapassar o global.".into());}
         let mut models=HashSet::new();let mut prices=vec![];if input.prices.len()>100{return Err("Catálogo manual limitado a 100 modelos.".into());}
         for mut price in input.prices {
-            if price.model.is_empty()||price.model.len()>160||!price.model.bytes().all(|b|b.is_ascii_alphanumeric()||b"-._:/".contains(&b))||redact(&price.model)!=price.model||!models.insert(price.model.clone()){return Err("Modelo de tarifa inválido, sensível ou repetido.".into());}
+            let provider=price.provider.unwrap_or(ProviderId::OpenAI);
+            if provider==ProviderId::OpenAI{price.provider=None;}
+            if !crate::ai_provider::valid_model(&price.model)||redact(&price.model)!=price.model||!models.insert((provider.id(),price.model.clone())){return Err("Modelo de tarifa inválido, sensível ou repetido.".into());}
             let input=money(&price.input_usd_per_million)?;let output=money(&price.output_usd_per_million)?;if input==0||output==0{return Err("Informe tarifas positivas; preço ausente ou gratuito não será presumido.".into());}
             price.input_usd_per_million=usd(input);price.output_usd_per_million=usd(output);price.source_note=redact(&clean_text(&price.source_note,500,"Origem da tarifa")?);
             let revision=digest(&serde_json::to_string(&price).map_err(err)?);prices.push(Price{fields:price,revision});
@@ -135,12 +139,12 @@ impl Ledger {
         let mut db=self.lock()?;let tx=db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate).map_err(err)?;let m=meta(&tx)?;let p=policy(&tx)?;
         let Some(p)=p.filter(|p|p.enabled)else{return Ok(json!({"enabled":false,"review":null,"notice":NOTICE}));};
         if specs.is_empty()||specs.len()>3{return Err("Revisão exige de 1 a 3 solicitações delimitadas.".into());}let first=&specs[0];
-        if specs.iter().any(|s|s.model!=first.model||s.assessment!=first.assessment||s.credential_hash!=first.credential_hash){return Err("Revisão não pode misturar modelo, credencial ou avaliação.".into());}
-        let price=p.prices.iter().find(|p|p.fields.model==first.model).ok_or("Modelo sem tarifa manual revisada; configure o orçamento.")?.clone();
+        if specs.iter().any(|s|s.endpoint!=first.endpoint||s.model!=first.model||s.assessment!=first.assessment||s.credential_hash!=first.credential_hash){return Err("Revisão não pode misturar modelo, credencial ou avaliação.".into());}
+        let price=p.prices.iter().find(|p|p.fields.provider.unwrap_or(ProviderId::OpenAI).endpoint()==first.endpoint&&p.fields.model==first.model).ok_or("Modelo sem tarifa manual revisada; configure o orçamento.")?.clone();
         let reserved=specs.iter().try_fold(0u64,|sum,s|add(sum,cost(&price,s.estimated_input_tokens,u64::from(s.max_output_tokens))?))?;
         let current=charges(&tx)?;let scope=scope(&m,&first.assessment);let (global,local)=admit(&current,&m,&p,&scope,reserved)?;
-        let model=first.model.clone();let mut specs=specs;for spec in &mut specs{spec.assessment=scope.clone();}
-        let mut review=Review{id:model::id(),digest:String::new(),created_at:model::now(),expires_at:(chrono::Utc::now()+chrono::Duration::minutes(15)).to_rfc3339(),epoch_id:m.epoch_id.clone().ok_or_else(||err("epoch"))?,policy_revision:p.revision,scope,model,endpoint:ENDPOINT.into(),price,specs,reserved,installation_remaining:global,assessment_remaining:local,context_digest};review.digest=review_digest(&review)?;
+        let model=first.model.clone();let endpoint=first.endpoint.clone();let mut specs=specs;for spec in &mut specs{spec.assessment=scope.clone();}
+        let mut review=Review{id:model::id(),digest:String::new(),created_at:model::now(),expires_at:(chrono::Utc::now()+chrono::Duration::minutes(15)).to_rfc3339(),epoch_id:m.epoch_id.clone().ok_or_else(||err("epoch"))?,policy_revision:p.revision,scope,model,endpoint,price,specs,reserved,installation_remaining:global,assessment_remaining:local,context_digest};review.digest=review_digest(&review)?;
         tx.execute("DELETE FROM budget_reviews WHERE json_extract(data,'$.expiresAt')<?1",[model::now()]).map_err(err)?;
         let count:i64=tx.query_row("SELECT COUNT(*) FROM budget_reviews",[],|r|r.get(0)).map_err(err)?;if count>=500{return Err("Há 500 prévias locais não expiradas; aguarde a validade de 15 minutos.".into());}
         tx.execute("INSERT INTO budget_reviews VALUES(?1,?2)",params![review.id,serde_json::to_string(&review).map_err(err)?]).map_err(err)?;tx.commit().map_err(err)?;Ok(json!({"enabled":true,"review":review_public(&review),"notice":NOTICE}))
@@ -148,7 +152,7 @@ impl Ledger {
     pub(super) fn reserve(&self,id:&str,spec:&Spec,consent:Option<&Consent>,slot:usize)->Result<Value,String>{
         let mut db=self.lock()?;let tx=db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate).map_err(err)?;let m=meta(&tx)?;let p=policy(&tx)?;let current=charges(&tx)?;let scope=scope(&m,&spec.assessment);
         if spec.assessment!="connection-test"&&current.iter().filter(|c|c.scope==scope&&c.state!="not_dispatched").count()>=100{return Err("Limite durável de 100 solicitações por avaliação atingido na instalação.".into());}
-        let enabled=p.as_ref().is_some_and(|p|p.enabled);let price=p.as_ref().and_then(|p|p.prices.iter().find(|price|price.fields.model==spec.model)).cloned();let reserved=price.as_ref().map(|p|cost(p,spec.estimated_input_tokens,u64::from(spec.max_output_tokens))).transpose()?;
+        let enabled=p.as_ref().is_some_and(|p|p.enabled);let price=p.as_ref().and_then(|p|p.prices.iter().find(|price|price.fields.provider.unwrap_or(ProviderId::OpenAI).endpoint()==spec.endpoint&&price.fields.model==spec.model)).cloned();let reserved=price.as_ref().map(|p|cost(p,spec.estimated_input_tokens,u64::from(spec.max_output_tokens))).transpose()?;
         let review_id=if enabled {
             let p=p.as_ref().unwrap();let consent=consent.ok_or("Revise e confirme a estimativa de custo antes deste envio.")?;
             let raw:String=tx.query_row("SELECT data FROM budget_reviews WHERE id=?1",[&consent.id],|r|r.get(0)).optional().map_err(err)?.ok_or("Revisão de orçamento não encontrada.")?;let r:Review=serde_json::from_str(&raw).map_err(err)?;
@@ -156,7 +160,7 @@ impl Ledger {
             if current.iter().any(|c|c.review_id.as_deref()==Some(&r.id)&&c.slot==slot){return Err("Esta revisão já foi consumida; nenhuma chamada será repetida.".into());}
             admit(&current,&m,p,&scope,reserved.ok_or("Tarifa do modelo ausente.")?)?;Some(r.id)
         }else{None};
-        let charge=Charge{id:id.into(),scope,epoch_id:m.epoch_id,policy_revision:p.as_ref().map(|p|p.revision.clone()),model:spec.model.clone(),endpoint:ENDPOINT.into(),created_at:model::now(),state:"reserved".into(),reserved,priced:None,assumed:None,price,input_tokens:None,output_tokens:None,review_id,slot,excluded:false,resolution:None,dispatched_at:None};
+        let charge=Charge{id:id.into(),scope,epoch_id:m.epoch_id,policy_revision:p.as_ref().map(|p|p.revision.clone()),model:spec.model.clone(),endpoint:spec.endpoint.clone(),created_at:model::now(),state:"reserved".into(),reserved,priced:None,assumed:None,price,input_tokens:None,output_tokens:None,review_id,slot,excluded:false,resolution:None,dispatched_at:None};
         tx.execute("INSERT INTO budget_charges VALUES(?1,?2,?3,?4)",params![charge.id,charge.scope,charge.state,serde_json::to_string(&charge).map_err(err)?]).map_err(err)?;tx.commit().map_err(err)?;Ok(charge_public(&charge))
     }
     pub(super) fn preflight(&self,specs:&[Spec],consent:Option<&Consent>)->Result<(),String>{
@@ -175,7 +179,7 @@ impl Ledger {
         let mut db=self.lock()?;let tx=db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate).map_err(err)?;
         let Some(mut charge)=charges(&tx)?.into_iter().find(|charge|charge.id==id)else{tx.commit().map_err(err)?;return Ok(());};
         let proof_hash=proof.fingerprint();
-        if charge.scope!=scope(&meta(&tx)?,assessment)||charge.endpoint!=ENDPOINT||expected_model.is_some_and(|model|model!=charge.model)||charge.dispatched_at.is_some()||charge.priced.is_some()||charge.assumed.is_some()||charge.input_tokens.is_some()||charge.output_tokens.is_some()||charge.excluded||!matches!(charge.state.as_str(),"reserved"|"unknown"|"not_dispatched")||charge.resolution.as_ref().is_some_and(|r|r["kind"]!="not_dispatched_proof"||r["proofSha256"]!=proof_hash){return Err(err("proof and charge disagree"));}
+        if charge.scope!=scope(&meta(&tx)?,assessment)||ProviderId::from_endpoint(&charge.endpoint).is_err()||expected_model.is_some_and(|(endpoint,model)|endpoint!=charge.endpoint||model!=charge.model)||charge.dispatched_at.is_some()||charge.priced.is_some()||charge.assumed.is_some()||charge.input_tokens.is_some()||charge.output_tokens.is_some()||charge.excluded||!matches!(charge.state.as_str(),"reserved"|"unknown"|"not_dispatched")||charge.resolution.as_ref().is_some_and(|r|r["kind"]!="not_dispatched_proof"||r["proofSha256"]!=proof_hash){return Err(err("proof and charge disagree"));}
         if charge.state!="not_dispatched"||charge.resolution.is_none(){
             charge.state="not_dispatched".into();charge.reserved=None;
             charge.resolution=Some(json!({"kind":"not_dispatched_proof","proofSha256":proof_hash,"recordedAt":model::now(),"remoteEffectStarted":false}));
@@ -232,13 +236,18 @@ impl AiService {
         "ai.budget.preview"=>{
             let input:Preview=decode(payload)?;let _lease=self.inference.try_lock().map_err(|_|"Aguarde a inferência para revisar custo.")?;
             if !self.budget.enabled()?{return Ok(json!({"enabled":false,"review":null,"notice":NOTICE}));}
-            let cfg=self.config(store,true)?;let(key,revision)=self.credential()?;
+            if input.operation=="investigation"{
+                let (specs,context)=self.investigation_budget_specs(input.payload,store)?;
+                return self.budget.preview(specs,context);
+            }
+            let cfg=self.config_for(store,input.payload["assessmentId"].as_str(),true)?;
+            let provider=ProviderId::parse(&cfg.provider)?;
+            let(key,revision)=self.provider_credential(provider)?;
             if redact(&cfg.model,Some(&key))!=cfg.model{return Err("Identificador do modelo contém dado sensível.".into());}
             let (specs,context)=match input.operation.as_str(){
-                "test"=>{empty(&input.payload)?;(vec![Spec::new("test","connection-test",&cfg.model,&revision,TEST_PROMPT,TEST_INSTRUCTIONS,2048)?],None)},
-                "ask"=>{let mut payload=input.payload;if !payload.is_object()||payload.get("allowRemote").is_some()||payload.get("budgetReview").is_some(){return Err("Prévia não recebe consentimento nem outra revisão.".into());}payload["allowRemote"]=json!(false);let input:AskInput=decode(payload)?;let reviewed=self.reviewed_ai_data(store,input.data_review.as_ref(),&input.assessment_id,&input.evidence_ids,&input.context_target_refs,&input.message,"ask")?;if reviewed.packet.context["digest"]!=input.context_digest{return Err("data_review_changed: contexto mudou antes do orçamento.".into());}self.data_policy.check_review(store,&reviewed.prepared.review,&reviewed.packet.spec)?;let(prompt,instructions,maximum)=&reviewed.packet.prompts[0];(vec![Spec::new("ask",&input.assessment_id,&cfg.model,&revision,prompt,instructions,*maximum)?.bind_data(&reviewed.prepared.review.digest)?],Some(input.context_digest))},
+                "test"=>{empty(&input.payload)?;(vec![Spec::for_provider(provider,"test","connection-test",&cfg.model,&revision,TEST_PROMPT,TEST_INSTRUCTIONS,2048)?],None)},
+                "ask"=>{let mut payload=input.payload;if !payload.is_object()||payload.get("allowRemote").is_some()||payload.get("budgetReview").is_some(){return Err("Prévia não recebe consentimento nem outra revisão.".into());}payload["allowRemote"]=json!(false);let input:AskInput=decode(payload)?;let reviewed=self.reviewed_ai_data(store,input.data_review.as_ref(),&input.assessment_id,&input.evidence_ids,&input.context_target_refs,&input.message,"ask")?;if reviewed.packet.context["digest"]!=input.context_digest{return Err("data_review_changed: contexto mudou antes do orçamento.".into());}self.data_policy.check_review(store,&reviewed.prepared.review,&reviewed.packet.spec)?;let(prompt,instructions,maximum)=&reviewed.packet.prompts[0];(vec![Spec::for_provider(provider,"ask",&input.assessment_id,&cfg.model,&revision,prompt,instructions,*maximum)?.bind_data(&reviewed.prepared.review.digest)?],Some(input.context_digest))},
                 "operation_proposal"=>self.operation_budget_specs(input.payload,store,&cfg.model,&key,&revision)?,
-                "investigation"=>self.investigation_budget_specs(input.payload,store)?,
                 _=>return Err("Operação não possui revisão de custo suportada.".into()),
             };self.budget.preview(specs,context)
         },_=>Err("Ação de orçamento desconhecida.".into())}}
@@ -251,7 +260,7 @@ mod tests {
     const KEY:&str="synthetic-budget-key-only-not-real-123456";
     struct Fake {calls:AtomicUsize,answers:Mutex<VecDeque<Result<Value,String>>>}
     impl Fake {fn new(answers:Vec<Result<Value,String>>)->Arc<Self>{Arc::new(Self{calls:AtomicUsize::new(0),answers:Mutex::new(answers.into())})}}
-    impl Provider for Fake {fn response(&self,_:&str,key:&str,_:&str,_:&str,_:u32)->Result<Value,String>{assert_eq!(key,KEY);self.calls.fetch_add(1,Ordering::SeqCst);self.answers.lock().unwrap().pop_front().expect("Unexpected paid dispatch")}}
+    impl Provider for Fake {fn response(&self,_:ProviderId,_:&str,key:&str,_:&str,_:&str,_:u32)->Result<Value,String>{assert_eq!(key,KEY);self.calls.fetch_add(1,Ordering::SeqCst);self.answers.lock().unwrap().pop_front().expect("Unexpected paid dispatch")}}
     fn answer(text:&str,input:i64,output:i64)->Result<Value,String>{Ok(json!({"id":model::id(),"status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":text}]}],"usage":{"input_tokens":input,"output_tokens":output}}))}
     struct Fixture {_dir:tempfile::TempDir,base:PathBuf,profile:PathBuf,store:Store,ai:AiService,fake:Arc<Fake>,assessment:String}
     impl Fixture {

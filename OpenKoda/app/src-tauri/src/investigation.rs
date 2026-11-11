@@ -75,7 +75,7 @@ fn validate(p:&Plan)->Result<(),String>{
         let mut selected=p.context_target_refs.clone();selected.sort_by(|a,b|a.entry_id.cmp(&b.entry_id));
         if p.scope_ref.is_none()||p.context.get("contextTargetRefs")!=Some(&json!(selected)){return Err("Seleção de fontes não corresponde ao contexto revisado.".into());}
     }else if p.context.get("contextTargetRefs").is_some(){return Err("Contexto combinado sem referências de origem.".into());}
-    if p.digest!=plan_digest(p)||p.context_digest!=digest(&p.context.to_string())||p.endpoint!=ENDPOINT||p.context.to_string().len()>MAX_CONTEXT||p.message.len()>8000{return Err("Plano de investigação alterado ou fora dos limites.".into());}
+    if p.digest!=plan_digest(p)||p.context_digest!=digest(&p.context.to_string())||ProviderId::from_endpoint(&p.endpoint).is_err()||p.context.to_string().len()>MAX_CONTEXT||p.message.len()>8000{return Err("Plano de investigação alterado ou fora dos limites.".into());}
     if let Some(review)=&p.data_review{
         crate::core::valid_id(&review.id)?;
         let options=p.data_options.as_ref().ok_or("Plano de dados incompleto.")?;
@@ -177,7 +177,7 @@ impl AiService {
     fn prepare_investigation(&self,store:&Store,input:Prepare)->Result<Value,String>{
         let _lease=self.inference.try_lock().map_err(|_|"Aguarde a inferência em andamento antes de preparar investigação.")?;
         if self.investigation_plans(None)?.len()>=MAX_JOBS{return Err("Limite local de 500 investigações atingido.".into());}
-        let cfg=self.config(store,true)?;let (_key,revision)=self.credential()?;
+        let cfg=self.config_for(store,Some(&input.assessment_id),true)?;let provider=ProviderId::parse(&cfg.provider)?;let (_key,revision)=self.provider_credential(provider)?;
         let reviewed=self.reviewed_ai_data(store,input.data_review.as_ref(),&input.assessment_id,&input.evidence_ids,&input.context_target_refs,&input.message,"investigation")?;
         if reviewed.prepared.options.perspectives!=input.perspectives||reviewed.prepared.options.max_output_tokens_per_request!=Some(input.max_output_tokens_per_request)||reviewed.prepared.options.max_total_tokens!=Some(input.max_total_tokens){return Err("data_review_changed: perspectivas ou limites mudaram.".into());}
         let message=reviewed.packet.message.clone();
@@ -186,7 +186,7 @@ impl AiService {
         let scope=context_scope(&context)?;
         scope::recheck_selected(store,&scope,AI_METHOD,&input.context_target_refs)?;
         let mut p=Plan{id:model::id(),assessment_id:input.assessment_id,evidence_ids:input.evidence_ids,context_digest:input.context_digest,context:context["context"].clone(),message,perspectives:input.perspectives,
-            endpoint:ENDPOINT.into(),model:cfg.model,credential_revision:revision,created_at:model::now(),expires_at:(chrono::Utc::now()+chrono::Duration::minutes(15)).to_rfc3339(),
+            endpoint:cfg.endpoint,model:cfg.model,credential_revision:revision,created_at:model::now(),expires_at:(chrono::Utc::now()+chrono::Duration::minutes(15)).to_rfc3339(),
             budget:Budget{max_requests:0,max_output_tokens_per_request:input.max_output_tokens_per_request,max_total_tokens:input.max_total_tokens,conservative_reservation_per_request:0,max_context_bytes:MAX_CONTEXT},digest:String::new(),status:"prepared".into(),results:vec![],outcome_note:String::new(),reconciled_from:None,scope_ref:Some(scope.clone()),context_target_refs:input.context_target_refs,data_review:Some(reviewed.prepared.review),data_options:Some(reviewed.prepared.options),data_message_input_sha256:Some(reviewed.prepared.raw_message_sha256),data_use_receipt_ref:None,data_request_fingerprints:Some(reviewed.packet.spec.requests.clone())};
         p.budget.max_requests=p.perspectives.len() as u32;
         let max_instructions=p.perspectives.iter().map(|role|instructions(role).map(|s|s.len())).collect::<Result<Vec<_>,_>>()?.into_iter().max().unwrap_or(0);
@@ -204,7 +204,7 @@ impl AiService {
         let packet=self.investigation_data_packet(&plan,store)?;
         let reference=plan.data_review.as_ref().ok_or("data_review_required: prepare outra investigação.")?;
         self.data_policy.check_review(store,reference,&packet.spec)?;
-        let specs=packet.prompts.iter().map(|(prompt,instructions,maximum)|budget::Spec::new("investigation",&plan.assessment_id,&plan.model,&plan.credential_revision,prompt,instructions,*maximum)?.bind_data(&reference.digest)).collect::<Result<Vec<_>,String>>()?;
+        let specs=packet.prompts.iter().map(|(prompt,instructions,maximum)|budget::Spec::for_provider(ProviderId::from_endpoint(&plan.endpoint)?,"investigation",&plan.assessment_id,&plan.model,&plan.credential_revision,prompt,instructions,*maximum)?.bind_data(&reference.digest)).collect::<Result<Vec<_>,String>>()?;
         Ok((specs,Some(plan.context_digest)))
     }
     fn validate_investigation_context(&self,p:&Plan,store:&Store)->Result<(),String>{
@@ -214,8 +214,8 @@ impl AiService {
         scope::check_selected_work(&snapshot,&p.assessment_id,AI_METHOD,Some(reference),&p.context_target_refs)?;
         let assessment=snapshot.assessments.iter().find(|a|a.id==p.assessment_id).ok_or("Avaliação não encontrada.")?;
         if !snapshot.projects.iter().any(|project|project.id==assessment.project_id&&!project.archived){return Err("Projeto arquivado não aceita nova inferência de investigação.".into());}
-        let cfg=self.config(store,true)?;
-        let revision:Option<String>=self.db.lock().map_err(failure)?.query_row("SELECT revision FROM vault WHERE id=1",[],|row|row.get(0)).optional().map_err(failure)?;
+        let cfg=self.config_for(store,Some(&p.assessment_id),true)?;
+        let revision=self.revision(ProviderId::parse(&cfg.provider)?)?;
         if cfg.model!=p.model||cfg.endpoint.trim_end_matches('/')!=p.endpoint||revision.as_deref()!=Some(&p.credential_revision){return Err("Modelo, endpoint ou credencial mudou; prepare outra revisão.".into());}
         let packet=self.investigation_data_packet(p,store)?;
         let decision=crate::data_policy::DataPolicyService::check_use(&store.snapshot()?,&packet.spec)?;
@@ -284,7 +284,7 @@ impl AiService {
         let locally_closed=local_closure::covered_roots(&store.root,&*self.db.lock().map_err(failure)?)?;
         let pending=self.investigation_plans(Some(&p.assessment_id))?.iter().any(|v|matches!(v.status.as_str(),"unknown"|"running"|"canceling")&&!locally_closed.contains(&crate::workflow::EffectRef::AiInvestigation{id:v.id.clone()}));
         if pending{return Err("Reconcilie a investigação interrompida antes de iniciar outra nesta avaliação.".into());}
-        let (key,revision)=self.credential()?;
+        let (key,revision)=self.provider_credential(ProviderId::from_endpoint(&p.endpoint)?)?;
         let(specs,_)=self.investigation_budget_specs(json!({"id":input.id,"digest":input.digest}),store)?;
         self.budget.preflight(&specs,input.budget_review.as_ref())?;
         let cancel=Arc::new(AtomicBool::new(false));
@@ -329,7 +329,7 @@ impl AiService {
             let packet=self.investigation_data_packet(p,store)?;
             let data_review=p.data_review.as_ref().ok_or("data_review_required")?;
             let(prompt,instructions,maximum)=&packet.prompts[index];
-            let answer=self.complete_locked(&p.model,key,revision,&p.assessment_id,prompt,instructions,None,*maximum,Some(&request_id),json!({"investigationId":p.id,"perspective":perspective,"maxOutputTokens":p.budget.max_output_tokens_per_request}),budget_review,index,Some((store,reference,&p.context_target_refs)),Some(data::DataDispatch{review:data_review,spec:&packet.spec,acknowledge_sensitive:false,admitted_context:Some((admitted,index as u8))}),work::RequestWork::Live(work));
+            let answer=self.complete_locked(ProviderId::from_endpoint(&p.endpoint)?,&p.model,key,revision,&p.assessment_id,prompt,instructions,None,*maximum,Some(&request_id),json!({"investigationId":p.id,"perspective":perspective,"maxOutputTokens":p.budget.max_output_tokens_per_request}),budget_review,index,Some((store,reference,&p.context_target_refs)),Some(data::DataDispatch{review:data_review,spec:&packet.spec,acknowledge_sensitive:false,admitted_context:Some((admitted,index as u8))}),work::RequestWork::Live(work));
             let ledger:Option<(String,Option<i64>,Option<i64>)>=self.db.lock().map_err(failure)?.query_row("SELECT status,input_tokens,output_tokens FROM requests WHERE id=?1",[&request_id],|row|Ok((row.get(0)?,row.get(1)?,row.get(2)?))).optional().map_err(failure)?;
             let step=&mut p.results[index];step.finished_at=Some(model::now());
             step.usage=ledger.as_ref().map(|(_,input,output)|json!({"input_tokens":input,"output_tokens":output})).unwrap_or(Value::Null);
@@ -370,7 +370,7 @@ impl AiService {
         let mut p=self.load_investigation(&input.id)?;check_assessment(store,&p.assessment_id)?;
         if p.status!="unknown"{return Err("Somente investigação interrompida/desconhecida pode ser reconciliada.".into());}
         p.reconciled_from=Some(p.status.clone());p.status="reconciled".into();
-        let note=if self.has_key(){let(key,_)=self.credential()?;redact(&note,Some(&key))}else{redact(&note,None)};
+        let note=Self::redact_keys(&note,&self.all_keys()?);
         p.outcome_note=format!("Inspeção humana: {note}. Registro encerrado localmente sem repetir inferência. Resultado remoto e cobrança desconhecidos não foram considerados cancelados ou estornados.");
         self.save_investigation(&p)?;public(&p)
     }
@@ -385,7 +385,7 @@ mod tests {
     struct Fake {calls:Mutex<Vec<Call>>,responses:Mutex<VecDeque<Result<Value,String>>>}
     impl Fake {fn new(responses:Vec<Result<Value,String>>)->Arc<Self>{Arc::new(Self{calls:Mutex::new(vec![]),responses:Mutex::new(responses.into())})}}
     impl Provider for Fake {
-        fn response(&self,model:&str,key:&str,prompt:&str,instructions:&str,max_output:u32)->Result<Value,String>{
+        fn response(&self,_:ProviderId,model:&str,key:&str,prompt:&str,instructions:&str,max_output:u32)->Result<Value,String>{
             assert_eq!(key,KEY);self.calls.lock().unwrap().push(Call{prompt:prompt.into(),instructions:instructions.into(),max_output,model:model.into()});
             self.responses.lock().unwrap().pop_front().expect("No unplanned provider request")
         }
@@ -498,7 +498,7 @@ mod tests {
     }
     #[test]fn scope_revocation_during_provider_preserves_charge_and_blocks_next_perspective(){
         struct Blocking {started:std::sync::mpsc::Sender<()>,release:Mutex<std::sync::mpsc::Receiver<()>>,calls:AtomicUsize}
-        impl Provider for Blocking {fn response(&self,_:&str,_:&str,_:&str,_:&str,_:u32)->Result<Value,String>{self.calls.fetch_add(1,Ordering::SeqCst);self.started.send(()).unwrap();self.release.lock().unwrap().recv_timeout(Duration::from_secs(10)).unwrap();answer("Admitted response remains recorded",12,13)}}
+        impl Provider for Blocking {fn response(&self,_:ProviderId,_:&str,_:&str,_:&str,_:&str,_:u32)->Result<Value,String>{self.calls.fetch_add(1,Ordering::SeqCst);self.started.send(()).unwrap();self.release.lock().unwrap().recv_timeout(Duration::from_secs(10)).unwrap();answer("Admitted response remains recorded",12,13)}}
         let(start_tx,start_rx)=std::sync::mpsc::channel();let(release_tx,release_rx)=std::sync::mpsc::channel();let provider=Arc::new(Blocking{started:start_tx,release:Mutex::new(release_rx),calls:AtomicUsize::new(0)});let f=Fixture::new(provider.clone());let p=f.plan(vec!["evidence","counterevidence"]);
         std::thread::scope(|threads|{
             let run=threads.spawn(||f.run(&p));start_rx.recv_timeout(Duration::from_secs(10)).unwrap();
@@ -525,7 +525,7 @@ mod tests {
     }
     #[test]fn cancellation_is_observable_during_request_and_configuration_is_locked(){
         struct Blocking {started:std::sync::mpsc::Sender<()>,release:Mutex<std::sync::mpsc::Receiver<()>>,calls:AtomicUsize}
-        impl Provider for Blocking {fn response(&self,_:&str,_:&str,_:&str,_:&str,_:u32)->Result<Value,String>{self.calls.fetch_add(1,Ordering::SeqCst);self.started.send(()).unwrap();self.release.lock().unwrap().recv_timeout(Duration::from_secs(10)).unwrap();answer("In-flight result preserved",12,13)}}
+        impl Provider for Blocking {fn response(&self,_:ProviderId,_:&str,_:&str,_:&str,_:&str,_:u32)->Result<Value,String>{self.calls.fetch_add(1,Ordering::SeqCst);self.started.send(()).unwrap();self.release.lock().unwrap().recv_timeout(Duration::from_secs(10)).unwrap();answer("In-flight result preserved",12,13)}}
         let(start_tx,start_rx)=std::sync::mpsc::channel();let(release_tx,release_rx)=std::sync::mpsc::channel();let provider=Arc::new(Blocking{started:start_tx,release:Mutex::new(release_rx),calls:AtomicUsize::new(0)});let f=Fixture::new(provider.clone());let p=f.plan(vec!["evidence","counterevidence"]);
         std::thread::scope(|scope|{
             let run=scope.spawn(||f.run(&p));start_rx.recv_timeout(Duration::from_secs(10)).unwrap();
@@ -538,7 +538,7 @@ mod tests {
     }
     #[test]fn changed_context_between_workers_stops_without_discarding_first_result(){
         struct Blocking {started:std::sync::mpsc::Sender<()>,release:Mutex<std::sync::mpsc::Receiver<()>>,calls:AtomicUsize}
-        impl Provider for Blocking {fn response(&self,_:&str,_:&str,_:&str,_:&str,_:u32)->Result<Value,String>{assert_eq!(self.calls.fetch_add(1,Ordering::SeqCst),0);self.started.send(()).unwrap();self.release.lock().unwrap().recv_timeout(Duration::from_secs(10)).unwrap();answer("Result against prior reviewed context",12,13)}}
+        impl Provider for Blocking {fn response(&self,_:ProviderId,_:&str,_:&str,_:&str,_:&str,_:u32)->Result<Value,String>{assert_eq!(self.calls.fetch_add(1,Ordering::SeqCst),0);self.started.send(()).unwrap();self.release.lock().unwrap().recv_timeout(Duration::from_secs(10)).unwrap();answer("Result against prior reviewed context",12,13)}}
         let(start_tx,start_rx)=std::sync::mpsc::channel();let(release_tx,release_rx)=std::sync::mpsc::channel();let provider=Arc::new(Blocking{started:start_tx,release:Mutex::new(release_rx),calls:AtomicUsize::new(0)});let f=Fixture::new(provider.clone());let p=f.plan(vec!["evidence","counterevidence"]);
         std::thread::scope(|scope|{let run=scope.spawn(||f.run(&p));start_rx.recv_timeout(Duration::from_secs(10)).unwrap();f.store.mutate(|s|{s.assessments[0].coverage.push("New observation after initial review".into());Ok(())}).unwrap();release_tx.send(()).unwrap();let result=run.join().unwrap();assert_eq!(result["status"],"partial");assert_eq!(result["results"][0]["text"],"Result against prior reviewed context");assert!(result["outcomeNote"].as_str().unwrap().contains("data_review_changed"));});assert_eq!(provider.calls.load(Ordering::SeqCst),1);
     }

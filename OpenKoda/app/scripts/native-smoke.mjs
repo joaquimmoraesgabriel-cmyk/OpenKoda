@@ -1522,6 +1522,35 @@ try {
     expect(await request('support.export', decision)).toEqual(saved);
     return { sha256: review.sha256, bytes: review.bytes, duplicateVerified: true, remoteTransmission: false };
   });
+  await gate('E4-provider-selection', 'Provider keys stay separate and retrying an assessment preserves its chosen destination', async () => {
+    const initial = await request('snapshot');
+    const input = {
+      projectId: project.id, title: 'Seleção por avaliação', kind: project.kind,
+      target: project.target, objective: 'Verificar seleção e reabertura sem inferência.',
+      idempotencyKey: randomUUID(), aiSelection: { provider: 'openrouter', model: 'fixture/model' }
+    };
+    for (const provider of ['groq', 'openrouter']) {
+      await request('ai.key.save', {provider, key: 'OPENKODA_SYNTHETIC_' + provider + '_NEVER_SEND_0123456789'});
+    }
+    const created = await request('assessment.create', input);
+    expect(created.aiSelection).toEqual(input.aiSelection);
+    await closeApp('before-provider-reopen.zip');
+    await openApp();
+    expect(await request('assessment.create', input)).toEqual(created);
+    const other = {provider:'groq', model:'fixture/model'};
+    await rejects('assessment.create', {...input, aiSelection: other}, 'scope_idempotency_conflict');
+    await request('ai.selection.save', {assessmentId:created.id, aiSelection:other});
+    await request('ai.key.remove', {provider:'openrouter'});
+    const expectedKeys = {openai:initial.settings.hasApiKey, groq:true, openrouter:false};
+    for (const [provider,hasApiKey] of Object.entries(expectedKeys)) {
+      expect(await request('ai.status', {provider})).toMatchObject({provider,hasApiKey});
+    }
+    const after = await request('snapshot');
+    expect(after.assessments).toHaveLength(initial.assessments.length + 1);
+    expect(after.assessments.find(a => a.id === created.id).aiSelection).toEqual(other);
+    expect(after.settings).toEqual(initial.settings);
+    return {providers:3, assessmentId:created.id, duplicatePrevented:true, providerChanged:true, modelInferences:0};
+  });
   succeeded = true;
 } catch (error) {
   if (page) await screenshot('failure.png').catch(() => {});

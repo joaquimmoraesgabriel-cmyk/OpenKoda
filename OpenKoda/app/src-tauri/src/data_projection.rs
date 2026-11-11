@@ -180,7 +180,7 @@ fn control(key:&str,value:&str)->bool{
     // These are control *values*, not a permission to expose arbitrary text
     // merely because an untrusted object names its property "status".
     let values:&[&str]=match key{
-        "provider"=>&["openai"],
+        "provider"=>&["openai","openrouter","groq"],
         "kind"=>&["web","network","code","files","combined","info","warning","error","success","source_rules","source_capture","provider_reference","target_reference","metadata_only","user_association","host_record","unknown","local","connection","local_raw_view","evidence","derived","scope_source","assessment_metadata"],
         "status"|"phase"=>&["draft","preparing","planning","awaiting_approval","queued","running","pausing","paused","validating","completed","partial","canceling","canceled","blocked","failed","unknown","candidate","validated","dismissed","fixed","proposed","approved","revoked","pending","ready","unavailable","starting","stopped","enabled","disabled","frozen","legacy","unreviewed","reviewed","admitted","dispatched","not_sent","failed_before_send","needs_review","retained","purged"],
         "severity"=>&["info","low","medium","high","critical"],

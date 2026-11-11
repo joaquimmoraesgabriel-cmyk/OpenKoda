@@ -42,36 +42,39 @@ try {
   await page.waitForFunction(()=>typeof window.__TAURI_INTERNALS__?.invoke==='function');
   const request=(action,payload={})=>page.evaluate(({action,payload})=>window.__TAURI_INTERNALS__.invoke('request',{request:{action,payload}}),{action,payload});
   await expect(page.locator('main')).toHaveAttribute('aria-busy','false');
-  if(!verifyOnly) await request('ai.key.save',{key});key=undefined;
-  metadata.configured=true;
-  const snapshot=await request('snapshot');
-  let model=snapshot.settings.model;
+  let model;
   let result;
   if(verifyOnly) {
-    result=await request('ai.status');
+    result=await request('ai.status',{provider:'openai'});
+    expect(result.provider).toBe('openai');
+    expect(result.endpoint).toBe(metadata.endpoint);
     expect(result.hasApiKey).toBe(true);
+    metadata.configured=true;
+    model=result.model;
     metadata.verificationOnly=true;
   } else {
-  if(snapshot.settings.endpoint!=='https://api.openai.com/v1'||snapshot.settings.provider!=='openai') {
-    await request('settings.save',{provider:'openai',endpoint:'https://api.openai.com/v1'});
-  }
-  const catalog=await request('ai.models');
-  const requested=process.argv[3]||snapshot.settings.model;
-  model=requested||['gpt-5-mini','gpt-4.1-mini','gpt-4o-mini'].find(id=>catalog.models.includes(id));
-  if(!model||!catalog.models.includes(model)) throw new Error('Selecione um modelo disponível nas Configurações; a chave já foi cadastrada.');
-  await request('settings.save',{model});metadata.model=model;
-  result=await request('ai.test');
+    await request('ai.key.save',{provider:'openai',key});key=undefined;
+    metadata.configured=true;
+    const snapshot=await request('snapshot');
+    const catalog=await request('ai.models',{provider:'openai'});
+    const requested=process.argv[3]||(snapshot.settings.provider==='openai'?snapshot.settings.model:'');
+    model=requested||['gpt-5-mini','gpt-4.1-mini','gpt-4o-mini'].find(id=>catalog.models.includes(id));
+    if(!model||!catalog.models.includes(model)) throw new Error('Selecione um modelo disponível nas Configurações; a chave já foi cadastrada.');
+    await request('settings.save',{provider:'openai',endpoint:metadata.endpoint,model});metadata.model=model;
+    result=await request('ai.test');
   }
   metadata.model=model;
   expect(result.verified).toBe(true);
   metadata.passed=true;metadata.checkedAt=result.checkedAt;metadata.usage=result.usage;
-  await page.reload();
-  await expect(page.locator('main')).toHaveAttribute('aria-busy','false');
-  await page.getByRole('button',{name:'Configurações',exact:true}).click();
-  await page.getByRole('button',{name:'IA e modelos',exact:true}).click();
-  await expect(page.getByLabel('Modelo',{exact:true})).toHaveValue(model);
-  await expect(page.getByText(/Conexão verificada/)).toBeVisible();
-  await page.screenshot({path:join(directory,'connection-configured.png'),fullPage:true});
+  if(!verifyOnly) {
+    await page.reload();
+    await expect(page.locator('main')).toHaveAttribute('aria-busy','false');
+    await page.getByRole('button',{name:'Configurações',exact:true}).click();
+    await page.getByRole('button',{name:'IA e modelos',exact:true}).click();
+    await expect(page.getByLabel('Modelo',{exact:true})).toHaveValue(model);
+    await expect(page.getByText(/Conexão verificada/)).toBeVisible();
+    await page.screenshot({path:join(directory,'connection-configured.png'),fullPage:true});
+  }
 } catch(error) {
   // Deliberately generic: no exception text from a provider, page or file is retained.
   const reason=String(error);

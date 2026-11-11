@@ -1,0 +1,100 @@
+//! Exercise the public commands and the durable dispatch/credential boundaries offline.
+use super::*;
+use crate::core::Request;
+use crate::data_projection::DataRedactor;
+
+const KEYS:[&str;3]=["synthetic-openai-provider-key","synthetic-openrouter-provider-key","synthetic-groq-provider-key"];
+struct Transport { calls:Mutex<Vec<(ProviderId,String)>> }
+impl Provider for Transport {
+    fn models(&self,p:ProviderId,key:&str)->Result<Vec<String>,String>{
+        assert_eq!(key,KEYS[p.slot() as usize-1]);
+        Ok(vec!["shared-model".into(),format!("{}-model",p.id())])
+    }
+    fn response(&self,p:ProviderId,model:&str,key:&str,prompt:&str,_:&str,_:u32)->Result<Value,String>{
+        assert_eq!(key,KEYS[p.slot() as usize-1]);
+        for key in KEYS {assert!(!prompt.contains(key));}
+        self.calls.lock().unwrap().push((p,model.into()));
+        Ok(json!({"id":"synthetic-reply","status":"completed","model":model,
+            "usage":{"input_tokens":3,"output_tokens":4},
+            "output":[{"type":"message","content":[{"type":"output_text","text":format!("Reply {}",KEYS[0])}]}]}))
+    }
+}
+#[test]
+fn per_assessment_dispatch_uses_its_slot_and_rejects_stale_reviews(){
+    let dir=tempfile::tempdir().unwrap();
+    let store=Store::open(dir.path().into()).unwrap();
+    let transport=Arc::new(Transport{calls:Mutex::default()});
+    let ai=AiService::with_provider(dir.path().into(),transport.clone()).unwrap();
+    for (p,key) in ProviderId::ALL.into_iter().zip(KEYS){
+        ai.handle("ai.key.save",json!({"provider":p,"key":key}),&store).unwrap();
+        let catalog=ai.handle("ai.models",json!({"provider":p}),&store).unwrap();
+        assert_eq!(catalog["models"][1],format!("{}-model",p.id()));
+    }
+    ai.save_settings(json!({"model":"default-model"}),&store).unwrap();
+    let redactor=ai.data_redactor();
+    for key in KEYS {assert!(redactor.contains_managed_secret(key));}
+    let p=store.handle(Request{action:"project.create".into(),payload:json!({"name":"Providers","kind":"web","target":"https://example.invalid/fixture"})}).unwrap();
+    let a=store.handle(Request{action:"assessment.create".into(),payload:json!({"projectId":p["id"],"title":"Scoped provider","kind":"web","target":p["target"],"objective":"Verify provider isolation","scope":crate::scope::test_creation(&store,p["id"].as_str().unwrap(),&[AI_METHOD]),"aiSelection":{"provider":"openrouter","model":"shared-model"}})}).unwrap();
+    let id=a["id"].as_str().unwrap();
+    let input=json!({"assessmentId":id,"message":"Review synthetic context","allowRemote":true,"evidenceIds":[]});
+    let first=ai.test_data_input(&store,"ask",input.clone());
+    assert!(first["dataReview"].is_object());
+    let save=|provider|ai.handle("ai.selection.save",json!({"assessmentId":id,"aiSelection":{"provider":provider,"model":"shared-model"}}),&store).unwrap();
+    save("groq");
+    assert!(ai.handle("ai.ask",first,&store).is_err());
+    assert!(transport.calls.lock().unwrap().is_empty());
+    let reviewed=ai.test_data_input(&store,"ask",input.clone());
+    let answer=ai.handle("ai.ask",reviewed.clone(),&store).unwrap();
+    assert!(!answer["text"].as_str().unwrap().contains(KEYS[0]));
+    assert!(ai.handle("ai.ask",reviewed,&store).is_err());
+    assert_eq!(*transport.calls.lock().unwrap(),[(ProviderId::Groq,"shared-model".into())]);
+    let history=ai.handle("ai.history",json!({"assessmentId":id}),&store).unwrap();
+    assert_eq!(history["requests"][0]["endpoint"],ProviderId::Groq.endpoint());
+    assert_eq!(history["requests"][0]["budget"]["endpoint"],ProviderId::Groq.endpoint());
+    ai.handle("ai.key.remove",json!({"provider":"openrouter"}),&store).unwrap();
+    assert_eq!(ai.handle("ai.status",json!({"provider":"groq"}),&store).unwrap()["hasApiKey"],true);
+    assert_eq!(ai.handle("ai.status",json!({"provider":"openrouter"}),&store).unwrap()["hasApiKey"],false);
+    let reopened=AiService::with_provider(dir.path().into(),transport).unwrap();
+    assert_eq!(reopened.provider_credential(ProviderId::OpenAI).unwrap().0.as_str(),KEYS[0]);
+    assert_eq!(reopened.provider_credential(ProviderId::Groq).unwrap().0.as_str(),KEYS[2]);
+    assert_eq!(store.snapshot().unwrap().settings.model,"default-model");
+}
+#[test]
+fn catalog_does_not_truncate_and_chat_usage_is_normalized(){
+    let aliases=crate::ai_provider::catalog(&json!({"data":[{"id":"org/model:v1"},{"id":"~org/alias-latest"},{"id":"org/model:v1"}]})).unwrap();
+    assert_eq!(aliases,["org/model:v1","~org/alias-latest"]);
+    let rows=(0..1200).map(|n|json!({"id":format!("org/model-{n}")})).collect::<Vec<_>>();
+    assert_eq!(crate::ai_provider::catalog(&json!({"data":rows})).unwrap().len(),1200);
+    for p in [ProviderId::OpenRouter,ProviderId::Groq]{
+        let body=p.body("org/model","user","system",50);
+        assert_eq!(body["model"],"org/model");
+        if p==ProviderId::Groq {assert_eq!(body["tool_choice"],"none");}
+        assert_eq!(body["messages"][1]["content"],"user");
+        assert_eq!(p.inference_url(),format!("{}/chat/completions",p.endpoint()));
+        let body=p.normalize(json!({"id":"abc","model":"org/model","choices":[{"finish_reason":"length","message":{"content":"partial"}}],"usage":{"prompt_tokens":15,"completion_tokens":50}})).unwrap();
+        assert_eq!(body["status"],"incomplete");
+        assert_eq!(body["usage"],json!({"input_tokens":15,"output_tokens":50}));
+        assert!(parse_completion(body,"key").is_err());
+    }
+}
+#[test]
+fn budget_distinguishes_identically_named_models_on_different_providers(){
+    let dir=tempfile::tempdir().unwrap();
+    let store=Store::open(dir.path().into()).unwrap();
+    let ai=AiService::with_provider(dir.path().into(),Arc::new(Transport{calls:Mutex::default()})).unwrap();
+    for (p,key) in ProviderId::ALL.into_iter().zip(KEYS){ai.handle("ai.key.save",json!({"provider":p,"key":key}),&store).unwrap();}
+    let status=ai.handle("ai.budget.status",json!({}),&store).unwrap();
+    let price=|rate:&str|json!({"model":"shared-model","inputUsdPerMillion":rate,"outputUsdPerMillion":rate,"sourceNote":"Synthetic price"});
+    let mut groq=price("10");groq["provider"]=json!("groq");
+    let config=json!({"expectedRevision":null,"enabled":true,"currency":"USD","installationLimitUsd":"10","assessmentLimitUsd":"1","prices":[price("1"),groq],"acknowledgeEstimates":true,"acknowledgeLegacyExcluded":true,"legacyReviewDigest":status["legacyReviewDigest"]});
+    ai.handle("ai.budget.configure",config,&store).unwrap();
+    let quote=||ai.handle("ai.budget.preview",json!({"operation":"test","payload":{}}),&store);
+    ai.save_settings(json!({"model":"shared-model"}),&store).unwrap();
+    let old=quote().unwrap()["review"].clone();
+    for p in [ProviderId::OpenRouter,ProviderId::Groq]{
+        ai.save_settings(json!({"model":"shared-model","provider":p,"endpoint":p.endpoint()}),&store).unwrap();
+        assert!(ai.handle("ai.test",json!({"budgetReview":{"id":old["id"],"digest":old["digest"]}}),&store).is_err());
+        if p==ProviderId::OpenRouter{assert!(quote().is_err());}
+        else {let current=quote().unwrap();assert_eq!(current["review"]["endpoint"],p.endpoint());assert_eq!(current["review"]["rates"]["inputUsdPerMillion"],"10.000000");}
+    }
+}
