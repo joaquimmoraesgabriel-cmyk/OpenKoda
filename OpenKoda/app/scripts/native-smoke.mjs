@@ -142,6 +142,15 @@ async function readPurgeStatus() {
   return status;
 }
 async function screenshot(name) { await page.screenshot({ path: join(runDirectory, name), fullPage: true }); }
+async function openProjectsAndWaitForIpc() {
+  // Leaving the panel cancels its scheduled inventory reads. Let any requests
+  // already in flight finish before the fixture starts another operation.
+  await page.getByRole('button', { name: 'Projetos', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Projetos', exact: true })).toBeVisible();
+  await expect.poll(() => pendingIpcRequests.size, {
+    timeout: 45_000, message: 'Pending review-panel reads finish after opening Projects',
+  }).toBe(0);
+}
 const dataCategories = ['human_text', 'target_metadata', 'execution_summary', 'evidence_excerpt', 'source_excerpt', 'finding_text', 'activity_metadata'];
 // These grants are created only in this test-owned profile. Remote permission is
 // pinned before the first local/report admission so later unsent AI plan tests
@@ -1237,6 +1246,7 @@ try {
     return { backupId: backup.id, restoredDirectory, activated: false };
   });
   await gate('E5-retention-selected-copies', 'Exact retention approval deletes only selected synthetic copies and preserves the unselected backup, report and live domain', async () => {
+    await openProjectsAndWaitForIpc();
     const selectedBackup = await fixtureBackup();
     const selectedReport = await fixtureReport(assessment.id);
     const preservedReport = await fixtureReport(assessment.id);
@@ -1317,12 +1327,7 @@ try {
     await screenshot('08-native-restarted.png'); expect(pageErrors).toEqual([]);
   });
   await gate('E5-activation-schedule', 'Reviewed recovery schedules exact database hashes while the live profile remains unchanged', async () => {
-    // The previous visual assertion mounts data-review panels asynchronously.
-    // Unmount their refresh timers and wait for the observed IPC work to finish
-    // before requesting the exclusive activation lease. Never retry a mutation.
-    await page.getByRole('button', { name: 'Projetos', exact: true }).click();
-    await expect(page.getByRole('heading', { name: 'Projetos', exact: true })).toBeVisible();
-    await expect.poll(() => pendingIpcRequests.size, { timeout: 45_000, message: 'Mounted review-panel reads finish before exclusive activation' }).toBe(0);
+    await openProjectsAndWaitForIpc();
     const before = await request('snapshot');
     activationPlan = await request('activation.plan', { recoveryId: stagedRecovery.id });
     expect(activationPlan.kind).toBe('restore'); expect(activationPlan.status).toBe('prepared');
