@@ -1,5 +1,8 @@
 # OpenKoda — roadmap de capacidades e validação
 
+<!-- local-0.1.9 -->
+**Situação após a 0.1.9.** O histórico de cópias do Kali tem paginação, e o executor pode ser trocado para uma cópia revalidada. A recuperação do programa no Windows foi exercitada com dois instaladores reais. O diagnóstico de suporte admite exportação local revisada e a janela protege trabalho ativo durante o fechamento. O próximo teste de distribuição requer um Windows separado para abrir o aplicativo instalado. A matriz de plataforma, falhas de reboot/disco e cobertura adicional de acessibilidade continuam documentadas abaixo. [Resultados e limites atuais](RETOMADA-0.1.9.md)
+
 **Após a 0.1.8.** A retenção da 0.1.7 e os três incrementos de código da tabela abaixo têm testes locais. A cópia recuperada do Kali permite acessar arquivos. O mapa amplo prevê revalidá-la e torná-la referência do executor. O ciclo positivo do instalador também requer um percurso de recuperação após interrupção ou retorno controlado do binário. Esses dois percursos entram na etapa seguinte junto à paginação do histórico de cópias. [Resultados da 0.1.8](RETOMADA-0.1.8.md)
 
 **Estado em 10 de novembro de 2026.** A consolidação de metadados do spool passou em 260 ciclos reais do helper Linux e em duas operações no Kali gerido. O ciclo do instalador 0.1.6 → 0.1.7 também passou. A abertura instalada em Windows separado segue pendente. As propostas de revisão do plano pela IA, cópias do disco Kali e reteste semântico JSON entraram no desenvolvimento da 0.1.8. O texto de 8 de novembro registra a base histórica dessas decisões. [Checkpoint 0.1.7](RETOMADA-0.1.7.md)

@@ -1,5 +1,8 @@
 # Etapas e evidências da construção
 
+<!-- local-0.1.9 -->
+**0.1.9 local.** Passaram 575 testes Rust no Windows, mais um no Kali gerido, 66 testes unitários da interface, 246 de navegador e 72 grupos nativos. As cópias recuperadas podem assumir o papel de executor após revisão. A ferramenta de recuperação da instalação, a revisão do fechamento e a exportação local de suporte têm percursos próprios. [Resultados e trabalho pendente](docs/RETOMADA-0.1.9.md) · [Instalador e hashes](releases/0.1.9-local-20261111/release.json)
+
 **Candidata local 0.1.8.** Passaram 556 testes Rust no Windows, mais um no Kali gerido, 66 testes unitários da interface, 233 de navegador e 70 grupos nativos. O arquivo recuperado foi lido em uma distro nova, inclusive depois de remover a origem de laboratório. Extração, instalação, atualização e desinstalação passaram. Abertura instalada em Windows separado, ativação do clone como executor e recuperação de atualização são percursos distintos. [Resultados](docs/RETOMADA-0.1.8.md) · [Manifesto](releases/0.1.8-local-20261110/release.json)
 
 A 0.1.7 inclui a liberação explícita das entradas de captura já purgadas no Kali. Passaram 538 testes Rust no Windows, o teste adicional no Kali gerido, 83 testes do helper no Linux e 70 grupos nativos com WebView2. A interface passou em 66 testes unitários e 228 de navegador, com mais 13 de retenção após o ajuste de foco. A instalação, a atualização da 0.1.6 e a desinstalação preservaram os dados sintéticos. A abertura do executável de produção instalado aguarda um perfil Windows descartável. [Manifesto](releases/0.1.7-local-20261110/release.json) · [Guia](docs/GUIA-0.1.7.md)

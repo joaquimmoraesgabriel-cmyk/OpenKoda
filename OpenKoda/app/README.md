@@ -1,5 +1,8 @@
 # OpenKoda desktop
 
+<!-- local-0.1.9 -->
+Baixe o [instalador local OpenKoda 0.1.9 para Windows x64](releases/0.1.9-local-20261111/OpenKoda_0.1.9_x64-setup.exe). A versão permite ativar uma cópia recuperada do Kali, consultar todo o histórico de cópias, rever trabalho em curso antes de fechar a janela e salvar um diagnóstico local para suporte. A atualização da 0.1.8 preservou os dados de teste. [Guia](docs/GUIA-0.1.9.md) · [Recuperação do Windows](docs/RECUPERACAO-WINDOWS.md) · [Testes e limites](docs/RETOMADA-0.1.9.md)
+
 Implementação Tauri do [mapa aprovado](../planejamento/README.md), com referências em [Visual e telas](../planejamento/VISUAL-E-TELAS.md). O andamento verificável está em [IMPLEMENTACAO](IMPLEMENTACAO.md); a presença de uma tela não significa que seu executor já está liberado.
 
 A [candidata local 0.1.8 sem assinatura](releases/0.1.8-local-20261110/OpenKoda_0.1.8_x64-setup.exe) acrescenta revisão de uma proposta de plano da IA, backup e restauração de arquivos do Kali e reteste do campo booleano `debug` em JSON. O instalador passou na atualização a partir da 0.1.7 e na desinstalação com dados sintéticos. A abertura do executável instalado aguarda um ambiente Windows separado. [Guia de uso](docs/GUIA-0.1.8.md) · [Manifesto](releases/0.1.8-local-20261110/release.json) · [Resultados dos testes](docs/RETOMADA-0.1.8.md)

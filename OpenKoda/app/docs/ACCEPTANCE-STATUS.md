@@ -1,5 +1,8 @@
 # Matriz completa de aceitação e evidências
 
+<!-- local-0.1.9 -->
+**0.1.9 local.** AC-09 e AC-28 têm novas provas de fechamento durante trabalho supervisionado e de pacote ausente antes do despacho. AC-20 e AC-26 ganharam provas de teclado, zoom, anúncio no NVDA e comparação das seis telas. F5 agora tem exportação de diagnóstico local revisada e recuperação após interrupção entre instaladores. A inicialização do executável instalado em ambiente isolado e a matriz completa Windows/WSL seguem abertas. [Resultados e limitações](RETOMADA-0.1.9.md)
+
 **0.1.8 local.** As sugestões de revisão do plano, o reteste JSON e a recuperação de arquivos em uma cópia inativa do Kali passaram nos percursos descritos no [checkpoint](RETOMADA-0.1.8.md). O instalador preservou os dados no ciclo positivo 0.1.7 → 0.1.8. A matriz de Windows limpo continua aberta.
 
 **10 de novembro de 2026.** A 0.1.7 concluiu os ensaios de retenção e do instalador local. O histórico por versão segue abaixo. [Recibos e limitações](RETOMADA-0.1.7.md)
