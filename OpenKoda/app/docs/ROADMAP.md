@@ -1,5 +1,8 @@
 # OpenKoda — roadmap de capacidades e validação
 
+<!-- local-0.1.12 -->
+**Situação após a 0.1.12.** A criação de uma avaliação de um alvo recupera o envio já gravado quando a interface perde a resposta. [Percursos verificados](RETOMADA-0.1.12.md)
+
 <!-- local-0.1.11 -->
 **Situação após a 0.1.11.** Foram entregues a comparação entre avaliações do mesmo projeto e a consulta independente de Internet no Windows. O APT foi testado em um volume com falta de espaço. [Resultados, plataformas e limites](RETOMADA-0.1.11.md)
 

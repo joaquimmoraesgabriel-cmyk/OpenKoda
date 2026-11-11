@@ -1,5 +1,8 @@
 # Matriz completa de aceitação e evidências
 
+<!-- local-0.1.12 -->
+**0.1.12, AC-16.** Os testes nativos de criação de um alvo e de derivação combinada conferiram uma avaliação por solicitação. Na interface WebView2, reenviar um rascunho ou uma avaliação com escopo revisado recuperou o mesmo ID. O teste do núcleo confirmou a reabertura. [Cobertura e limites](RETOMADA-0.1.12.md)
+
 <!-- local-0.1.11 -->
 **0.1.11.** A comparação entre avaliações, a operação offline da interface e o indicador de Internet têm testes. A recuperação de falha de espaço nos índices do APT foi exercitada em um contêiner Kali. [Evidências](RETOMADA-0.1.11.md)
 

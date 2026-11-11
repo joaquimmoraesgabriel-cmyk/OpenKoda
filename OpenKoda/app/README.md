@@ -1,5 +1,8 @@
 # OpenKoda desktop
 
+<!-- local-0.1.12 -->
+**0.1.12 local para Windows x64.** O reenvio de uma avaliação de um alvo recupera o mesmo registro. [Guia de uso](docs/GUIA-0.1.12.md) · [Instalador local](releases/0.1.12-local-20261111/OpenKoda_0.1.12_x64-setup.exe) · [Validação](docs/RETOMADA-0.1.12.md)
+
 <!-- local-0.1.11 -->
 **0.1.11 local para Windows x64.** Consulte o [guia de comparação de avaliações e de conectividade](docs/GUIA-0.1.11.md) e os [resultados dos testes](docs/RETOMADA-0.1.11.md). Neste checkout, o [instalador sem assinatura](releases/0.1.11-local-20261111/OpenKoda_0.1.11_x64-setup.exe) está pronto para uso.
 

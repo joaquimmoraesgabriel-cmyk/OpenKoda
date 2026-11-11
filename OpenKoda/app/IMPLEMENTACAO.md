@@ -1,5 +1,8 @@
 # Etapas e evidências da construção
 
+<!-- local-0.1.12 -->
+**0.1.12 local.** A criação de rascunhos e de avaliações com escopo revisado foi testada com perda de resposta, concorrência e reabertura. A atualização da 0.1.11 preservou o projeto sintético. [Resultados](docs/RETOMADA-0.1.12.md)
+
 <!-- local-0.1.11 -->
 **0.1.11 local.** A comparação de avaliações e a consulta de Internet pelo Windows passaram pela interface nativa. A atualização 0.1.10 → 0.1.11 preservou os dados. [Resultados e limites](docs/RETOMADA-0.1.11.md)
 
