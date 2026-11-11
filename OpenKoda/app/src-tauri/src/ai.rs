@@ -47,30 +47,63 @@ pub struct AiService { db: Mutex<Connection>, inference: Mutex<()>, provider:Arc
 pub(crate) const VAULT_SCHEMA:&str="CREATE TABLE vault (id INTEGER PRIMARY KEY CHECK(id IN (1,2,3)), cipher BLOB NOT NULL, revision TEXT NOT NULL)";
 pub(crate) const CHECK_SCHEMA:&str="CREATE TABLE connection_check (id INTEGER PRIMARY KEY CHECK(id IN (1,2,3)), model TEXT NOT NULL, endpoint TEXT NOT NULL, revision TEXT NOT NULL, checked TEXT NOT NULL)";
 
-fn expand_provider_slots(tx:&rusqlite::Transaction<'_>)->Result<(),String>{
+pub(crate) const VAULT_SCHEMA_V2:&str="CREATE TABLE vault (id INTEGER PRIMARY KEY CHECK(id BETWEEN 1 AND 7), cipher BLOB NOT NULL, revision TEXT NOT NULL)";
+pub(crate) const CHECK_SCHEMA_V2:&str="CREATE TABLE connection_check (id INTEGER PRIMARY KEY CHECK(id BETWEEN 1 AND 7), model TEXT NOT NULL, endpoint TEXT NOT NULL, revision TEXT NOT NULL, checked TEXT NOT NULL)";
+
+fn expand_provider_slots(tx:&rusqlite::Transaction<'_>,provider:ProviderId)->Result<(),String>{
     let version:i64=tx.query_row("PRAGMA user_version",[],|r|r.get(0)).map_err(failure)?;
-    if version==1{return Ok(());}
-    if version!=0{return Err("Versão do vault de IA não suportada.".into());}
+    if !(0..=2).contains(&version){return Err("Versão do vault de IA não suportada.".into());}
+    let required=if provider.slot()>3{2}else{1};
+    if version>=required{return Ok(());}
     tx.execute_batch("ALTER TABLE vault RENAME TO old_vault; ALTER TABLE connection_check RENAME TO old_check;").map_err(failure)?;
-    tx.execute_batch(VAULT_SCHEMA).map_err(failure)?;
-    tx.execute_batch(CHECK_SCHEMA).map_err(failure)?;
+    tx.execute_batch(if required==2{VAULT_SCHEMA_V2}else{VAULT_SCHEMA}).map_err(failure)?;
+    tx.execute_batch(if required==2{CHECK_SCHEMA_V2}else{CHECK_SCHEMA}).map_err(failure)?;
     tx.execute_batch("INSERT INTO vault SELECT * FROM old_vault; INSERT INTO connection_check SELECT * FROM old_check;
-        DROP TABLE old_vault; DROP TABLE old_check; PRAGMA user_version=1;").map_err(failure)
+        DROP TABLE old_vault; DROP TABLE old_check;").map_err(failure)?;
+    tx.pragma_update(None,"user_version",required).map_err(failure)
+}
+
+fn authenticate(request:reqwest::blocking::RequestBuilder, provider:ProviderId, key:&str) -> reqwest::blocking::RequestBuilder {
+    if provider == ProviderId::Anthropic {
+        request.header("x-api-key",key).header("anthropic-version","2023-06-01")
+    } else { request.bearer_auth(key) }
 }
 
 trait Provider:Send+Sync {
     fn response(&self,provider:ProviderId,model:&str,key:&str,prompt:&str,instructions:&str,max_output_tokens:u32)->Result<Value,String>;
     fn models(&self,provider:ProviderId,key:&str)->Result<Vec<String>,String>{
-        let response=client()?.get(provider.catalog_url()).bearer_auth(key).send().map_err(network_error)?;
-        let body=read_bounded_response(response,16*1024*1024)?;
-        crate::ai_provider::catalog(&body)
+        let client=client()?;
+        let mut models=std::collections::BTreeSet::new();
+        let mut cursors=std::collections::HashSet::new();
+        let mut cursor=None::<String>;
+        loop {
+            let mut page=client.get(provider.catalog_url());
+            match provider {
+                ProviderId::Anthropic => {
+                    page=authenticate(page,provider,key).query(&[("limit","1000")]);
+                    if let Some(id)=cursor.as_deref(){page=page.query(&[("after_id",id)]);}
+                }
+                ProviderId::Gemini => {
+                    page=page.header("x-goog-api-key",key).query(&[("pageSize","1000")]);
+                    if let Some(token)=cursor.as_deref(){page=page.query(&[("pageToken",token)]);}
+                }
+                _ => page=authenticate(page,provider,key),
+            }
+            let response=page.send().map_err(network_error)?;
+            let body=read_bounded_response(response,16*1024*1024)?;
+            let (names,next)=provider.catalog_page(&body)?;
+            models.extend(names);
+            let Some(next)=next else{return Ok(models.into_iter().collect());};
+            if cursors.len()>=100 || !cursors.insert(next.clone()){return Err("O catálogo excedeu o limite de páginas ou retornou um cursor repetido.".into());}
+            cursor=Some(next);
+        }
     }
 }
 struct HttpProvider;
 impl Provider for HttpProvider {
     fn response(&self,provider:ProviderId,model:&str,key:&str,prompt:&str,instructions:&str,max_output_tokens:u32)->Result<Value,String>{
         let body=provider.body(model,prompt,instructions,max_output_tokens);
-        let response=client()?.post(provider.inference_url()).bearer_auth(key).json(&body).send().map_err(network_error)?;
+        let response=authenticate(client()?.post(provider.inference_url()),provider,key).json(&body).send().map_err(network_error)?;
         provider.normalize(read_bounded_response(response,MAX_RESPONSE)?)
     }
 }
@@ -218,7 +251,7 @@ impl AiService {
                 crate::credential_refs::ensure_provider_slot(store,provider)?;
                 let mut db = self.db.lock().map_err(failure)?;
                 let tx = db.transaction().map_err(failure)?;
-                if provider!=ProviderId::OpenAI {expand_provider_slots(&tx)?;}
+                if provider!=ProviderId::OpenAI {expand_provider_slots(&tx,provider)?;}
                 tx.execute("INSERT INTO vault VALUES(?3,?1,?2) ON CONFLICT(id) DO UPDATE SET cipher=excluded.cipher, revision=excluded.revision", params![cipher,model::id(),provider.slot()]).map_err(failure)?;
                 tx.execute("DELETE FROM connection_check WHERE id=?1", [provider.slot()]).map_err(failure)?;
                 tx.commit().map_err(failure)?;

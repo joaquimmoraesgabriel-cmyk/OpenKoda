@@ -1,24 +1,11 @@
 import { useRef, useState, type FormEvent } from 'react';
 import { ArrowUpRight, CalendarDays, Database, Monitor, Pencil, UserRound } from 'lucide-react';
 import { native } from '../api';
+import { avatarColors, saveIdentity, useIdentity, type Identity } from '../profile-identity';
 import type { Snapshot } from '../types';
 import './profile-usage.css';
 
-const avatarColors = { azul: 'Azul', verde: 'Verde', ameixa: 'Ameixa', cobre: 'Cobre' };
-type Identity = { name: string; color: keyof typeof avatarColors };
-const defaultIdentity: Identity = { name: '', color: 'azul' };
-const identityKey = 'openkoda.profile-display.v1';
 const dateFormat = new Intl.DateTimeFormat('pt-BR', {day: 'numeric', month: 'short', year: 'numeric'});
-
-function readIdentity(): Identity {
-  try {
-    const value = JSON.parse(localStorage.getItem(identityKey) ?? 'null');
-    if (typeof value?.name === 'string' && Object.hasOwn(avatarColors, value.color)) {
-      return {name: value.name.trim().slice(0, 60), color: value.color};
-    }
-  } catch { /* The default identity is usable without device storage. */ }
-  return defaultIdentity;
-}
 
 function activeDays(snapshot: Snapshot, today: Date) {
   const start = new Date(today);
@@ -36,8 +23,8 @@ function activeDays(snapshot: Snapshot, today: Date) {
   });
 }
 
-export default function WorkspaceProfile({ snapshot, onSettings }: { snapshot: Snapshot; onSettings: () => void }) {
-  const [identity, setIdentity] = useState(readIdentity);
+export default function WorkspaceProfile({ snapshot, onSettings, onUsageHistory }: { snapshot: Snapshot; onSettings: () => void; onUsageHistory: () => void }) {
+  const identity = useIdentity();
   const [draft, setDraft] = useState(identity);
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState('');
@@ -58,8 +45,7 @@ export default function WorkspaceProfile({ snapshot, onSettings }: { snapshot: S
     event.preventDefault();
     const next = {...draft, name: draft.name.trim()};
     try {
-      localStorage.setItem(identityKey, JSON.stringify(next));
-      setIdentity(next);
+      saveIdentity(next);
       endEdit();
     } catch {
       setError('Não foi possível salvar o perfil neste dispositivo.');
@@ -113,7 +99,10 @@ export default function WorkspaceProfile({ snapshot, onSettings }: { snapshot: S
           <div><dt><Monitor size={17} aria-hidden="true"/>Ambiente</dt><dd>{native ? 'Aplicativo desktop' : 'Prévia no navegador'}</dd></div>
           <div><dt><Database size={17} aria-hidden="true"/>Armazenamento</dt><dd>{native ? 'Banco de dados local' : 'Dados de demonstração do navegador'}</dd></div>
         </dl>
-        <button type="button" className="button" onClick={onSettings}>Preferências do aplicativo<ArrowUpRight size={15} aria-hidden="true"/></button>
+        <div className="inline-actions">
+          <button type="button" className="button" onClick={onSettings}>Preferências do aplicativo<ArrowUpRight size={15} aria-hidden="true"/></button>
+          <button type="button" className="button" onClick={onUsageHistory}>Histórico de uso<ArrowUpRight size={15} aria-hidden="true"/></button>
+        </div>
       </section>
     </div>
   </div>;

@@ -22,7 +22,7 @@ impl Activity {
         // Known observations cannot dispatch effects. Unknown/new actions default to tracked.
         if matches!(action, "snapshot" | "projectPurge.status" | "activation.status" | "activation.list"
             | "environment.status" | "host.connectivity" | "kali.mcp.status" | "kali.mcp.assessmentEnvironments" | "ai.status" | "ai.context" | "ai.history"
-            | "ai.budget.status" | "ai.investigation.list" | "data.session.select" | "data.policy.status"
+            | "ai.budget.status" | "ai.budget.history" | "ai.investigation.list" | "data.session.select" | "data.policy.status"
             | "assessment.scopeStatus" | "assessment.scopeOptions" | "assessment.combinedOptions"
             | "project.targetOptions" | "work.plan.get" | "work.queue" | "work.events" | "work.aiLocalClosure.list"
             | "capture.list" | "capture.status" | "backup.list" | "support.review" | "evidence.origins"
@@ -60,12 +60,15 @@ impl CloseGate {
         Ok(Some(Admission { gate: self.clone(), id }))
     }
 
-    pub fn request_close(&self) -> Option<Activity> {
+    #[cfg(test)]
+    pub fn request_close(&self) -> Option<Activity> { self.check_close(true) }
+
+    pub fn check_close(&self, exiting: bool) -> Option<Activity> {
         let mut state = self.0.lock().unwrap_or_else(|poison| poison.into_inner());
         // A real dispatched job has a known assessment. Prefer it over a concurrent short-lived request.
         let current = state.live.values().find(|task| task.area == Area::Queue && task.assessment_id.is_some())
             .or_else(|| state.live.values().next()).copied();
-        if current.is_none() { state.closing = true; }
+        if exiting && current.is_none() { state.closing = true; }
         current
     }
 }

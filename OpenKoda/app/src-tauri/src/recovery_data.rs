@@ -65,10 +65,10 @@ fn expected(name: &str, version: i64) -> Result<Vec<(&'static str, &'static str)
         schema.push(ENVIRONMENT_SWITCH);
         if version >= 2 { schema.push(crate::environment::REMOVAL_TABLE); }
     }
-    if name=="assistant.sqlite3" && version==1 {
+    if name=="assistant.sqlite3" && version>=1 {
         for (table,ddl) in &mut schema {match *table {
-            "vault" => *ddl=crate::ai::VAULT_SCHEMA,
-            "connection_check" => *ddl=crate::ai::CHECK_SCHEMA,
+            "vault" => *ddl=if version==2{crate::ai::VAULT_SCHEMA_V2}else{crate::ai::VAULT_SCHEMA},
+            "connection_check" => *ddl=if version==2{crate::ai::CHECK_SCHEMA_V2}else{crate::ai::CHECK_SCHEMA},
             _ => {}
         }}
     }
@@ -84,7 +84,7 @@ pub(super) fn verify_schema(db: &Connection, name: &str) -> Result<i64, String> 
     let valid_version = match name {
         "openkoda.sqlite3" => (1..=core::STORE_VERSION).contains(&version),
         "environment.sqlite3" | "environment-history.sqlite3" => (0..=2).contains(&version),
-        "assistant.sqlite3" => (0..=1).contains(&version),
+        "assistant.sqlite3" => (0..=2).contains(&version),
         _ => version == 0,
     };
     if !valid_version { return Err("Versão de banco não reconhecida para a cópia de recuperação.".into()); }

@@ -18,6 +18,7 @@ pub mod activation;
 pub mod retention;
 pub mod project_purge;
 mod project_picker;
+mod window_behavior;
 pub mod http_validation;
 pub mod scope;
 pub mod scope_targets;
@@ -53,7 +54,7 @@ fn ensure_purge_access(services:&Services,action:&str)->Result<(),String>{
     if matches!(action,"work.plan.get"|"work.queue"|"work.events"|"work.pause"|"work.cancel"|"work.cancelPlan"|"work.reconcile"|"work.aiLocalClosure.list"|"work.aiLocalClosure.prepare"|"work.aiLocalClosure.commit"|"capture.list"|"capture.status"){return Ok(());}
     if matches!(action,"data.policy.status"|"data.policy.revoke"|"data.classification.subjects"|"credential.reference.list"|"credential.reference.revoke"|"data.session.select"|"data.review.cancel"){return Ok(());}
     if matches!(action,"project.targetOptions"|"assessment.combinedOptions"|"evidence.origins"){return Ok(());}
-    if project_purge::supports(action)||matches!(action,"snapshot"|"assessment.scopeStatus"|"assessment.scopeOptions"|"ai.status"|"ai.history"|"ai.context"|"ai.investigation.list"|"ai.budget.status"|"ai.key.remove"|"environment.status"|"kali.mcp.status"|"remediation.list"|"remediation.get"|"finding.httpStatus"|"activation.status"|"activation.list"|"activation.cancel"|"backup.list"|"backup.verify"|"retention.inventory") {return Ok(());}
+    if project_purge::supports(action)||matches!(action,"snapshot"|"assessment.scopeStatus"|"assessment.scopeOptions"|"ai.status"|"ai.history"|"ai.context"|"ai.investigation.list"|"ai.budget.status"|"ai.budget.history"|"ai.key.remove"|"environment.status"|"kali.mcp.status"|"remediation.list"|"remediation.get"|"finding.httpStatus"|"activation.status"|"activation.list"|"activation.cancel"|"backup.list"|"backup.verify"|"retention.inventory") {return Ok(());}
     if services.project_purge.has_unresolved()? {return Err("Há um expurgo de projeto incompleto. Inspecione o registro e conclua ou encerre explicitamente a exclusão parcial antes de iniciar outra alteração.".into());}
     Ok(())
 }
@@ -76,6 +77,9 @@ async fn request(
         return Err("Janela não autorizada.".into());
     }
     let admission = services.close_gate.admit(close_guard::Activity::request(&request.action, &request.payload))?;
+    if matches!(request.action.as_str(), "window.behavior.get" | "window.behavior.set") {
+        return window.state::<window_behavior::WindowBehavior>().handle(&request.action, &request.payload);
+    }
     if request.action == "project.pickTarget" {
         return project_picker::pick(window, request.payload).await;
     }
@@ -359,7 +363,8 @@ pub fn run() {
             if window.label() != "main" { return; }
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 let Some(services) = window.try_state::<Arc<Services>>() else { return };
-                if let Some(activity) = services.close_gate.request_close() {
+                let minimize = window.try_state::<window_behavior::WindowBehavior>().is_some_and(|p| p.minimizes());
+                if let Some(activity) = services.close_gate.check_close(!minimize) {
                     api.prevent_close();
                     if let Some(webview) = window.get_webview_window("main") {
                         // Only enum names and a parsed UUID enter this presentation signal.
@@ -368,6 +373,9 @@ pub fn run() {
                             let _ = webview.eval(format!("window.dispatchEvent(new CustomEvent('openkoda-close-review',{{detail:{detail}}}))"));
                         }
                     }
+                } else if minimize {
+                    api.prevent_close();
+                    let _ = window.minimize();
                 }
             }
         })
@@ -379,6 +387,7 @@ pub fn run() {
             let override_root:Option<std::path::PathBuf> = None;
             let storage=storage::open(&app.path().home_dir()?,&legacy,override_root.as_deref()).map_err(std::io::Error::other)?;
             let store = Store::open(storage.root.clone()).map_err(std::io::Error::other)?;
+            app.manage(window_behavior::WindowBehavior::load(&storage.base));
             let data_policy=Arc::new(data_policy::DataPolicyService::new());
             let supervisor=work_supervisor::WorkSupervisor::default();
             let environment=Arc::new(environment::EnvironmentManager::new(storage.base.clone()).map_err(std::io::Error::other)?);

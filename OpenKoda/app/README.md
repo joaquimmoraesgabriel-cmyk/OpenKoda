@@ -1,5 +1,11 @@
 # OpenKoda desktop
 
+**0.1.15 para Windows x64.** As Configurações abrem em **Geral**. Pesquise uma categoria na lateral ou abra **Histórico de uso** diretamente pelo Perfil. O histórico reúne os tokens registrados no perfil ativo e permite consultar dias, modelos, provedores e avaliações. Em **Uso e orçamento**, consulte o saldo estimado da instalação, suas reservas e as tarifas usadas nos cálculos. [Instalador local](releases/0.1.15-local-20261111/OpenKoda_0.1.15_x64-setup.exe)
+
+**Geral** compartilha o nome de exibição com o Perfil. A preferência de fechamento permite minimizar o aplicativo na barra de tarefas, e o atalho do compositor segue o fluxo de revisão da avaliação. **Aparência** aplica as escolhas de fontes, painéis, listas e papel de parede à área de trabalho.
+
+Em **IA e modelos**, use **Adicionar provedor**, selecione um serviço, salve a chave e escolha um modelo do catálogo. Os serviços disponíveis são OpenAI, OpenRouter, Groq, Anthropic, Gemini, DeepSeek e xAI. A criação de avaliações e a revisão das solicitações usam a mesma lista. A primeira credencial de um dos quatro provedores adicionados na 0.1.15 atualiza o formato do cofre. Para voltar a uma versão anterior, use um backup feito antes dessa alteração.
+
 **0.1.14 para Windows x64.** O ícone da instalação usa o K da barra lateral. Perfil permite escolher um nome e uma cor para o avatar e consultar a atividade das avaliações. Em Configurações, Avaliações e Achados, o menu e o conteúdo têm rolagens independentes. [Instalador local](releases/0.1.14-local-20261111/OpenKoda_0.1.14_x64-setup.exe)
 
 Em **Configurações → IA e modelos**, escolha OpenAI, OpenRouter ou Groq e salve a credencial desse provedor. Selecione um modelo do catálogo retornado pela API e use **Salvar alterações** para torná-lo o padrão. Você também pode escolher o modelo ao criar uma avaliação ou alterá-lo antes de revisar um envio. A lista pode incluir modelos de áudio, imagem e outros tipos. As operações de IA do OpenKoda usam modelos que geram texto.

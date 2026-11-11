@@ -1,6 +1,8 @@
 import { Check, CornerDownLeft } from 'lucide-react';
 import type { Settings } from '../types';
 import { interfaceScales, type DeviceAppearance } from '../appearance';
+import { AppearanceCustomization } from './AppearanceCustomization';
+import './pref-pages.css';
 
 const themes = [['system', 'Sistema'], ['light', 'Claro'], ['dark', 'Escuro']] as const;
 
@@ -17,6 +19,7 @@ export function AppearanceSettings({draft, change, busy}: {
   busy: boolean;
 }) {
   return <fieldset className="appearance-controls" disabled={busy}>
+    <h3 className="pref-heading">Modo do tema</h3>
     <fieldset className="theme-options">
       <legend className="visually-hidden">Tema</legend>
       {themes.map(([id,label]) => <label key={id} className="theme-option">
@@ -28,6 +31,8 @@ export function AppearanceSettings({draft, change, busy}: {
         <span>{label}</span>
       </label>)}
     </fieldset>
+    <AppearanceCustomization draft={draft} change={change}/>
+    <h3 className="pref-heading">Escala e movimento</h3>
     <div className="appearance-row">
       <div><label htmlFor="appearance-scale">Tamanho da interface</label><small>Escala de textos, ícones e controles.</small></div>
       <select id="appearance-scale" value={draft.interfaceScale} onChange={e => change('interfaceScale', Number(e.target.value))}>

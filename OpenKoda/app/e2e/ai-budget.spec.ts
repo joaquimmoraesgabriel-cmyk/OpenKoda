@@ -25,6 +25,14 @@ async function fixture(page:Page,mode='enabled'){
       if(action==='environment.status')return {status:'unavailable',distro:'OpenKoda-Kali',message:'Fixture',tools:[],executorReady:false};
       if(action==='ai.status')return {hasApiKey:true,verified:false,model:state.settings.model,endpoint:state.settings.endpoint};
       if(action==='ai.history')return {messages:structuredClone(messages),requests:[]};
+      if(action==='ai.budget.history'){
+        const day=(offset:number)=>{const date=new Date();date.setDate(date.getDate()+offset);return date.getFullYear()+'-'+String(date.getMonth()+1).padStart(2,'0')+'-'+String(date.getDate()).padStart(2,'0');};
+        return {rows:[
+          {day:day(0),provider:'openai',model:'fixture-model',assessmentId:assessment.id,requests:1,input:500,output:150,partial:0},
+          {day:day(-1),provider:'groq',model:'fixture-model',assessmentId:null,requests:1,input:40,output:null,partial:1},
+          {day:day(-38),provider:'openai',model:'fixture-model',assessmentId:assessment.id,requests:1,input:70,output:10,partial:0}
+        ]};
+      }
       if(action==='ai.context')return {context:{assessmentId:assessment.id,evidenceIds:payload.evidenceIds},digest:'context-budget',bytes:150,notice:'Contexto sintético.'};
       if(action==='ai.budget.status'){
         const result = status(payload);
@@ -57,6 +65,29 @@ async function fixture(page:Page,mode='enabled'){
 }
 async function calls(page:Page,action:string){return page.evaluate(name=>(window as unknown as {__budgetCalls:{action:string;payload:Record<string,unknown>}[]}).__budgetCalls.filter(call=>call.action===name),action);}
 const budgetAck='Revisei a reserva estimada em USD desta solicitação e seus limites locais.';
+test('atalho do compositor revisa contexto e exige autorização para enviar', async({page}) => {
+  await fixture(page,'disabled');
+  await page.getByRole('button',{name:'Configurações',exact:true}).click();
+  await page.getByLabel('Atalho de envio').selectOption('enter');
+  await openAssessmentList(page);
+  await page.getByText('Avaliação com orçamento sintético',{exact:true}).click();
+  await page.locator('summary').filter({hasText:'Conversa com a IA'}).click();
+  const panel = page.locator('.ai-conversation');
+  const message = panel.getByLabel('Sua mensagem',{exact:true});
+  const consent = panel.getByRole('checkbox',{name:'Autorizo o envio deste contexto e da mensagem ao provedor configurado.',exact:true});
+  await message.fill('Revisar o objetivo');
+  await chooseAiData(panel);
+  await message.press('End');
+  await message.press('Shift+Enter');
+  await expect(message).toHaveValue('Revisar o objetivo\n');
+  await message.press('Enter');
+  await expect(consent).toBeVisible();
+  await message.press('Enter');
+  expect(await calls(page,'ai.ask')).toHaveLength(0);
+  await consent.check();
+  await message.press('Enter');
+  await expect.poll(async() => (await calls(page,'ai.ask')).length).toBe(1);
+});
 async function flow(page:Page,operation='ask'):Promise<{panel:Locator;send:Locator;action:string}>{
   if(operation==='test'){await page.getByRole('button',{name:'Configurações',exact:true}).click();await page.getByRole('button',{name:'IA e modelos',exact:true}).click();const panel=page.locator('.settings-content .content-section').filter({has:page.getByRole('heading',{name:'Conexão',exact:true})});return {panel,send:panel.getByRole('button',{name:'Testar conexão',exact:true}),action:'ai.test'};}
   await openAssessmentList(page);
@@ -136,6 +167,31 @@ test('análises separam tokens informados, saldos e detalhes da chamada', async(
   await models.selectOption({label:'Todos os modelos'});
   await expect(panel.getByRole('row').filter({hasText:'fixture-model'})).toHaveCount(2);
   expect(await calls(page,'ai.ask')).toEqual([]);
+});
+
+test('histórico do perfil inclui datas antigas e permite filtrar pelo calendário e abrir a avaliação', async({page})=>{
+  await fixture(page,'analytics');
+  const budget=await settings(page,'Visão geral');
+  await budget.getByRole('button',{name:'Abrir histórico de tokens'}).click();
+  const history=page.getByRole('region',{name:'Conteúdo de Histórico de uso'});
+  const total=history.locator('.uh-stats > div').filter({hasText:'Tokens no período'}).locator('dd');
+  await expect(total).toHaveText('770');
+  await history.getByRole('combobox',{name:'Período',exact:true}).selectOption('7d');
+  await expect(total).toHaveText('690');
+  await history.getByRole('combobox',{name:'Modelo',exact:true}).selectOption({label:'Groq · fixture-model'});
+  await expect(total).toHaveText('40');
+  await expect(history.getByText('1 chamada com contagem de tokens incompleta no período.')).toBeVisible();
+  await history.getByRole('combobox',{name:'Modelo',exact:true}).selectOption('');
+  const today=history.locator('.uh-calendar button').last();
+  await today.focus();await page.keyboard.press('ArrowUp');await page.keyboard.press('Enter');
+  await expect(total).toHaveText('40');
+  await history.getByRole('combobox',{name:'Período',exact:true}).selectOption('all');
+  await page.screenshot({path:test.info().outputPath('historico-desktop.png')});
+  await page.setViewportSize({width:512,height:480});
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1)).toBe(true);
+  await history.getByRole('button',{name:'Avaliação com orçamento sintético'}).click();
+  await expect(page.getByRole('heading',{name:'Avaliação com orçamento sintético',exact:true})).toBeVisible();
+  expect(await calls(page,'ai.ask')).toHaveLength(0);
 });
 
 test('tarifas de modelos homônimos são independentes por provedor', async({page})=>{

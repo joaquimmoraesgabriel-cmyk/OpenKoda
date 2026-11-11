@@ -27,9 +27,9 @@ export function ProviderField({value, onChange, disabled, label = 'Provedor', on
 type Catalog = {phase: 'idle' | 'loading' | 'no-key' | 'ready' | 'failed'; models: string[]; message?: string};
 const idle: Catalog = {phase: 'idle', models: []};
 
-export function ModelCatalogField({provider, value, onChange, disabled, label = 'Modelo', allowManual = false, hasKey}: {
+export function ModelCatalogField({provider, value, onChange, disabled, label = 'Modelo', allowManual = false, expanded = false, hasKey}: {
   provider: ProviderId; value: string; onChange: (model: string) => void;
-  disabled?: boolean; label?: string; allowManual?: boolean; hasKey?: boolean;
+  disabled?: boolean; label?: string; allowManual?: boolean; expanded?: boolean; hasKey?: boolean;
 }) {
   const [attempt, setAttempt] = useState(0);
   const [catalog, setCatalog] = useState<Catalog>(idle);
@@ -73,12 +73,13 @@ export function ModelCatalogField({provider, value, onChange, disabled, label = 
   const matching = search ? catalog.models.filter(id => id.toLowerCase().includes(search)) : catalog.models;
   const CatalogIcon = catalog.phase === 'loading' ? LoaderCircle : catalog.phase === 'ready' ? Check : RefreshCw;
   return <div className="provider-model-field">
-    {!allowManual && catalog.models.length > 20 && <Field label="Filtrar modelos">
+    {!allowManual && catalog.models.length > (expanded ? 1 : 20) && <Field label="Filtrar modelos">
       <input type="search" value={filter} disabled={disabled} placeholder="Digite parte do nome" onChange={e => setFilter(e.target.value)}/>
     </Field>}
     <Field label={label} hint={hint}>
       {allowManual ? <input value={value} disabled={disabled} maxLength={160} list={listId} onChange={e => onChange(e.target.value)}/>
-        : <select value={value} disabled={disabled || !catalog.models.length} onChange={e => onChange(e.target.value)}>
+        : <select value={value} size={expanded && catalog.models.length ? Math.min(6, Math.max(2, catalog.models.length+1)) : undefined}
+          disabled={disabled || !catalog.models.length} onChange={e => onChange(e.target.value)}>
           <option value="">Selecione um modelo</option>
           {value && !matching.includes(value) && <option value={value}>{value}{catalog.phase === 'ready' && !catalog.models.includes(value) ? ' · fora do catálogo atual' : ''}</option>}
           {matching.map(id => <option value={id} key={id}>{id}</option>)}

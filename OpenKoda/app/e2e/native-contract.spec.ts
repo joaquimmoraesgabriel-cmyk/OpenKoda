@@ -39,7 +39,7 @@ async function nativeFixture(page:Page, environmentReady=false, bridgeMode='succ
     if(assessmentMode.startsWith('import'))assessment.status='draft';
     if(bridgeMode==='oversized')state.assessments[0].evidence[0].content='é'.repeat(17000);
     const providerKeys=new Set<string>();let verified=false;
-    const catalogs:Record<string,string[]>={openai:['fixture-model'],openrouter:['example/model-a','example/model-b',...Array.from({length:24},(_,i)=>'fixture/model-'+i)],groq:['example-chat']};
+    const catalogs:Record<string,string[]>={openai:['fixture-model'],openrouter:['example/model-a','example/model-b',...Array.from({length:24},(_,i)=>'fixture/model-'+i)],groq:['example-chat'],gemini:['gemini-fixture']};
     let finishRun:((result:unknown)=>void)|undefined;
     const messages:{id:string;role:string;text:string;createdAt:string}[]=[];
     let remediationPlan:Record<string,unknown>|undefined;
@@ -332,7 +332,11 @@ test('catálogo da chave alimenta configurações, rascunhos e modelo usado em u
   await nativeFixture(page);await page.goto('/');
   await page.getByRole('button',{name:'Configurações',exact:true}).click();
   await page.getByRole('button',{name:'IA e modelos',exact:true}).click();
-  await page.getByLabel('Provedor',{exact:true}).selectOption('openrouter');
+  await page.getByRole('button',{name:'Adicionar provedor',exact:true}).click();
+  const providers=page.getByRole('dialog',{name:'Adicionar provedor'});
+  await providers.getByRole('searchbox',{name:'Pesquisar provedores'}).fill('router');
+  await expect(providers.getByRole('button',{name:/Anthropic/})).toHaveCount(0);
+  await providers.getByRole('button',{name:/OpenRouter/}).click();
   await expect(page.getByLabel('Endpoint',{exact:true})).toHaveValue('https://openrouter.ai/api/v1');
   await expect(page.getByLabel('Modelo',{exact:true})).toBeDisabled();
   await page.getByLabel('Chave de API',{exact:true}).fill('synthetic-not-a-key');
@@ -370,19 +374,38 @@ test('catálogo da chave alimenta configurações, rascunhos e modelo usado em u
   expect(await calls(page,'ai.ask')).toEqual([]);
 });
 
+test('novos provedores aparecem com seu destino e o modelo Gemini pode ser o padrão',async({page})=>{
+  await nativeFixture(page);await page.goto('/');
+  await page.getByRole('button',{name:'Configurações',exact:true}).click();
+  await page.getByRole('button',{name:'IA e modelos',exact:true}).click();
+  await page.getByRole('button',{name:'Adicionar provedor'}).click();
+  const chooser=page.getByRole('dialog',{name:'Adicionar provedor'});
+  for (const domain of ['api.anthropic.com','generativelanguage.googleapis.com','api.deepseek.com','api.x.ai']) {
+    await expect(chooser.getByText(domain,{exact:true})).toBeVisible();
+  }
+  await chooser.getByRole('button',{name:/Google Gemini/}).click();
+  await expect(page.getByLabel('Endpoint',{exact:true})).toHaveValue('https://generativelanguage.googleapis.com/v1beta/openai');
+  await page.getByLabel('Chave de API',{exact:true}).fill('synthetic-gemini-fixture');
+  await page.getByRole('button',{name:'Salvar credencial'}).click();
+  await page.getByLabel('Modelo',{exact:true}).selectOption('gemini-fixture');
+  await page.getByRole('button',{name:'Salvar alterações',exact:true}).click();
+  expect((await calls(page,'settings.save')).at(-1)?.payload).toMatchObject({provider:'gemini',model:'gemini-fixture'});
+  expect(await calls(page,'ai.test')).toEqual([]);
+});
+
 test('trocar o provedor e descartar a escolha limpam a chave ainda não salva',async({page})=>{
   await nativeFixture(page);await page.goto('/');
   await page.getByRole('button',{name:'Configurações',exact:true}).click();
   await page.getByRole('button',{name:'IA e modelos',exact:true}).click();
-  const provider=page.getByLabel('Provedor',{exact:true});
   const credential=page.getByLabel('Chave de API',{exact:true});
   await credential.fill('synthetic-openai-entry');
-  await provider.selectOption('groq');
+  await page.getByRole('button',{name:'Adicionar provedor',exact:true}).click();
+  await page.getByRole('dialog').getByRole('button',{name:/Groq/}).click();
   await expect(credential).toHaveValue('');
   await expect(page.getByRole('button',{name:'Salvar credencial'})).toBeDisabled();
   await credential.fill('synthetic-groq-entry');
   await page.getByRole('button',{name:'Descartar',exact:true}).click();
-  await expect(provider).toHaveValue('openai');
+  await expect(page.getByRole('complementary',{name:'Provedores configurados'}).getByRole('button',{name:/OpenAI/})).toHaveAttribute('aria-pressed','true');
   await expect(credential).toHaveValue('');
   expect(await calls(page,'ai.key.save')).toEqual([]);
   expect(await calls(page,'ai.models')).toEqual([]);

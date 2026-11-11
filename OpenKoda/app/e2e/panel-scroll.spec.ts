@@ -27,6 +27,7 @@ test('as categorias e o conteúdo das configurações rolam de forma independent
   await page.setViewportSize({width: 1280, height: 580});
   await page.goto('/');
   await page.getByRole('button', {name:'Configurações', exact:true}).click();
+  await page.getByRole('button', {name:'Aparência', exact:true}).click();
   await checkIndependentScroll(page, page.locator('.settings-menu'), page.getByRole('region', {name:'Conteúdo de Aparência'}));
   await page.getByRole('button', {name:'Atualizações', exact:true}).click();
   await expect(page.getByRole('heading', {name:'Atualizações', exact:true})).toBeInViewport();

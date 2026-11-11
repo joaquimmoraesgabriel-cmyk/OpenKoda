@@ -4,6 +4,8 @@
 use super::*;
 use serde::{Deserialize,Serialize};
 use std::{collections::HashSet,path::Path};
+#[path="ai_budget_history.rs"]
+mod history;
 
 const SCALE:u64=1_000_000;
 const MAX_MONEY:u64=1_000_000*SCALE;
@@ -226,11 +228,12 @@ struct Configure {expected_revision:Option<String>,enabled:bool,currency:String,
 struct Resolve {charge_id:String,assumed_charge_usd:String,note:String,acknowledge_unknown_charge:bool}
 #[derive(Deserialize)]#[serde(rename_all="camelCase",deny_unknown_fields)]struct Status {#[serde(default)]assessment_id:Option<String>}
 #[derive(Deserialize)]#[serde(deny_unknown_fields)]struct Preview {operation:String,payload:Value}
-pub(super) fn supports(action:&str)->bool{matches!(action,"ai.budget.status"|"ai.budget.configure"|"ai.budget.preview"|"ai.budget.resolveUnknown")}
+pub(super) fn supports(action:&str)->bool{matches!(action,"ai.budget.status"|"ai.budget.history"|"ai.budget.configure"|"ai.budget.preview"|"ai.budget.resolveUnknown")}
 impl AiService {
     fn legacy_requests(&self)->Result<Vec<String>,String>{let db=self.db.lock().map_err(failure)?;let mut q=db.prepare("SELECT id FROM requests WHERE json_type(details,'$.budget') IS NULL ORDER BY id").map_err(failure)?;let rows=q.query_map([],|r|r.get(0)).map_err(failure)?.collect::<Result<Vec<_>,_>>().map_err(failure)?;Ok(rows)}
     pub(super) fn budget_handle(&self,action:&str,payload:Value,store:&Store)->Result<Value,String>{match action{
         "ai.budget.status"=>{let input:Status=decode(payload)?;if let Some(id)=&input.assessment_id{check_assessment(store,id)?;}self.budget.status(input.assessment_id.as_deref(),&self.legacy_requests()?)},
+        "ai.budget.history"=>{empty(&payload)?;let db=self.db.lock().map_err(failure)?;history::read(&db)},
         "ai.budget.configure"=>{let input:Configure=decode(payload)?;self.with_local_redactor(|redactor|self.budget.configure(input,&self.legacy_requests()?,redactor))?;self.budget.status(None,&self.legacy_requests()?)},
         "ai.budget.resolveUnknown"=>{let input:Resolve=decode(payload)?;self.with_local_redactor(|redactor|self.budget.resolve(input,redactor))},
         "ai.budget.preview"=>{

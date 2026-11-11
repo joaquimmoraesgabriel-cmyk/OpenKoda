@@ -1,14 +1,16 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { Boxes, CircleDollarSign, Database, HardDriveDownload, Layers, LifeBuoy, Monitor, RefreshCw, Settings2, ShieldCheck, SlidersHorizontal } from 'lucide-react';
+import { Boxes, CircleDollarSign, Database, HardDriveDownload, History, Layers, LifeBuoy, Monitor, RefreshCw, Search, Settings2, ShieldCheck, SlidersHorizontal } from 'lucide-react';
 import { version } from '../../package.json';
-import { saveAppearance, useDeviceAppearance, type DeviceAppearance } from '../appearance';
-import { Action, Project, Settings as SettingsModel, errorMessage } from '../types';
+import { appearanceFrom, appearanceKeys, saveAppearance, useDeviceAppearance, type DeviceAppearance } from '../appearance';
+import { Action, Assessment, Project, Settings as SettingsModel, errorMessage } from '../types';
 import { Field, Notice, KeyValue } from './shared';
 import { AppearanceSettings, KeyboardTips } from './AppearanceSettings';
 import AiConnection from './AiConnection';
 import AiLocalClosure from './AiLocalClosure';
 import AiBudgetSettings from './AiBudgetSettings';
-import HostConnectivity from './HostConnectivity';
+import GeneralSettings from './GeneralSettings';
+import WindowBehaviorSettings from './WindowBehaviorSettings';
+import UsageHistory from './UsageHistory';
 import ProjectDataSettings from './ProjectDataSettings';
 import ProjectPurge, { ProjectPurgeStatus } from './ProjectPurge';
 import Recovery from './Recovery';
@@ -25,7 +27,7 @@ const groups = [
     { name: 'Backup e recuperação', icon: HardDriveDownload }, { name: 'Permissões', icon: SlidersHorizontal },
   ]},
   { name: 'Integrações', items: [
-    { name: 'IA e modelos', icon: Layers }, { name: 'Uso e orçamento', icon: CircleDollarSign },
+    { name: 'IA e modelos', icon: Layers }, { name: 'Uso e orçamento', icon: CircleDollarSign }, {name: 'Histórico de uso', icon: History},
   ]},
   { name: 'Instalação', items: [
     { name: 'Diagnóstico e suporte', icon: LifeBuoy }, { name: 'Atualizações', icon: RefreshCw },
@@ -36,7 +38,7 @@ type Section = typeof groups[number]['items'][number]['name'];
 type Draft = SettingsModel & DeviceAppearance;
 type EditableKey = Exclude<keyof Draft, 'hasApiKey'>;
 const fields: Partial<Record<Section, EditableKey[]>> = {
-  'Aparência': ['theme', 'interfaceScale', 'density', 'motion'],
+  'Aparência': ['theme', ...appearanceKeys],
   'IA e modelos': ['provider', 'endpoint', 'model'],
   'Armazenamento': ['retentionDays'],
   'Permissões': ['timeoutSeconds', 'outputLimitKiB'],
@@ -44,11 +46,15 @@ const fields: Partial<Record<Section, EditableKey[]>> = {
 
 type Props = {
   settings: SettingsModel; projects: Project[]; action: Action; busy: boolean;
-  dataRequest?: number; onPurgeStatus: (value: ProjectPurgeStatus) => void;
+  dataRequest?: number; usageRequest?: number; assessments?: Assessment[]; onOpenAssessment?: (id: string) => void; onPurgeStatus: (value: ProjectPurgeStatus) => void;
 };
 
-export default function Settings({settings, projects, action, busy, dataRequest=0, onPurgeStatus}: Props) {
-  const [section, setSection] = useState<Section>('Aparência');
+export default function Settings({settings, projects, action, busy, dataRequest=0, usageRequest=0, assessments, onOpenAssessment, onPurgeStatus}: Props) {
+  const [section, setSection] = useState<Section>('Geral');
+  const [search, setSearch] = useState('');
+  const normalized = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('pt-BR');
+  const matches = groups.map(group => ({...group, items: group.items.filter(item =>
+    normalized(group.name + ' ' + item.name).includes(normalized(search.trim())))})).filter(group => group.items.length);
   const [edits, setEdits] = useState<Partial<Draft>>({});
   const [saved, setSaved] = useState<Section>();
   const [saveError, setSaveError] = useState('');
@@ -67,8 +73,9 @@ export default function Settings({settings, projects, action, busy, dataRequest=
   }
 
   useEffect(() => {
-    if (dataRequest) navigate('Dados e privacidade');
+    if (dataRequest) {setSearch(''); navigate('Dados e privacidade');}
   }, [dataRequest]);
+  useEffect(() => { if (usageRequest) {setSearch(''); navigate('Histórico de uso');} }, [usageRequest]);
 
   function change<K extends keyof Draft>(key: K, value: Draft[K]) {
     setEdits(current => ({...current, [key]: value}));
@@ -93,8 +100,7 @@ export default function Settings({settings, projects, action, busy, dataRequest=
     const payload = Object.fromEntries(keys.map(key => [key, draft[key]]));
     try {
       if (section === 'Aparência' && keys.some(key => key !== 'theme')) {
-        const {interfaceScale, density, motion} = draft;
-        await saveAppearance({interfaceScale, density, motion}, keys.includes('theme') ? () => action('settings.save', {theme: draft.theme}) : undefined);
+        await saveAppearance(appearanceFrom(draft), keys.includes('theme') ? () => action('settings.save', {theme: draft.theme}) : undefined);
       } else {
         await action('settings.save', payload);
       }
@@ -120,8 +126,10 @@ export default function Settings({settings, projects, action, busy, dataRequest=
   return <div className="settings-layout">
     <h1 className="settings-page-title">Configurações</h1>
     <aside className="settings-menu">
+      <label className="settings-search"><Search size={15} aria-hidden="true"/><input type="search" aria-label="Pesquisar configurações" placeholder="Pesquisar configurações" value={search} onChange={e=>setSearch(e.target.value)}/></label>
       <nav aria-label="Categorias de configuração">
-        {groups.map(group => <div className="settings-group" key={group.name}>
+        {matches.length === 0 && <p role="status" className="muted">Nenhuma categoria encontrada.</p>}
+        {matches.map(group => <div className="settings-group" key={group.name}>
           <h2>{group.name}</h2>
           {group.items.map(({name, icon: Icon}) => <button type="button" key={name} aria-label={name} aria-current={section === name ? 'page' : undefined} onClick={() => navigate(name)}>
             <Icon size={18} strokeWidth={1.65} aria-hidden="true"/><span>{name}</span>
@@ -136,16 +144,13 @@ export default function Settings({settings, projects, action, busy, dataRequest=
         {section === 'Aparência' && <form onSubmit={save}>
           <AppearanceSettings draft={draft} change={change} busy={busy}/>{saveActions}
         </form>}
-        {section === 'Geral' && <>
-          <KeyValue label="Idioma">Português (Brasil)</KeyValue>
-          <KeyValue label="Fuso horário">{Intl.DateTimeFormat().resolvedOptions().timeZone}</KeyValue>
-          <HostConnectivity/>
-        </>}
+        {section === 'Geral' && <GeneralSettings windowOptions={<WindowBehaviorSettings/>}/>}
         {section === 'IA e modelos' && <>
-          <form onSubmit={save}><AiConnection key={draft.provider} draft={draft} dirty={dirty} change={change} action={action} busy={busy}/>{saveActions}</form>
+          <form onSubmit={save}><AiConnection saved={settings} draft={draft} dirty={dirty} change={change} action={action} busy={busy}/>{saveActions}</form>
           <AiLocalClosure action={action} busy={busy}/>
         </>}
-        {section === 'Uso e orçamento' && <AiBudgetSettings action={action} busy={busy}/>}
+        {section === 'Uso e orçamento' && <AiBudgetSettings action={action} busy={busy} onUsageHistory={()=>navigate('Histórico de uso')}/>}
+        {section === 'Histórico de uso' && <UsageHistory assessments={assessments} onOpenAssessment={onOpenAssessment}/>}
         {section === 'Permissões' && <>
           <p className="muted">Cada operação depende dos alvos, métodos e limites do escopo autorizado da avaliação.</p>
           <form onSubmit={save}><div className="form-group">

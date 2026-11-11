@@ -7,10 +7,11 @@ import { Field, KeyValue, Notice } from './shared';
 import { BudgetAnalytics, BudgetOverview } from './BudgetInsights';
 import { ModelCatalogField, ProviderField } from './ProviderModels';
 import './profile-usage.css';
+import './usage-history.css';
 
 const sections = ['Visão geral', 'Análises', 'Política de orçamento'] as const;
 
-export default function AiBudgetSettings({action,busy}:{action:Action;busy:boolean}){
+export default function AiBudgetSettings({action,busy,onUsageHistory}:{action:Action;busy:boolean;onUsageHistory?:()=>void}){
   const [section,setSection] = useState<typeof sections[number]>('Visão geral');
   const [status,setStatus]=useState<BudgetStatus>();const [enabled,setEnabled]=useState(false);const [installation,setInstallation]=useState('');const [assessment,setAssessment]=useState('');const [prices,setPrices]=useState<BudgetPrice[]>([]);const [review,setReview]=useState<Payload>();const [ackEstimates,setAckEstimates]=useState(false);const [ackLegacy,setAckLegacy]=useState(false);const [ackUnbounded,setAckUnbounded]=useState(false);
   const [chargeId,setChargeId]=useState('');const [assumed,setAssumed]=useState('');const [note,setNote]=useState('');const [ackUnknown,setAckUnknown]=useState(false);const [pending,setPending]=useState(false);const [error,setError]=useState('');const [message,setMessage]=useState('');const pendingRef=useRef(false);
@@ -20,7 +21,7 @@ export default function AiBudgetSettings({action,busy}:{action:Action;busy:boole
   useEffect(()=>{setReview(undefined);setAckEstimates(false);setAckLegacy(false);setAckUnbounded(false);},[draftKey]);
   useEffect(()=>{setAssumed('');setNote('');setAckUnknown(false);},[chargeId]);
   const disabled=busy||pending;const amountValid=(value:string)=>usdMicros(value)!==null;const positive=(value:string)=>{const amount=usdMicros(value);return amount!==null&&amount>0n;};
-  const validPrices=prices.length>0&&prices.length<=100&&new Set(prices.map(p=>JSON.stringify([p.provider??'openai',p.model.trim()]))).size===prices.length&&prices.every(p=>/^[A-Za-z0-9._:/-]+$/.test(p.model.trim())&&new TextEncoder().encode(p.model.trim()).length<=160&&positive(p.inputUsdPerMillion)&&positive(p.outputUsdPerMillion)&&p.sourceNote.trim()&&new TextEncoder().encode(p.sourceNote.trim()).length<=500);
+  const validPrices=prices.length>0&&prices.length<=100&&new Set(prices.map(p=>JSON.stringify([p.provider??'openai',p.model.trim()]))).size===prices.length&&prices.every(p=>/^[A-Za-z0-9._:/@+~-]{1,160}$/.test(p.model.trim())&&positive(p.inputUsdPerMillion)&&positive(p.outputUsdPerMillion)&&p.sourceNote.trim()&&new TextEncoder().encode(p.sourceNote.trim()).length<=500);
   const validLimits=positive(installation)&&positive(assessment)&&usdMicros(assessment)!<=usdMicros(installation)!;
   const charge=status?.unknownCharges.find(c=>c.chargeId===chargeId);const minCharge=charge?.heldUsd==null?null:usdMicros(charge.heldUsd);const assumedMicros=usdMicros(assumed);const noteBytes=new TextEncoder().encode(note.trim()).length;
   function priceChange(index:number,key:keyof BudgetPrice,value:string){setPrices(items=>items.map((p,i)=>i===index?{...p,[key]:value}:p));}
@@ -40,7 +41,7 @@ export default function AiBudgetSettings({action,busy}:{action:Action;busy:boole
       {status && <>
         {status.degraded && <Notice tone="warning">{status.notice}</Notice>}
         {section === 'Visão geral' && <>
-          <BudgetOverview status={status} onAnalysis={()=>setSection('Análises')} onPolicy={()=>setSection('Política de orçamento')}/>
+          <BudgetOverview status={status} onAnalysis={()=>setSection('Análises')} onPolicy={()=>setSection('Política de orçamento')} onUsageHistory={onUsageHistory}/>
           {!status.degraded && <p className="analysis-scope">{status.notice}</p>}
         </>}
         {section === 'Análises' && <BudgetAnalytics status={status}/>}

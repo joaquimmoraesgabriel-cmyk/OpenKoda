@@ -3,7 +3,8 @@ use super::*;
 use crate::core::Request;
 use crate::data_projection::DataRedactor;
 
-const KEYS:[&str;3]=["synthetic-openai-provider-key","synthetic-openrouter-provider-key","synthetic-groq-provider-key"];
+const KEYS:[&str;7]=["synthetic-openai-provider-key","synthetic-openrouter-provider-key","synthetic-groq-provider-key",
+    "synthetic-anthropic-provider-key","synthetic-gemini-provider-key","synthetic-deepseek-provider-key","synthetic-xai-provider-key"];
 struct Transport { calls:Mutex<Vec<(ProviderId,String)>> }
 impl Provider for Transport {
     fn models(&self,p:ProviderId,key:&str)->Result<Vec<String>,String>{
@@ -61,11 +62,25 @@ fn per_assessment_dispatch_uses_its_slot_and_rejects_stale_reviews(){
 }
 #[test]
 fn catalog_does_not_truncate_and_chat_usage_is_normalized(){
+    let claude=ProviderId::Anthropic;
+    assert_eq!(claude.catalog_page(&json!({"data":[{"id":"claude-fixture"}],"has_more":true,"last_id":"claude-fixture"})).unwrap().1.as_deref(),Some("claude-fixture"));
+    assert!(claude.catalog_page(&json!({"data":[],"has_more":true})).is_err());
+    let gemini=ProviderId::Gemini;
+    assert_eq!(gemini.catalog_page(&json!({"models":[{"name":"models/gemini-fixture"}],"nextPageToken":"AQ=="})).unwrap(),
+        (vec!["gemini-fixture".to_string()],Some("AQ==".to_string())));
+    assert_eq!(gemini.catalog_page(&json!({"models":[]})).unwrap().1,None);
+    assert_eq!(claude.inference_url(),"https://api.anthropic.com/v1/messages");
+    assert_eq!(claude.body("claude","user","rules",300),json!({"model":"claude","system":"rules","max_tokens":300,"messages":[{"role":"user","content":"user"}]}));
+    let reply=claude.normalize(json!({"id":"abc","model":"claude","stop_reason":"end_turn","usage":{"input_tokens":9,"cache_read_input_tokens":1,"cache_creation_input_tokens":3,"output_tokens":5},
+        "content":[{"type":"thinking","thinking":"not a message"},{"type":"text","text":"hello"}]})).unwrap();
+    let parsed=parse_completion(reply,"secret").unwrap();
+    assert_eq!(parsed["text"],"hello");
+    assert_eq!(parsed["usage"],json!({"input_tokens":13,"output_tokens":5}));
     let aliases=crate::ai_provider::catalog(&json!({"data":[{"id":"org/model:v1"},{"id":"~org/alias-latest"},{"id":"org/model:v1"}]})).unwrap();
     assert_eq!(aliases,["org/model:v1","~org/alias-latest"]);
     let rows=(0..1200).map(|n|json!({"id":format!("org/model-{n}")})).collect::<Vec<_>>();
     assert_eq!(crate::ai_provider::catalog(&json!({"data":rows})).unwrap().len(),1200);
-    for p in [ProviderId::OpenRouter,ProviderId::Groq]{
+    for p in [ProviderId::OpenRouter,ProviderId::Groq,ProviderId::Gemini,ProviderId::DeepSeek,ProviderId::Xai]{
         let body=p.body("org/model","user","system",50);
         assert_eq!(body["model"],"org/model");
         if p==ProviderId::Groq {assert_eq!(body["tool_choice"],"none");}

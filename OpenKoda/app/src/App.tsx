@@ -46,7 +46,9 @@ export default function App() {
   const refreshPurge=useCallback(async()=>{if(!native)return;try{setPurgeStatus(await request<ProjectPurgeStatus>('projectPurge.status'));setPurgeError('');}catch(e){setPurgeError(errorMessage(e));}},[]);
   const dataAssessmentId=view==='assessments'&&!creating?selected:view==='findings'?snapshot?.findings.find(f=>f.id===selectedFinding)?.assessmentId:undefined;
   useEffect(()=>{if(native)void request('data.session.select',{assessmentId:dataAssessmentId||null}).catch(e=>setError(errorMessage(e)));},[dataAssessmentId]);
-  function openDataSettings(){setSettingsDataRequest(value=>value+1);setView('settings');}
+  const [settingsUsageRequest, setSettingsUsageRequest] = useState(0);
+  function openDataSettings(){setSettingsUsageRequest(0);setSettingsDataRequest(value=>value+1);setView('settings');}
+  function openUsageHistory(){setSettingsDataRequest(0);setSettingsUsageRequest(value=>value+1);setView('settings');}
 
   const refresh = useCallback(async () => {
     const next = await request<Snapshot>('snapshot');
@@ -125,7 +127,7 @@ export default function App() {
   function navigate(next: View) {
     if (next === 'projects') openProjects();
     else {
-      if (next === 'settings') setSettingsDataRequest(0);
+      if (next === 'settings') { setSettingsDataRequest(0); setSettingsUsageRequest(0); }
       setView(next);
     }
   }
@@ -155,12 +157,12 @@ export default function App() {
       {native&&(purgeError||purgeStatus?.hasUnresolved||purgeStatus?.hasPartialHistory)&&<div className="app-alert project-purge-banner" role="alert"><AlertCircle size={20}/><span>{purgeError?`Não foi possível consultar exclusões de projetos: ${purgeError}`:purgeStatus?.hasUnresolved?'Exclusão de projeto pendente: novas alterações estão bloqueadas. O histórico pode estar parcialmente removido.':'Há exclusão encerrada parcialmente. A trilha do projeto pode estar incompleta; os dados restantes foram preservados.'}</span><button className="button" type="button" onClick={openDataSettings}>Revisar exclusão em Dados</button></div>}
       {loading&&!snapshot?<div className="loading-state" role="status"><LoaderCircle className="spin" size={26}/>Carregando seu trabalho…</div>:!snapshot?<div className="loading-state"><h1>Não foi possível abrir seus dados</h1><p>Os dados existentes foram preservados.</p><button className="button" onClick={()=>void load()}><RefreshCw size={17}/>Tentar novamente</button></div>:<>
         {view==='overview'&&<Overview assessments={snapshot.assessments} projects={snapshot.projects} busy={busy} onOpenAssessment={openAssessment} onNewAssessment={()=>newAssessment()} onOpenProject={id=>openProjects(id)} onNewProject={()=>openProjects(undefined,true)}/>}
-        {view==='profile'&&<WorkspaceProfile snapshot={snapshot} onSettings={()=>navigate('settings')}/>}
+        {view==='profile'&&<WorkspaceProfile snapshot={snapshot} onSettings={()=>navigate('settings')} onUsageHistory={openUsageHistory}/>}
         {view==='assessments'&&<Assessments {...snapshot} closeQueue={closeQueue} onCloseQueueOpened={()=>setCloseQueue(undefined)} selected={selected} onSelect={id=>{setSelected(id);setCreating(false);}} creating={creating} initialProject={initialProject} onCancelNew={()=>setCreating(false)} onCreate={createAssessment} onProjects={()=>openProjects()} onFindings={openFinding} action={action} busy={busy} onExport={path=>setNotice(`Relatório exportado para ${path}`)}/>}
         {view==='projects'&&<Projects key={projectEntry.revision} projects={snapshot.projects} assessments={snapshot.assessments} initialProjectId={projectEntry.id} initialCreate={projectEntry.create} action={action} busy={busy} onNewAssessment={newAssessment} onOpenAssessment={openAssessment}/>}
         {view==='findings'&&<Findings selected={selectedFinding} onSelect={setSelectedFinding} onOpenAssessment={openAssessment} findings={snapshot.findings} assessments={snapshot.assessments} projects={snapshot.projects} validations={snapshot.validations} action={action} busy={busy}/>}
         {view==='kali'&&<Kali environment={environment} action={action} busy={busy} onExecutorChange={updateExecutorBinding}/>}
-        {view==='settings'&&<Settings settings={snapshot.settings} projects={snapshot.projects} action={action} busy={busy} dataRequest={settingsDataRequest} onPurgeStatus={value=>{setPurgeStatus(value);setPurgeError('');}}/>}
+        {view==='settings'&&<Settings settings={snapshot.settings} projects={snapshot.projects} assessments={snapshot.assessments} action={action} busy={busy} dataRequest={settingsDataRequest} usageRequest={settingsUsageRequest} onOpenAssessment={openAssessment} onPurgeStatus={value=>{setPurgeStatus(value);setPurgeError('');}}/>}
       </>}
     </main>
     <footer className="statusbar workspace-status"><span><span className={`status-dot ${busy||runningCount?'working':''}`}/>{busy?'Atualizando…':runningCount?'Execução em andamento':snapshot?'Dados locais disponíveis':'Armazenamento não carregado'}</span><button className={`environment-indicator env-${environment.status}`} onClick={()=>navigate('kali')} title={environment.message}><span className="status-dot"/>{envLabel}</button></footer>

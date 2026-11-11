@@ -18,37 +18,41 @@ export function readableAmount(value?: string | null) {
   return 'USD ' + count.format(BigInt(whole)) + ',' + decimals;
 }
 
-export function BudgetOverview({status, onAnalysis, onPolicy}: {status:BudgetStatus; onAnalysis:()=>void; onPolicy:()=>void}) {
+export function BudgetOverview({status, onAnalysis, onPolicy, onUsageHistory}: {status:BudgetStatus; onAnalysis:()=>void; onPolicy:()=>void; onUsageHistory?:()=>void}) {
   const balance = status.installation;
   const limit = Number(balance?.limitUsd);
   const remaining = balance?.remainingUsd;
   const percent = remaining != null && limit > 0 ? Math.max(0, Math.min(100, (1 - Number(remaining) / limit) * 100)) : null;
   const committedLabel = percent === null ? undefined : percent.toLocaleString('pt-BR', {maximumFractionDigits:1}) + '% comprometido';
   return <div className="usage-overview">
-    <section className="usage-limit" aria-labelledby="usage-limit-heading">
+    <section className="billing-group" aria-labelledby="usage-limit-heading">
       <div className="limit-heading"><span className="usage-glyph"><Wallet size={20} aria-hidden="true"/></span>
         <div className="insight-title"><div><h3 id="usage-limit-heading">Orçamento da instalação</h3>
           <p>{status.degraded ? 'Registro indisponível' : status.enabled ? 'Controle monetário ativado' : 'Controle monetário desativado'}</p></div></div>
       </div>
-      <div className="usage-ledger">
+      <div className="billing-balance-card">
         <div className="usage-available">
           <p className="balance-caption">Saldo estimado disponível</p>
           <div className="balance-amount">{balance && balance.limitUsd == null ? 'Sem limite definido' : readableAmount(remaining)}</div>
           {percent !== null && <><progress className="balance-meter" max={100} value={percent} aria-label="Percentual comprometido do limite" aria-valuetext={committedLabel}/>
             <div className="balance-fractions"><span>{committedLabel}</span><span>Limite de {readableAmount(balance?.limitUsd)}</span></div></>}
         </div>
-        <dl className="usage-balance-lines" aria-label="Composição do orçamento">
-          <div><dt><i className="series-input"/>Estimativa com tokens informados</dt><dd>{readableAmount(balance?.pricedUsageUsd)}</dd></div>
-          <div><dt><i className="series-output"/>Reservas retidas</dt><dd>{readableAmount(balance?.heldUsd)}</dd></div>
-          <div><dt><i className="series-assumed"/>Débitos assumidos</dt><dd>{readableAmount(balance?.assumedChargeUsd)}</dd></div>
-        </dl>
-      </div>
-      <div className="budget-card-footer"><span>Custos pendentes <strong>{balance?.unresolvedCount ?? 'Não informado'}</strong></span>
+        <div className="budget-card-footer"><span>Custos pendentes <strong>{balance?.unresolvedCount ?? 'Não informado'}</strong></span>
         <button type="button" className="button" onClick={onPolicy}>Gerenciar limites e preços<ArrowRight size={14} aria-hidden="true"/></button></div>
+      </div>
     </section>
-    <section className="usage-history-link"><Activity size={19} aria-hidden="true"/><div><h3>Histórico de uso</h3>
+    <section className="billing-group">
+      <h3>Composição do orçamento</h3>
+      <dl className="usage-balance-lines billing-breakdown" aria-label="Composição do orçamento">
+        <div><dt><i className="series-input"/><span>Estimativa com tokens informados<small>Calculada pelas tarifas do modelo e do provedor.</small></span></dt><dd>{readableAmount(balance?.pricedUsageUsd)}</dd></div>
+        <div><dt><i className="series-output"/><span>Reservas retidas<small>Valores separados para solicitações em andamento ou com resultado desconhecido.</small></span></dt><dd>{readableAmount(balance?.heldUsd)}</dd></div>
+        <div><dt><i className="series-assumed"/><span>Débitos assumidos<small>Estimativas registradas ao revisar custos desconhecidos.</small></span></dt><dd>{readableAmount(balance?.assumedChargeUsd)}</dd></div>
+      </dl>
+    </section>
+    <section className="usage-history-link"><Activity size={19} aria-hidden="true"/><div><h3>Registros de custo</h3>
       <p>{status.recentChargesTotal == null ? 'Quantidade de registros indisponível' : count.format(status.recentChargesTotal) + (status.recentChargesTotal === 1 ? ' registro de custo' : ' registros de custo')}</p></div>
       <button type="button" className="button" onClick={onAnalysis}>Ver análises<ArrowRight size={14} aria-hidden="true"/></button></section>
+    {onUsageHistory && <button className="text-button billing-history-link" type="button" onClick={onUsageHistory}>Abrir histórico de tokens<ArrowRight size={14} aria-hidden="true"/></button>}
   </div>;
 }
 

@@ -3,10 +3,10 @@ use serde_json::{json, Value};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
-pub enum ProviderId { OpenAI, OpenRouter, Groq }
+pub enum ProviderId { OpenAI, OpenRouter, Groq, Anthropic, Gemini, DeepSeek, Xai }
 
 impl ProviderId {
-    pub const ALL: [Self; 3] = [Self::OpenAI, Self::OpenRouter, Self::Groq];
+    pub const ALL: [Self; 7] = [Self::OpenAI, Self::OpenRouter, Self::Groq, Self::Anthropic, Self::Gemini, Self::DeepSeek, Self::Xai];
     pub fn parse(id: &str) -> Result<Self, String> {
         Self::ALL.into_iter().find(|p| p.id() == id)
             .ok_or_else(|| "Provedor de IA não suportado.".into())
@@ -17,22 +17,56 @@ impl ProviderId {
     }
     pub fn id(self) -> &'static str { match self {
         Self::OpenAI => "openai", Self::OpenRouter => "openrouter", Self::Groq => "groq",
+        Self::Anthropic => "anthropic", Self::Gemini => "gemini", Self::DeepSeek => "deepseek", Self::Xai => "xai",
     }}
-    pub fn slot(self) -> i64 { match self { Self::OpenAI => 1, Self::OpenRouter => 2, Self::Groq => 3 } }
+    pub fn slot(self) -> i64 { match self { Self::OpenAI => 1, Self::OpenRouter => 2, Self::Groq => 3,
+        Self::Anthropic => 4, Self::Gemini => 5, Self::DeepSeek => 6, Self::Xai => 7 } }
     pub fn endpoint(self) -> &'static str { match self {
         Self::OpenAI => "https://api.openai.com/v1",
         Self::OpenRouter => "https://openrouter.ai/api/v1",
         Self::Groq => "https://api.groq.com/openai/v1",
+        Self::Anthropic => "https://api.anthropic.com/v1",
+        Self::Gemini => "https://generativelanguage.googleapis.com/v1beta/openai",
+        Self::DeepSeek => "https://api.deepseek.com",
+        Self::Xai => "https://api.x.ai/v1",
     }}
     pub fn catalog_url(self) -> String {
+        if self == Self::Gemini { return "https://generativelanguage.googleapis.com/v1beta/models".into(); }
         format!("{}{}", self.endpoint(), if self == Self::OpenRouter { "/models/user?output_modalities=all" } else { "/models" })
     }
+    pub fn catalog_page(self, body: &Value) -> Result<(Vec<String>, Option<String>), String> {
+        if self == Self::Gemini {
+            let mut names = Vec::new();
+            for row in body["models"].as_array().ok_or("Catálogo de modelos inválido.")? {
+                let name = row["name"].as_str().and_then(|id| id.strip_prefix("models/"))
+                    .filter(|id| valid_model(id)).ok_or("Nome de modelo Gemini inválido.")?;
+                names.push(name.to_owned());
+            }
+            let next = match body.get("nextPageToken") {
+                None | Some(Value::Null) => None,
+                Some(Value::String(token)) if token.is_empty() => None,
+                Some(Value::String(token)) if token.len() <= 4096 && token.bytes().all(|b| b.is_ascii_graphic()) => Some(token.clone()),
+                _ => return Err("Cursor de modelos Gemini inválido.".into()),
+            };
+            return Ok((names, next));
+        }
+        let next = if self == Self::Anthropic && body["has_more"].as_bool().ok_or("Paginação Anthropic inválida.")? {
+            let id = body["last_id"].as_str().filter(|id| valid_model(id)).ok_or("Cursor de modelos Anthropic inválido.")?;
+            Some(id.to_owned())
+        } else { None };
+        Ok((catalog(body)?, next))
+    }
     pub fn inference_url(self) -> String {
-        format!("{}{}", self.endpoint(), if self == Self::OpenAI { "/responses" } else { "/chat/completions" })
+        format!("{}{}", self.endpoint(), match self {
+            Self::OpenAI => "/responses", Self::Anthropic => "/messages", _ => "/chat/completions"
+        })
     }
     pub fn body(self, model: &str, prompt: &str, instructions: &str, maximum: u32) -> Value {
         if self == Self::OpenAI {
             return json!({"model":model,"instructions":instructions,"input":[{"role":"user","content":prompt}],"store":false,"max_output_tokens":maximum});
+        }
+        if self == Self::Anthropic {
+            return json!({"model":model,"system":instructions,"messages":[{"role":"user","content":prompt}],"max_tokens":maximum});
         }
         let mut body = json!({"model":model,"messages":[{"role":"system","content":instructions},{"role":"user","content":prompt}],"stream":false});
         if self==Self::Groq {body["tool_choice"]=json!("none");}
@@ -41,6 +75,27 @@ impl ProviderId {
     }
     pub fn normalize(self, body: Value) -> Result<Value, String> {
         if self == Self::OpenAI { return Ok(body); }
+        if self == Self::Anthropic {
+            let reason = body["stop_reason"].as_str().ok_or("Resposta sem término identificável.")?;
+            let status = match reason {
+                "end_turn" | "stop_sequence" => "completed",
+                "max_tokens" | "model_context_window_exceeded" => "incomplete",
+                _ => "failed",
+            };
+            let content: Vec<_> = body["content"].as_array().ok_or("Resposta sem conteúdo.")?.iter()
+                .filter(|block| block["type"] == "text")
+                .map(|block| json!({"type":"output_text","text": block["text"]})).collect();
+            let usage = &body["usage"];
+            // Messages reports uncached, cache-read and cache-write input as disjoint counts.
+            let input_tokens = usage["input_tokens"].as_u64().and_then(|base| {
+                ["cache_read_input_tokens", "cache_creation_input_tokens"].iter().try_fold(base, |sum, key| {
+                    match usage.get(*key) { None | Some(Value::Null) => Some(sum), Some(count) => sum.checked_add(count.as_u64()?) }
+                })
+            });
+            return Ok(json!({"id":body["id"],"model":body["model"],"status":status,
+                "output":[{"type":"message","content":content}],
+                "usage":{"input_tokens":input_tokens,"output_tokens":usage["output_tokens"]}}));
+        }
         let choice = &body["choices"][0];
         let reason = choice["finish_reason"].as_str().ok_or("Resposta sem término identificável.")?;
         let status = match reason {

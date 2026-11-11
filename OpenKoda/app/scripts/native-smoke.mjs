@@ -366,6 +366,33 @@ try {
     await rejects('project.create', { name: '', kind: 'code', target: fixtureDirectory, description: '' });
     expect((await request('snapshot')).projects).toEqual([]);
   });
+  await gate('E1-window-close-behavior', 'The close button minimizes the owned window and preserves native IPC', async () => {
+    expect(await request('window.behavior.get')).toEqual({minimize:false});
+    expect(await request('window.behavior.set', {minimize:true})).toEqual({minimize:true});
+    try {
+      const script = `
+        $ErrorActionPreference='Stop'
+        $app=Get-Process -Id $env:OPENKODA_TEST_PID
+        if ($app.Path -ne $env:OPENKODA_TEST_EXE) {throw 'Unexpected native process'}
+        $handle=$app.MainWindowHandle
+        if ($handle -eq 0) {throw 'Missing task-owned window'}
+        Add-Type -Name NativeWindow -Namespace OpenKodaTests -MemberDefinition '
+          [System.Runtime.InteropServices.DllImport("user32.dll")] public static extern bool IsIconic(System.IntPtr h);
+          [System.Runtime.InteropServices.DllImport("user32.dll")] public static extern bool ShowWindowAsync(System.IntPtr h, int command);'
+        if (!$app.CloseMainWindow()) {throw 'Could not request close'}
+        $deadline=[DateTime]::UtcNow.AddSeconds(10)
+        while (![OpenKodaTests.NativeWindow]::IsIconic($handle) -and [DateTime]::UtcNow -lt $deadline) {Start-Sleep -Milliseconds 100}
+        if (![OpenKodaTests.NativeWindow]::IsIconic($handle)) {throw 'Window did not minimize'}
+        [void][OpenKodaTests.NativeWindow]::ShowWindowAsync($handle,9)
+      `;
+      await promisify(execFile)('powershell.exe', ['-NoProfile','-NonInteractive','-Command',script], {
+        windowsHide:true, timeout:25_000, env:{...process.env, OPENKODA_TEST_PID:String(child.pid), OPENKODA_TEST_EXE:binary}
+      });
+      expect((await request('snapshot')).projects).toEqual([]);
+    } finally {
+      expect(await request('window.behavior.set', {minimize:false})).toEqual({minimize:false});
+    }
+  });
   await gate('E1-host-connectivity', 'Windows connectivity has its own on-demand Settings observation', async () => {
     await page.getByRole('button', { name: 'Configurações', exact: true }).click();
     await page.getByRole('button', { name: 'Geral', exact: true }).click();
