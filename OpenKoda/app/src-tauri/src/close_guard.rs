@@ -21,7 +21,7 @@ impl Activity {
     pub fn request(action: &str, payload: &Value) -> Option<Self> {
         // Known observations cannot dispatch effects. Unknown/new actions default to tracked.
         if matches!(action, "snapshot" | "projectPurge.status" | "activation.status" | "activation.list"
-            | "environment.status" | "kali.mcp.status" | "ai.status" | "ai.context" | "ai.history"
+            | "environment.status" | "host.connectivity" | "kali.mcp.status" | "kali.mcp.assessmentEnvironments" | "ai.status" | "ai.context" | "ai.history"
             | "ai.budget.status" | "ai.investigation.list" | "data.session.select" | "data.policy.status"
             | "assessment.scopeStatus" | "assessment.scopeOptions" | "assessment.combinedOptions"
             | "project.targetOptions" | "work.plan.get" | "work.queue" | "work.events" | "work.aiLocalClosure.list"
@@ -91,7 +91,7 @@ mod tests {
     #[test]
     fn passive_polls_and_historical_states_do_not_prevent_idle_close() {
         let gate = Arc::new(CloseGate::default());
-        for action in ["snapshot","work.queue","work.events","work.plan.get","environment.status"] {
+        for action in ["snapshot","work.queue","work.events","work.plan.get","environment.status","host.connectivity"] {
             assert!(gate.admit(Activity::request(action,&json!({"status":"unknown"}))).unwrap().is_none());
         }
         assert_eq!(gate.request_close(), None);

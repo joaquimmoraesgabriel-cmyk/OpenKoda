@@ -8,6 +8,7 @@ import { Field, Notice, KeyValue } from './shared';
 import AiConnection from './AiConnection';
 import AiLocalClosure from './AiLocalClosure';
 import AiBudgetSettings from './AiBudgetSettings';
+import HostConnectivity from './HostConnectivity';
 import Recovery from './Recovery';
 import Retention from './Retention';
 import ProjectPurge, { ProjectPurgeStatus } from './ProjectPurge';
@@ -28,6 +29,7 @@ export default function Settings({settings,projects,action,busy,dataRequest=0,on
     {section==='Geral'&&<section className="content-section"><h2>Interface</h2><div className="form-group"><Field label="Tema"><select value={draft.theme} onChange={e=>change('theme',e.target.value)}><option value="light">Claro</option><option value="dark">Escuro</option><option value="system">Usar tema do sistema</option></select></Field><Field label="Idioma"><select value={draft.language} onChange={e=>change('language',e.target.value)}><option value="pt-BR">Português (Brasil)</option></select></Field></div><p className="muted">A interface respeita a preferência do sistema para reduzir movimento. As datas seguem o fuso deste dispositivo.</p></section>}
     {section==='Permissões'&&<section className="content-section"><h2>Autoridade de execução</h2><KeyValue label="Modo disponível">Assistido</KeyValue><KeyValue label="Execução de ferramentas">Aguardando executor verificado</KeyValue><Notice>Cadastrar um alvo não autoriza operações. Cada avaliação deve ter escopo e efeitos revisados antes da execução.</Notice><p className="muted">Políticas avançadas, elevação e manutenção terão revisão própria quando seus executores estiverem disponíveis.</p></section>}
     {section==='Dados e privacidade'&&<section className="content-section"><h2>Armazenamento local</h2><p>Projetos, avaliações e evidências permanecem no armazenamento desta instalação. A prévia do navegador usa dados separados.</p><div className="form-group"><Field label="Retenção desejada (dias)" hint="Prazo de referência para revisão. Salvar não agenda nem exclui arquivos; a exclusão depende de seleção e confirmação abaixo."><input type="number" min={1} max={3650} value={draft.retentionDays} required onChange={e=>change('retentionDays',e.target.valueAsNumber)}/></Field></div><Notice>Cada mensagem exige a revisão do contexto e o consentimento de envio. A IA recebe somente o conteúdo selecionado nessa revisão; não executa ferramentas automaticamente.</Notice></section>}
+    {section==='Geral'&&<HostConnectivity/>}
     {section==='Dados e privacidade'&&<ProjectDataSettings projects={projects} action={action} busy={busy}/>}
     {section==='Dados e privacidade'&&<SupportPackage/>}
     {section==='Dados e privacidade'&&<Recovery projects={projects} action={action} busy={busy}/>}

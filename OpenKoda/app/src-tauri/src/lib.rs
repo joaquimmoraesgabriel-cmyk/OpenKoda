@@ -78,6 +78,9 @@ async fn request(
     let services = services.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         let _admission = admission;
+        if request.action == "host.connectivity" {
+            return environment::connectivity::observe(&request.payload);
+        }
         // Support is an allowlisted metadata-only document, even when the credential vault is unavailable.
         if matches!(request.action.as_str(), "support.review" | "support.export") {
             let _lease = services.environment_gate.try_read()

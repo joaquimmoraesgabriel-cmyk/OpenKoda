@@ -20,6 +20,8 @@ use std::{
 mod archives;
 #[path = "environment_host.rs"]
 mod host;
+#[path = "host_connectivity.rs"]
+pub(crate) mod connectivity;
 #[path = "environment_removal.rs"]
 mod removal;
 pub(crate) use removal::REMOVAL_TABLE;

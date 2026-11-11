@@ -45,6 +45,9 @@ pub struct KaliBridge { db:Mutex<Connection>, active:Mutex<Option<Active>>, laun
 
 #[derive(Deserialize)]#[serde(rename_all="camelCase",deny_unknown_fields)]
 struct AssessmentInput { assessment_id:String }
+#[derive(Deserialize)]
+#[serde(rename_all="camelCase",deny_unknown_fields)]
+struct ComparisonInput { project_id:String, assessment_ids:[String;2] }
 #[derive(Deserialize)]#[serde(rename_all="camelCase",deny_unknown_fields)]
 struct HashInput { assessment_id:String, evidence_id:String, #[serde(default)] data_review:Option<crate::data_policy::DataReviewRef>,#[serde(default)] acknowledge_local_transfer:bool,#[serde(default)] acknowledge_sensitive:bool }
 #[derive(Deserialize)]#[serde(rename_all="camelCase",deny_unknown_fields)]
@@ -52,7 +55,7 @@ struct ScanInput { assessment_id:String, evidence_id:String, acknowledge_local_t
 #[derive(Deserialize)]#[serde(rename_all="camelCase",deny_unknown_fields)]
 struct ReconcileInput { assessment_id:String, run_id:String }
 
-pub fn supports(action:&str)->bool {matches!(action,"kali.mcp.status"|"kali.mcp.diagnose"|"kali.mcp.hashEvidence"|"kali.mcp.scanEvidence"|"kali.mcp.cancel"|"kali.mcp.reconcile")}
+pub fn supports(action:&str)->bool {matches!(action,"kali.mcp.status"|"kali.mcp.assessmentEnvironments"|"kali.mcp.diagnose"|"kali.mcp.hashEvidence"|"kali.mcp.scanEvidence"|"kali.mcp.cancel"|"kali.mcp.reconcile")}
 pub fn needs_identity(action:&str)->bool {matches!(action,"kali.mcp.diagnose"|"kali.mcp.hashEvidence"|"kali.mcp.scanEvidence"|"kali.mcp.reconcile")}
 fn scope_method(tool:&str)->Result<&'static str,String>{match tool{"runtime_diagnostics"=>Ok("kali.runtime-diagnostics.v1"),"hash_bytes"=>Ok("kali.hash-evidence.v1"),"scan_bytes"=>Ok("kali.rg.signals.v1"),_=>Err("Método MCP sem escopo suportado.".into())}}
 pub fn admit_before_identity(action:&str,payload:&Value,store:&Store)->Result<(),String>{
@@ -126,6 +129,24 @@ impl KaliBridge {
     fn handle_internal(&self,action:&str,payload:Value,store:&Store,environment_id:&str,ai:Option<&crate::ai::AiService>,mut dispatch:Option<&mut work::KaliDispatch<'_>>)->Result<Value,String>{
         if !payload.is_object()||payload.to_string().len()>4096{return Err("Solicitação MCP inválida ou grande demais.".into());}
         match action {
+            "kali.mcp.assessmentEnvironments"=>{
+                let input:ComparisonInput=decode(payload)?;
+                valid_id(&input.project_id)?;
+                let [first,second]=&input.assessment_ids;
+                valid_id(first)?;
+                valid_id(second)?;
+                let snapshot=store.snapshot()?;
+                if first==second || !snapshot.projects.iter().any(|project| project.id==input.project_id)
+                    || !input.assessment_ids.iter().all(|id| snapshot.assessments.iter().any(|a| a.id==*id && a.project_id==input.project_id)) {
+                    return Err("Selecione duas avaliações diferentes deste projeto.".into());
+                }
+                let pairs:std::collections::BTreeSet<_>=self.runs()?.into_iter()
+                    .filter(|run| input.assessment_ids.contains(&run.assessment_id))
+                    .map(|run| (run.assessment_id,run.environment_id)).collect();
+                let rows:Vec<_>=pairs.into_iter().map(|(assessment,environment)|
+                    json!({"assessmentId":assessment,"environmentId":environment})).collect();
+                Ok(json!(rows))
+            }
             "kali.mcp.status"=>{
                 if payload.as_object().is_none_or(|o|!o.is_empty()){return Err("Status não recebe campos.".into());}
                 let active=self.active.lock().map_err(|_|"Supervisor MCP indisponível.")?;
@@ -599,6 +620,42 @@ mod tests{
     }
     fn setup_store(root:&std::path::Path)->(Arc<Store>,String){
         setup_scoped_store(root,&["kali.runtime-diagnostics.v1","kali.hash-evidence.v1","kali.rg.signals.v1"],json!({"startsAt":null,"endsAt":null}))
+    }
+    #[test]
+    fn compared_environments_include_older_runs_once_and_require_membership() {
+        let dir=tempfile::tempdir().unwrap();
+        let (store,first)=setup_store(dir.path());
+        let project=store.snapshot().unwrap().projects[0].id.clone();
+        let create=|project_id:&str| {
+            let scope=crate::scope::test_creation(&store,project_id,&["kali.runtime-diagnostics.v1"]);
+            store.handle(crate::core::Request{action:"assessment.create".into(),payload:json!({
+                "projectId":project_id,"kind":"web","target":"http://127.0.0.1:9","title":"Comparison fixture","objective":"Observe history","scope":scope
+            })}).unwrap()["id"].as_str().unwrap().to_owned()
+        };
+        let second=create(&project);
+        let other=store.handle(crate::core::Request{action:"project.create".into(),payload:json!({
+            "name":"Other project","kind":"web","target":"http://127.0.0.1:9"
+        })}).unwrap()["id"].as_str().unwrap().to_owned();
+        let foreign=create(&other);
+        let bridge=KaliBridge::new(dir.path().into()).unwrap();
+        let environment=model::id();
+        let record=|aid:&str,env:&str| {
+            let mut row=run();
+            row.assessment_id=aid.into(); row.environment_id=env.into(); row.status="completed".into();
+            row.finished_at=Some(row.started_at.clone()); row.cleanup_confirmed=true;
+            bridge.save(&row).unwrap();
+        };
+        record(&first,&environment);
+        record(&first,&environment);
+        for _ in 0..51 {record(&foreign,&model::id());}
+        let query=|p:&str,a:&str,b:&str| bridge.handle_with_identity("kali.mcp.assessmentEnvironments",
+            json!({"projectId":p,"assessmentIds":[a,b]}),&store,||panic!("A historical read cannot contact the executor"),None);
+        assert_eq!(query(&project,&first,&second).unwrap(),json!([{"assessmentId":first,"environmentId":environment}]));
+        assert!(query(&project,&first,&foreign).is_err());
+        assert!(query(&other,&first,&second).is_err());
+        assert!(query(&project,&first,&first).is_err());
+        assert!(query(&project,&first,&model::id()).is_err());
+        assert_eq!(bridge.runs().unwrap().len(),53);
     }
     fn test_scan(bridge:&KaliBridge,mut payload:Value,store:&Store,environment:&str)->Result<Value,String>{
         let ai=crate::ai::AiService::new(store.root.clone())?.with_data_policy(bridge.data_policy.clone());
