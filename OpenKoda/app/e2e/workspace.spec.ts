@@ -1,7 +1,7 @@
 import { test, expect } from './fixtures';
 
 test('visão geral reflete os dados e abre o projeto ou a avaliação correta', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/?area=tecnica');
   await expect(page.getByRole('heading', { name: 'Visão geral', exact: true })).toBeVisible();
   await expect(page.locator('.dashboard-no-activity')).toBeVisible();
   await page.getByRole('button', { name: 'Novo projeto', exact: true }).click();
@@ -56,7 +56,7 @@ test('visão geral reflete os dados e abre o projeto ou a avaliação correta', 
 test('a lateral permanece visível ao rolar e o perfil abre pelo teclado', async ({ page }) => {
   for (const width of [1400, 512]) {
     await page.setViewportSize({ width, height: 430 });
-    await page.goto('/');
+    await page.goto('/?area=tecnica');
     const main = page.locator('#main-content');
     await expect(main.getByRole('heading', { name: 'Visão geral' })).toBeVisible();
     const nav = page.getByRole('navigation', { name: 'Navegação principal' });

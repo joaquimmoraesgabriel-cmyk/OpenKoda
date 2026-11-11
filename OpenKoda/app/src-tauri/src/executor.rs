@@ -509,12 +509,32 @@ pub(crate) fn admit_locked(s:&mut Snapshot,plan_id:&str,digest:&str,reserved_exe
     Ok((p,execution))
 }
 
+fn observation_summary(adapter: &str, observation: &Value) -> Option<String> {
+    match adapter {
+        crate::source_scan::ADAPTER => {
+            let counts = &observation["counts"];
+            Some(format!("Arquivos revisados ({}/{}), sinais candidatos ({}) e sinais omitidos na evidência ({}).",
+                counts["scannedFiles"].as_u64()?, counts["plannedFiles"].as_u64()?,
+                counts["candidates"].as_u64()?, counts["omittedCandidates"].as_u64()?))
+        }
+        ADAPTER_HTTP => Some(format!("A requisição HEAD recebeu HTTP {} e encontrou {} cabeçalhos do catálogo.",
+            observation["status"].as_u64()?, observation["headers"].as_object()?.len())),
+        crate::network::ADAPTER => {
+            let rows = observation["observations"].as_array()?;
+            let connected = rows.iter().filter(|r| r["outcome"] == "connected").count();
+            let refused = rows.iter().filter(|r| r["outcome"] == "refused").count();
+            Some(format!("Foram tentadas {} conexões TCP, com {} aceitas e {} recusadas.", rows.len(), connected, refused))
+        }
+        _ => None,
+    }
+}
+
 pub(crate) fn finish_locked(s:&mut Snapshot,plan:&ExecutionPlan,execution:&Execution,outcome:Result<String,String>,canceled:bool)->Result<NativeCompletion,String>{
     let index=s.executions.iter().position(|e|e.id==execution.id&&e.plan_id==plan.id&&e.assessment_id==plan.assessment_id).ok_or("Execução não encontrada.")?;
     if !matches!(s.executions[index].status.as_str(),"running"|"canceling"){return Err("Execução já finalizada; o efeito não será repetido.".into());}
     let parsed=outcome.as_ref().ok().and_then(|text|serde_json::from_str::<Value>(text).ok());
     let partial=parsed.as_ref().is_some_and(|v|v["partial"]==true||v["capturePartial"]==true||v["canceled"]==true||v["timedOut"]==true||v["stopReason"]=="timeout"||v["termination"]=="read_error");
-    let (status,message,content)=match outcome {
+    let (status,mut message,content)=match outcome {
         Ok(output)=>{
             let timed_out=parsed.as_ref().is_some_and(|v|v["stopReason"]=="timeout"||v["timedOut"]==true);
             let read_error=parsed.as_ref().is_some_and(|v|v["termination"]=="read_error");
@@ -522,6 +542,9 @@ pub(crate) fn finish_locked(s:&mut Snapshot,plan:&ExecutionPlan,execution:&Execu
         },
         Err(error)=>(if canceled{"canceled"}else{"failed"},error,None),
     };
+    if let Some(summary) = parsed.as_ref().and_then(|value| observation_summary(&plan.adapter, value)) {
+        message = format!("{summary} {message}");
+    }
     let a=s.assessments.iter_mut().find(|a|a.id==plan.assessment_id).ok_or("Avaliação não encontrada.")?;
     let evidence=content.map(|content|Evidence{id:id(),name:format!("{}-{}.json",plan.adapter,execution.id),sha256:core::hash(&content),content,created_at:now()});
     if let Some(e)=&evidence {

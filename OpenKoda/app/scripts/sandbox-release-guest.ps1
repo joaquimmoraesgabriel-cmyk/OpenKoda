@@ -112,6 +112,8 @@ print(json.dumps({'projects': [{k: p[k] for k in ('name','id','target','kind')} 
 function Test-InstalledWindow($App,[int]$Iteration,[string]$Profile,[string]$Target,[string]$ExpectedId) {
     Add-Type -AssemblyName UIAutomationClient
     Add-Type -AssemblyName UIAutomationTypes
+    Invoke-WindowButton $App 'Configurações'
+    Invoke-WindowButton $App 'Abrir área técnica'
     Invoke-WindowButton $App 'Projetos'
     $state = Read-ProjectFixture $Profile
     if ($state.assessments -ne 0 -or @($state.projects).Count -ne ($Iteration-1)) { throw 'Unexpected initial native state.' }

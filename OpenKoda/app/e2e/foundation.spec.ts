@@ -2,7 +2,7 @@ import { openAssessmentList } from './navigation';
 import { test, expect } from './fixtures';
 
 test('as áreas principais abrem vazias e a prévia não simula Kali ou IA', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/?area=tecnica');
   await expect(page.getByText('Prévia no navegador · Dados locais de demonstração')).toBeVisible();
   for (const name of ['Projetos', 'Achados', 'Avaliações']) {
     await page.getByRole('button', { name, exact: true }).click();
@@ -29,7 +29,7 @@ test('as áreas principais abrem vazias e a prévia não simula Kali ou IA', asy
 });
 
 test('cria projeto e rascunho e conserva ambos depois de recarregar', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/?area=tecnica');
   await page.getByRole('button', { name: 'Projetos', exact: true }).click();
   await page.getByRole('button', { name: 'Adicionar projeto', exact: true }).click();
   await page.getByLabel('Nome do projeto', { exact: true }).fill('Laboratório E2E');
@@ -58,7 +58,7 @@ test('cria projeto e rascunho e conserva ambos depois de recarregar', async ({ p
 });
 
 test('formulário não aceita projeto sem nome e sem alvo', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/?area=tecnica');
   await page.getByRole('button', { name: 'Projetos', exact: true }).click();
   await page.getByRole('button', { name: 'Adicionar projeto', exact: true }).click();
   await page.getByRole('button', { name: 'Criar projeto', exact: true }).click();
@@ -67,7 +67,7 @@ test('formulário não aceita projeto sem nome e sem alvo', async ({ page }) => 
 });
 
 test('iniciar na prévia informa indisponibilidade e preserva o rascunho', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/?area=tecnica');
   // Seed through the actual app transport: no invented endpoints or shared storage snapshot.
   await page.evaluate(async () => {
     const moduleUrl = '/src/api.ts';
@@ -100,7 +100,7 @@ test('iniciar na prévia informa indisponibilidade e preserva o rascunho', async
 
 test('navegação responde ao teclado em janela menor sem rolagem horizontal', async ({ page }) => {
   await page.setViewportSize({ width: 1024, height: 768 });
-  await page.goto('/');
+  await page.goto('/?area=tecnica');
   const projects = page.getByRole('button', { name: 'Projetos', exact: true });
   await projects.focus();
   await page.keyboard.press('Enter');
@@ -116,7 +116,7 @@ test('salva configurações para a próxima avaliação sem testar conexão impl
   page.on('request', request => {
     if (request.url().startsWith('https://api.example.test')) providerRequests.push(request.url());
   });
-  await page.goto('/');
+  await page.goto('/?area=tecnica');
   await page.getByRole('button', { name: 'Configurações', exact: true }).click();
   await page.getByRole('button',{name:'IA e modelos',exact:true}).click();
   await page.getByLabel('Endpoint', { exact: true }).fill('https://api.example.test/v1');
@@ -133,7 +133,7 @@ test('salva configurações para a próxima avaliação sem testar conexão impl
 });
 
 test('configurações e navegação continuam legíveis em janela estreita',async({page})=>{
-  await page.setViewportSize({width:390,height:844});await page.goto('/');
+  await page.setViewportSize({width:390,height:844});await page.goto('/?area=tecnica');
   await page.getByRole('button',{name:'Configurações',exact:true}).click();
   await page.getByRole('button',{name:'IA e modelos',exact:true}).click();
   await expect(page.getByLabel('Endpoint',{exact:true})).toBeVisible();

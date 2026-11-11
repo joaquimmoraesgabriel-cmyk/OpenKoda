@@ -48,7 +48,7 @@ test('a escolha de fonte respeita a modalidade e cancelar conserva o alvo', asyn
 });
 
 test('a prévia conserva a entrada manual sem solicitar acesso aos arquivos do navegador', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/?area=tecnica');
   await page.getByRole('button', { name: 'Projetos', exact: true }).click();
   await page.getByRole('button', { name: 'Novo projeto', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Escolher pasta' })).toHaveCount(0);

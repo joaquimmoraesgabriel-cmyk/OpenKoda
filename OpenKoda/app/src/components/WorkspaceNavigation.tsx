@@ -16,9 +16,10 @@ interface Props {
   onNavigate: (next: View) => void;
   onCreateAssessment: () => void;
   creationDisabled: boolean;
+  onChats?:()=>void;
 }
 
-export default function WorkspaceNavigation({ view, onNavigate, onCreateAssessment, creationDisabled }: Props) {
+export default function WorkspaceNavigation({ view, onNavigate, onCreateAssessment, creationDisabled,onChats }: Props) {
   const buttons = destinations.map(({ view: dest, label, icon: Icon }) => (
     <button key={dest} type="button" className="workspace-nav-item" aria-label={label}
       title={label} aria-current={view === dest ? 'page' : undefined} onClick={() => onNavigate(dest)}>
@@ -39,7 +40,7 @@ export default function WorkspaceNavigation({ view, onNavigate, onCreateAssessme
           <Plus size={18} aria-hidden="true"/><span>Nova avaliação</span>
         </button>
       </div>
-      <div className="workspace-nav-footer">{buttons.slice(5)}</div>
+      <div className="workspace-nav-footer">{onChats&&<button className="workspace-nav-item" aria-label="Voltar às conversas" title="Voltar às conversas" onClick={onChats}><House size={18}/><span>Voltar às conversas</span></button>}{buttons.slice(5)}</div>
     </nav>
   </aside>;
 }

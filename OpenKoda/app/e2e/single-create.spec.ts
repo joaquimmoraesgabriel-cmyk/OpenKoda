@@ -57,7 +57,7 @@ async function installNative(page:Page,loss:'snapshot'|'reply') {
 const sent=(page:Page)=>page.evaluate(()=>Reflect.get(window,'__sentSingle') as {idempotencyKey:string;scope?:{projectDigest:string};title:string}[]);
 
 test('uma leitura falha após salvar o escopo e o reenvio recupera exatamente o pedido original',async({page})=>{
-  await installNative(page,'snapshot');await page.goto('/');
+  await installNative(page,'snapshot');await page.goto('/?area=tecnica');
   await newForm(page,'Revisão recuperada');
   await page.getByRole('checkbox',{name:/Inventário local/}).check();
   await review(page,true);
@@ -72,7 +72,7 @@ test('uma leitura falha após salvar o escopo e o reenvio recupera exatamente o 
 });
 
 test('rascunho permite recuperar a resposta perdida e usa outra chave para uma nova avaliação idêntica',async({page})=>{
-  await installNative(page,'reply');await page.goto('/');
+  await installNative(page,'reply');await page.goto('/?area=tecnica');
   await newForm(page,'Mesmo título');await review(page,false);
   await page.getByRole('button',{name:'Reenviar a mesma solicitação'}).click();
   await expect(page.getByRole('heading',{name:'Mesmo título',exact:true})).toBeVisible();
@@ -84,7 +84,7 @@ test('rascunho permite recuperar a resposta perdida e usa outra chave para uma n
 });
 
 test('editar materialmente o rascunho inicia uma intenção diferente',async({page})=>{
-  await installNative(page,'reply');await page.goto('/');
+  await installNative(page,'reply');await page.goto('/?area=tecnica');
   await newForm(page,'Primeiro título');await review(page,false);
   const retry=page.getByRole('button',{name:'Reenviar a mesma solicitação'});
   await expect(retry).toBeVisible();
@@ -111,7 +111,7 @@ test('a prévia recupera a mesma avaliação após a falha de atualização do p
       return get.call(this,k);
     };
   },{key:previewStorageKey,snapshot});
-  await page.goto('/');await newForm(page,'Rascunho único');await review(page,false,false);
+  await page.goto('/?area=tecnica');await newForm(page,'Rascunho único');await review(page,false,false);
   const retry=page.getByRole('button',{name:'Reenviar a mesma solicitação'});
   await expect(retry).toBeVisible();
   const bytes=()=>page.evaluate(key=>localStorage.getItem(key),previewStorageKey);
@@ -128,7 +128,7 @@ test('duas abas que reenviam a mesma chave recebem uma única avaliação da pr�
   },{key:previewStorageKey,snapshot});
   const second=await context.newPage(), tabs=[page,second];
   await Promise.all(tabs.map(async tab=>{
-    await tab.goto('/');await newForm(tab,'Solicitação compartilhada');
+    await tab.goto('/?area=tecnica');await newForm(tab,'Solicitação compartilhada');
     await tab.getByRole('button',{name:'Revisar avaliação',exact:true}).click();
     // Replay one user's intent in two documents. Only the form's next UUID is fixed.
     await tab.evaluate(()=>{

@@ -16,14 +16,25 @@ import { ProjectPurgeStatus } from './components/ProjectPurge';
 import WorkspaceNavigation from './components/WorkspaceNavigation';
 import WorkspaceProfile from './components/WorkspaceProfile';
 import Overview from './components/Overview';
+import ProjectDesk from './components/ProjectDesk';
+import { Rail } from './components/ProjectRail';
 import { useApplyAppearance } from './appearance';
 import './workspace.css';
+import './project-desk.css';
 
 export default function App() {
   const [snapshot, setSnapshot] = useState<Snapshot>();
   const [environment, setEnvironment] = useState<Environment>({ status:'unavailable', distro:'OpenKoda-Kali', message:'Ambiente ainda não consultado.', tools:[] });
   const environmentRevision = useRef(0);
   const [view, setView] = useState<View>('overview');
+  const [technical,setTechnical]=useState(()=>new URLSearchParams(window.location.search).get('area')==='tecnica');
+  const [modelsRequest,setModelsRequest]=useState(false);
+  function switchWorkspace(advanced:boolean){
+    setTechnical(advanced);
+    const url=new URL(window.location.href);
+    if(advanced)url.searchParams.set('area','tecnica');else url.searchParams.delete('area');
+    window.history.replaceState(null,'',url);
+  }
   const main = useRef<HTMLElement>(null);
   const [projectEntry, setProjectEntry] = useState<{ revision: number; id?: string; create?: boolean }>({ revision: 0 });
   const [selected, setSelected] = useState('');
@@ -44,7 +55,7 @@ export default function App() {
   const [notice, setNotice] = useState('');
   const [purgeStatus,setPurgeStatus]=useState<ProjectPurgeStatus>();const [purgeError,setPurgeError]=useState('');const [settingsDataRequest,setSettingsDataRequest]=useState(0);
   const refreshPurge=useCallback(async()=>{if(!native)return;try{setPurgeStatus(await request<ProjectPurgeStatus>('projectPurge.status'));setPurgeError('');}catch(e){setPurgeError(errorMessage(e));}},[]);
-  const dataAssessmentId=view==='assessments'&&!creating?selected:view==='findings'?snapshot?.findings.find(f=>f.id===selectedFinding)?.assessmentId:undefined;
+  const dataAssessmentId=(view==='assessments'&&!creating||!technical&&view==='overview')?selected:view==='findings'?snapshot?.findings.find(f=>f.id===selectedFinding)?.assessmentId:undefined;
   useEffect(()=>{if(native)void request('data.session.select',{assessmentId:dataAssessmentId||null}).catch(e=>setError(errorMessage(e)));},[dataAssessmentId]);
   const [settingsUsageRequest, setSettingsUsageRequest] = useState(0);
   function openDataSettings(){setSettingsUsageRequest(0);setSettingsDataRequest(value=>value+1);setView('settings');}
@@ -67,11 +78,13 @@ export default function App() {
   }
   const load = useCallback(async () => {
     setLoading(true); setError('');
-    try { await refresh(); await refreshEnvironment(); await refreshPurge(); }
+    try { await refresh(); await refreshPurge(); }
     catch (e) { setError(errorMessage(e)); }
     finally { setLoading(false); }
-  }, [refresh, refreshEnvironment,refreshPurge]);
+  }, [refresh,refreshPurge]);
   useEffect(() => { void load(); }, [load]);
+  const needsEnvironment=technical||view==='kali';
+  useEffect(()=>{if(needsEnvironment)void refreshEnvironment().catch(e=>setError(errorMessage(e)));},[needsEnvironment,refreshEnvironment]);
   useEffect(() => {
     const active = runningCount>0 || snapshot?.assessments.some(a=>['preparing','running','canceling','pausing','queued'].includes(a.status));
     if(!active)return;
@@ -94,7 +107,7 @@ export default function App() {
   }, [pageKey]);
 
   const action: Action = async <T,>(name: string, payload: Payload = {}): Promise<T> => {
-    if(['plan.run','assessment.cancel','kali.mcp.diagnose','kali.mcp.hashEvidence','kali.mcp.scanEvidence','kali.mcp.cancel','ai.investigation.run','ai.investigation.cancel'].includes(name)) {
+    if(['ai.ask','plan.run','assessment.cancel','kali.mcp.diagnose','kali.mcp.hashEvidence','kali.mcp.scanEvidence','kali.mcp.cancel','ai.investigation.run','ai.investigation.cancel'].includes(name)) {
       const id=name+':'+String(payload.id??payload.assessmentId);
       if(runningRequests.current.has(id))throw new Error('Esta execução já está em andamento.');
       runningRequests.current.add(id);setRunningCount(runningRequests.current.size);setError('');setNotice('');
@@ -120,7 +133,8 @@ export default function App() {
   };
   function newAssessment(projectId?: string) { setInitialProject(projectId); setCreating(true); setView('assessments'); }
   function openFinding(id=''){setSelectedFinding(id);setView('findings');}
-  function openAssessment(id: string) { setSelected(id); setCreating(false); setView('assessments'); }
+  function openAssessment(id: string) { setSelected(id); setCreating(false); setView(technical?'assessments':'overview'); }
+  function openTechnical(id?:string) {switchWorkspace(true);setCreating(false);setSelected(id??'');setView(id?'assessments':'overview');}
   function openProjects(id?: string, create = false) {
     setProjectEntry(previous => ({ revision: previous.revision + 1, id, create }));
     setView('projects');
@@ -128,7 +142,7 @@ export default function App() {
   function navigate(next: View) {
     if (next === 'projects') openProjects();
     else {
-      if (next === 'settings') { setSettingsDataRequest(0); setSettingsUsageRequest(0); }
+      if (next === 'settings') { setSettingsDataRequest(0); setSettingsUsageRequest(0); setModelsRequest(false); }
       setView(next);
     }
   }
@@ -136,7 +150,7 @@ export default function App() {
     if(work.area==='kali' || work.area==='settings'){ setView(work.area); return; }
     if(work.area==='current')return;
     const id=work.assessmentId || snapshot?.assessments.find(a=>['running','preparing','pausing','canceling'].includes(a.status))?.id || selected;
-    setCreating(false); setView('assessments');
+    switchWorkspace(true);setCreating(false); setView('assessments');
     if(id){setSelected(id);if(work.area==='queue')setCloseQueue(id);}
     void refresh().catch(e=>setError(errorMessage(e)));
   }
@@ -146,10 +160,10 @@ export default function App() {
   }
   const envLabel = environment.status === 'ready' ? environment.executorReady ? 'Kali pronto para executar' : 'Kali preparado' : environment.status === 'degraded' ? 'Kali requer atenção' : 'Kali não conectado';
 
-  return <div className="app-shell workspace-shell">
+  return <div className={'app-shell workspace-shell'+(technical?'':' project-shell')}>
     <CloseWorkPrompt onReview={reviewCloseActivity}/>
     <a className="skip-link" href="#main-content">Ir para o conteúdo</a>
-    <WorkspaceNavigation view={view} onNavigate={navigate} onCreateAssessment={()=>newAssessment()} creationDisabled={!snapshot||busy}/>
+    {technical?<WorkspaceNavigation view={view} onNavigate={navigate} onCreateAssessment={()=>newAssessment()} creationDisabled={!snapshot||busy} onChats={()=>{switchWorkspace(false);setView('overview');}}/>:<Rail view={view} navigate={navigate}/>}
     <main ref={main} id="main-content" tabIndex={-1} className="main-content workspace-main" aria-busy={loading||busy}>
       {snapshot&&<div className="workspace-projection"><ProjectionNotice projection={snapshot.projection}/></div>}
       {!native&&<div className="preview-banner">Prévia no navegador · Dados locais de demonstração</div>}
@@ -157,15 +171,16 @@ export default function App() {
       {notice&&<div className="app-notice" role="status"><span>{notice}</span><button className="icon-button" title="Fechar confirmação" aria-label="Fechar confirmação" onClick={()=>setNotice('')}><X size={18}/></button></div>}
       {native&&(purgeError||purgeStatus?.hasUnresolved||purgeStatus?.hasPartialHistory)&&<div className="app-alert project-purge-banner" role="alert"><AlertCircle size={20}/><span>{purgeError?`Não foi possível consultar exclusões de projetos: ${purgeError}`:purgeStatus?.hasUnresolved?'Exclusão de projeto pendente: novas alterações estão bloqueadas. O histórico pode estar parcialmente removido.':'Há exclusão encerrada parcialmente. A trilha do projeto pode estar incompleta; os dados restantes foram preservados.'}</span><button className="button" type="button" onClick={openDataSettings}>Revisar exclusão em Dados</button></div>}
       {loading&&!snapshot?<div className="loading-state" role="status"><LoaderCircle className="spin" size={26}/>Carregando seu trabalho…</div>:!snapshot?<div className="loading-state"><h1>Não foi possível abrir seus dados</h1><p>Os dados existentes foram preservados.</p><button className="button" onClick={()=>void load()}><RefreshCw size={17}/>Tentar novamente</button></div>:<>
-        {view==='overview'&&<Overview assessments={snapshot.assessments} projects={snapshot.projects} busy={busy} onOpenAssessment={openAssessment} onNewAssessment={()=>newAssessment()} onOpenProject={id=>openProjects(id)} onNewProject={()=>openProjects(undefined,true)}/>}
+        {view==='overview'&&technical&&<Overview assessments={snapshot.assessments} projects={snapshot.projects} busy={busy} onOpenAssessment={openAssessment} onNewAssessment={()=>newAssessment()} onOpenProject={id=>openProjects(id)} onNewProject={()=>openProjects(undefined,true)}/>}
+        {!technical&&<div className="desk-host" hidden={view!=='overview'}><ProjectDesk snapshot={snapshot} busy={busy} action={action} selected={selected} onSelect={setSelected} onAdvanced={openTechnical} onModels={()=>{navigate('settings');setModelsRequest(true);}} onFinding={openFinding}/></div>}
         {view==='profile'&&<WorkspaceProfile snapshot={snapshot} onSettings={()=>navigate('settings')} onUsageHistory={openUsageHistory}/>}
         {view==='assessments'&&<Assessments {...snapshot} closeQueue={closeQueue} onCloseQueueOpened={()=>setCloseQueue(undefined)} selected={selected} onSelect={id=>{setSelected(id);setCreating(false);}} creating={creating} initialProject={initialProject} onCancelNew={()=>setCreating(false)} onCreate={createAssessment} onProjects={()=>openProjects()} onFindings={openFinding} action={action} busy={busy} onExport={path=>setNotice(`Relatório exportado para ${path}`)}/>}
         {view==='projects'&&<Projects key={projectEntry.revision} projects={snapshot.projects} assessments={snapshot.assessments} initialProjectId={projectEntry.id} initialCreate={projectEntry.create} action={action} busy={busy} onNewAssessment={newAssessment} onOpenAssessment={openAssessment}/>}
         {view==='findings'&&<Findings selected={selectedFinding} onSelect={setSelectedFinding} onOpenAssessment={openAssessment} findings={snapshot.findings} assessments={snapshot.assessments} projects={snapshot.projects} validations={snapshot.validations} action={action} busy={busy}/>}
         {view==='kali'&&<Kali environment={environment} action={action} busy={busy} onExecutorChange={updateExecutorBinding}/>}
-        {view==='settings'&&<Settings settings={snapshot.settings} projects={snapshot.projects} assessments={snapshot.assessments} action={action} busy={busy} dataRequest={settingsDataRequest} usageRequest={settingsUsageRequest} onOpenAssessment={openAssessment} onPurgeStatus={value=>{setPurgeStatus(value);setPurgeError('');}}/>}
+        {view==='settings'&&<Settings settings={snapshot.settings} projects={snapshot.projects} assessments={snapshot.assessments} action={action} busy={busy} dataRequest={settingsDataRequest} usageRequest={settingsUsageRequest} initialModels={modelsRequest} onTechnical={technical?undefined:()=>openTechnical()} onOpenAssessment={openAssessment} onPurgeStatus={value=>{setPurgeStatus(value);setPurgeError('');}}/>}
       </>}
     </main>
-    <footer className="statusbar workspace-status"><span><span className={`status-dot ${busy||runningCount?'working':''}`}/>{busy?'Atualizando…':runningCount?'Execução em andamento':snapshot?'Dados locais disponíveis':'Armazenamento não carregado'}</span><button className={`environment-indicator env-${environment.status}`} onClick={()=>navigate('kali')} title={environment.message}><span className="status-dot"/>{envLabel}</button></footer>
+    {technical&&<footer className="statusbar workspace-status"><span><span className={`status-dot ${busy||runningCount?'working':''}`}/>{busy?'Atualizando…':runningCount?'Execução em andamento':snapshot?'Dados locais disponíveis':'Armazenamento não carregado'}</span><button className={`environment-indicator env-${environment.status}`} onClick={()=>navigate('kali')} title={environment.message}><span className="status-dot"/>{envLabel}</button></footer>}
   </div>;
 }

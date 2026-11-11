@@ -15,9 +15,9 @@ import { authorizeData, reviewedReport, reviewedBackup, reviewedEvidenceText } f
 // Requires the coordinator's exact bundled custom-protocol debug artifact.
 // No user secrets, provider requests, Kali installation, or external target traffic.
 const appRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const binary = resolve(appRoot, 'src-tauri/target/debug/openkoda.exe');
+const binary = resolve(appRoot, process.env.OPENKODA_SMOKE_BINARY || 'src-tauri/target/debug/openkoda.exe');
 const arguments_ = process.argv.slice(2);
-if (arguments_.length !== 2 || arguments_[0] !== '--expected-sha256' || !/^[a-f0-9]{64}$/.test(arguments_[1])) throw new Error('Use --expected-sha256 <reviewed 0.1.6 custom-protocol debug SHA-256>.');
+if (arguments_.length !== 2 || arguments_[0] !== '--expected-sha256' || !/^[a-f0-9]{64}$/.test(arguments_[1])) throw new Error('Use --expected-sha256 <reviewed custom-protocol debug SHA-256>.');
 const runDirectory = resolve(appRoot, '.local', `native-smoke-${randomUUID()}`);
 const dataDirectory = join(runDirectory, 'data');
 const profileDirectory = join(runDirectory, 'webview');
@@ -95,6 +95,8 @@ async function openApp() {
   page.on('pageerror', error => { pageErrors.push(error.message); diagnostics.push(`pageerror: ${error.message}`); });
   await page.waitForFunction(() => typeof window.__TAURI_INTERNALS__?.invoke === 'function');
   expect(new URL(page.url()).hostname, 'Run only the bundled native frontend').toBe('tauri.localhost');
+  await navigationButton('Configurações').click();
+  await page.getByRole('button',{name:'Abrir área técnica',exact:true}).click();
   await expect(navigationButton('Projetos')).toBeVisible();
   await browser.contexts()[0].tracing.start({ screenshots: true, snapshots: true, sources: true });
   await expect(page.locator('#main-content')).toHaveAttribute('aria-busy', 'false', { timeout: 45_000 });
@@ -900,6 +902,7 @@ try {
     await page.getByRole('button', { name: 'Histórico', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Validação registrada', exact: true })).toBeVisible();
     await screenshot('06-native-validation-history.png');
+    await openProjectsAndWaitForIpc();
   });
   await gate('E4-remediation-stale-base', 'Changed synthetic base invalidates an approved patch without overwriting concurrent work', async () => {
     const path = ownedPath(join(fixtureDirectory, 'README.txt'), fixtureDirectory);
@@ -915,7 +918,7 @@ try {
     await request('remediation.approve', { id: stale.id, digest: stale.digest });
     const concurrent = `${before}Concurrent edit owned by this test.\n`;
     await writeFile(path, concurrent);
-    await rejects('remediation.apply', { id: stale.id, digest: stale.digest });
+    await rejects('remediation.apply', { id: stale.id, digest: stale.digest }, 'Base ou identidade do arquivo mudou');
     expect(await readFile(path, 'utf8')).toBe(concurrent);
     expect((await request('remediation.get', { id: stale.id })).status).toBe('invalidated');
     expect((await request('snapshot')).findings.find(value => value.id === finding.id).status).toBe('validated');

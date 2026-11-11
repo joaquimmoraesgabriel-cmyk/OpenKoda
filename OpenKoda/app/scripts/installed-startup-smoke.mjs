@@ -46,6 +46,10 @@ try{
   const request=(action)=>page.evaluate(action=>window.__TAURI_INTERNALS__.invoke('request',{request:{action,payload:{}}}),action);
   const snapshot=await request('snapshot');const ai=await request('ai.status');
   expect(snapshot.projects.length).toBe(receipt.before.projects);expect(snapshot.assessments.length).toBe(receipt.before.assessments);
+  if(await page.getByRole('button',{name:'Início',exact:true}).count()){
+   await page.getByRole('button',{name:'Configurações',exact:true}).click();
+   await page.getByRole('button',{name:'Abrir área técnica',exact:true}).click();
+  }
   for(const name of ['Avaliações','Achados','Projetos','Kali e ferramentas','Configurações']){
    await page.getByRole('button',{name,exact:true}).click();await expect(page.locator('main')).toHaveAttribute('aria-busy','false');await expect(page.locator('main h1').first()).toBeVisible();
   }

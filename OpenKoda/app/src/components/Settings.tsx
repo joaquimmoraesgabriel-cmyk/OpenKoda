@@ -46,12 +46,13 @@ const fields: Partial<Record<Section, EditableKey[]>> = {
 };
 
 type Props = {
+  initialModels?:boolean; onTechnical?:()=>void;
   settings: SettingsModel; projects: Project[]; action: Action; busy: boolean;
   dataRequest?: number; usageRequest?: number; assessments?: Assessment[]; onOpenAssessment?: (id: string) => void; onPurgeStatus: (value: ProjectPurgeStatus) => void;
 };
 
-export default function Settings({settings, projects, action, busy, dataRequest=0, usageRequest=0, assessments, onOpenAssessment, onPurgeStatus}: Props) {
-  const [section, setSection] = useState<Section>('Geral');
+export default function Settings({settings, projects, action, busy, dataRequest=0, usageRequest=0, assessments, onOpenAssessment, onPurgeStatus,initialModels,onTechnical}: Props) {
+  const [section, setSection] = useState<Section>(initialModels?'IA e modelos':'Geral');
   const [search, setSearch] = useState('');
   const normalized = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('pt-BR');
   const matches = groups.map(group => ({...group, items: group.items.filter(item =>
@@ -145,7 +146,7 @@ export default function Settings({settings, projects, action, busy, dataRequest=
         {section === 'Aparência' && <form onSubmit={save}>
           <AppearanceSettings draft={draft} change={change} busy={busy}/>{saveActions}
         </form>}
-        {section === 'Geral' && <GeneralSettings windowOptions={<WindowBehaviorSettings/>}/>}
+        {section === 'Geral' && <><GeneralSettings windowOptions={<WindowBehaviorSettings/>}/>{onTechnical && <section className="content-section"><h3>Área técnica</h3><p>Consulte planos, escopos combinados e evidências das avaliações.</p><button className="button" onClick={onTechnical}>Abrir área técnica</button></section>}</>}
         {section === 'IA e modelos' && <>
           {native
             ? <AiConnection saved={settings} draft={draft} change={change} action={action} busy={busy}/>

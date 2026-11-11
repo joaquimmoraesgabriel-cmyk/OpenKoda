@@ -207,6 +207,7 @@ impl Store {
             "snapshot" => { empty(&request.payload)?; encode(self.snapshot()?) }
             "project.create" => self.create_project(decode(request.payload)?),
             "project.launch" => crate::scope::project_launch::create(self, request.payload),
+            "project.newConversation" => crate::scope::project_launch::new_conversation(self, request.payload),
             "project.archive" => self.archive_project(decode(request.payload)?),
             "assessment.create" => self.create_assessment(request.payload),
             "evidence.import" => self.import_evidence(decode(request.payload)?),

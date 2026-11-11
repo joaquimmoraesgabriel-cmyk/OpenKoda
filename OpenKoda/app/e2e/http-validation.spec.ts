@@ -63,7 +63,7 @@ async function fixture(page:Page,mode='flow'){
       throw new Error('Ação não prevista na fixture HTTP: '+action);
     }};
   },{ids,mode});
-  await page.goto('/');
+  await page.goto('/?area=tecnica');
 }
 async function calls(page:Page,action:string){return page.evaluate(name=>(window as unknown as {__contractCalls:{action:string;payload:Record<string,unknown>}[]}).__contractCalls.filter(c=>c.action===name),action);}
 async function openAssessment(page:Page){await page.getByRole('button',{name:'Avaliações',exact:true}).click();await page.getByText('HTTP factual de contrato',{exact:true}).first().click();}

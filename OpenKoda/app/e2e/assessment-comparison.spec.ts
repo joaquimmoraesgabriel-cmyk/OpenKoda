@@ -30,7 +30,7 @@ async function openHistory(page:Page, unavailable=false) {
       }
     }},moveAssessment:()=>{data.assessments[1].projectId='other';}});
   },{data,unavailable});
-  await page.goto('/');
+  await page.goto('/?area=tecnica');
   await page.getByRole('button',{name:'Projetos',exact:true}).click();
   await page.getByRole('button',{name:/Laboratório/}).click();
   await page.getByRole('navigation',{name:'Seções'}).getByRole('button',{name:'Avaliações'}).click();

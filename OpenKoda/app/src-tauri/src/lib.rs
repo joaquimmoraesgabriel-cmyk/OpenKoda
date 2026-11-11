@@ -338,7 +338,7 @@ async fn request(
         let action=request.action.clone();
         let _lease=services.environment_gate.try_read().map_err(|_|"Dados temporariamente ocupados por manutenção ou backup.")?;
         ensure_purge_access(&services,&request.action)?;
-        if matches!(action.as_str(),"assessment.create"|"project.launch"|"evidence.import"){allow_new_work(&services)?;}
+        if matches!(action.as_str(),"assessment.create"|"project.launch"|"project.newConversation"|"evidence.import"){allow_new_work(&services)?;}
         let mut result=if action=="snapshot"{
             if !request.payload.as_object().is_some_and(|payload|payload.is_empty()){return Err("Esta ação não recebe campos.".into());}
             serde_json::json!({"settings":{"hasApiKey":services.ai.has_selected_key(&store)}})

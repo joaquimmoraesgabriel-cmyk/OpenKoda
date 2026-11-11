@@ -35,7 +35,7 @@ test('as categorias e o conteúdo das configurações rolam de forma independent
 
 test('as listas de avaliações e achados mantêm a posição enquanto se lê um registro', async ({page}) => {
   await page.setViewportSize({width: 1280, height: 560});
-  await page.goto('/');
+  await page.goto('/?area=tecnica');
   await page.evaluate(async () => {
     const api = '/src/api.ts';
     const {request} = await import(api);

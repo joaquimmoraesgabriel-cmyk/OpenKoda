@@ -10,6 +10,84 @@ use serde_json::{json, Value};
 use std::path::Path;
 
 const ACTION: &str = "project.launch";
+const NEW_CHAT: &str = "project.newConversation";
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct NewConversation {
+    project_id: String,
+    source_assessment_id: Option<String>,
+    title: String,
+    idempotency_key: String,
+}
+
+fn chat_methods(methods: &[String]) -> Vec<String> {
+    methods.iter().filter(|m| matches!(m.as_str(),
+        "ai.remote-review.v1" | "source.rules.v1" | "local.inventory.v1" |
+        "http.headers.v1" | "network.tcp-connect.v1")).cloned().collect()
+}
+
+pub(crate) fn new_conversation(store: &Store, payload: Value) -> Result<Value,String> {
+    let input:NewConversation = serde_json::from_value(payload).map_err(|_|"Solicitação de conversa inválida.")?;
+    core::valid_id(&input.project_id)?;
+    core::valid_id(&input.idempotency_key)?;
+    if let Some(id)=&input.source_assessment_id {core::valid_id(id)?;}
+    let aid=targets::derived_id("openkoda.project-conversation.v1",&[&input.project_id,&input.idempotency_key]);
+    let digest=scope::hash(&input);
+    let title=core::text(&input.title,"Título",160,true)?;
+    let objective="Revisar este projeto em conversa.";
+    store.mutate(|s|{
+        if scope::replay(s,NEW_CHAT,&aid,&input.idempotency_key,&digest)?.is_some() {
+            return Ok(json!(scope::assessment(s,&aid)?));
+        }
+        let project=s.projects.iter().find(|p|p.id==input.project_id&&!p.archived).ok_or("Projeto indisponível.")?;
+        let source=match &input.source_assessment_id {
+            Some(id)=>Some(s.assessments.iter().find(|a|a.id==*id&&a.project_id==project.id)
+                .ok_or("A conversa de origem não pertence a este projeto.")?),
+            None=>s.assessments.iter().filter(|a|a.project_id==project.id).max_by_key(|a|&a.updated_at),
+        };
+        let original=if let Some(a)=source {
+            match scope::binding(s,a)? {
+                Some(binding) if binding.revocation.is_some()=>return Err(scope::err("scope_revoked")),
+                Some(binding)=>match scope::current(s,binding)? {
+                    Some(revision) if revision.review.is_none()=>return Err(scope::err("scope_unreviewed")),
+                    revision=>revision,
+                },
+                None=>None,
+            }
+        } else {None};
+        let ai=source.and_then(|a|a.ai_selection.clone());
+        let window=original.map(|r|r.body.window.clone()).unwrap_or(ScopeWindow{starts_at:None,ends_at:None});
+        let result=if let Some(set)=original.and_then(|r|r.body.target_set.as_ref()) {
+            let mut selection=targets::selection_from_set(set);
+            selection.common_methods.clear();
+            for entry in &mut selection.entries {
+                entry.methods=chat_methods(&entry.methods);
+                if entry.methods.is_empty(){return Err("A entrada selecionada exige uma nova revisão de escopo.".into());}
+            }
+            let body=scope::combined_body(project,&aid,objective,&window,&selection)?;
+            scope::insert_combined(s,&aid,&input.project_id,&title,body,None,ai)?
+        }else{
+            if source.is_some_and(|a|a.kind!=project.kind||!same_target(&project.kind,&a.target,&project.target)){
+                return Err("O alvo da conversa precisa de revisão.".into());
+            }
+            let methods=original.map(|r|chat_methods(&r.body.methods)).unwrap_or_else(||vec!["ai.remote-review.v1".into()]);
+            let creation=scope::CreationScope{methods,window,project_digest:scope::project_digest(project),
+                catalog_version:scope::CATALOG_VERSION.into(),acknowledge_scope:true};
+            let mut a=Assessment{id:aid.clone(),project_id:project.id.clone(),title,kind:project.kind.clone(),target:project.target.clone(),
+                objective:objective.into(),status:"draft".into(),created_at:model::now(),updated_at:model::now(),events:vec![],
+                evidence:vec![],coverage:vec![],summary:String::new(),ai_selection:ai,scope_id:None};
+            scope::initialize(s,&mut a,Some(&creation))?;
+            s.assessments.push(a);
+            scope::scope_result(s,&aid)?
+        };
+        let created=s.assessments.iter_mut().find(|a|a.id==aid).ok_or("Conversa indisponível.")?;
+        created.events=vec![model::event("Conversa criada. Toda nova verificação exige plano próprio.","info")];
+        let response=json!(created);
+        scope::receipt(s,NEW_CHAT,&aid,&input.idempotency_key,&digest,result);
+        Ok(response)
+    })
+}
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -207,6 +285,32 @@ mod tests {
     }
 
     #[test]
+    fn new_chat_keeps_scoped_entry_and_deadline_without_reusing_work() {
+        let tmp=tempfile::tempdir().unwrap();
+        let store=Store::open(tmp.path().join("db")).unwrap();
+        let mut body=input("code",tmp.path().to_str().unwrap());
+        body["relativeTarget"]=json!("only.py");
+        body["minutes"]=json!(10);
+        body["useRipgrep"]=json!(true);
+        let first=create(&store,body).unwrap();
+        let intent=json!({"projectId":first["projectId"],"sourceAssessmentId":first["assessmentId"],
+            "title":"Nova revisão","idempotencyKey":model::id()});
+        let chat=new_conversation(&store,intent.clone()).unwrap();
+        assert_eq!(new_conversation(&store,intent).unwrap()["id"],chat["id"]);
+        let s=store.snapshot().unwrap();
+        let old=&s.scope_revisions[0].body;
+        let new=&s.scope_revisions[1].body;
+        let selected=&new.target_set.as_ref().unwrap().entries;
+        assert_eq!(old.window,new.window);
+        assert_eq!(selected.len(),1);
+        assert_eq!(selected[0].target,old.target_set.as_ref().unwrap().entries[0].target);
+        assert!(selected[0].methods.iter().any(|m|m=="source.rules.v1"));
+        assert!(!selected[0].methods.iter().any(|m|m.starts_with("kali.")||m=="source.capture.v1"));
+        assert!(s.plans.is_empty()&&s.executions.is_empty()&&s.data_bindings.is_empty());
+        assert!(chat["evidence"].as_array().unwrap().is_empty());
+    }
+
+    #[test]
     fn opening_analysis_scans_only_the_selected_file_once_and_retains_errors() {
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path().join("source");
@@ -226,6 +330,7 @@ mod tests {
         executor.handle("plan.approve",decision.clone(),&store).unwrap();
         let execution=executor.handle("plan.run",decision,&store).unwrap();
         assert_eq!(execution["status"],"completed");
+        assert!(execution["message"].as_str().unwrap().contains("Arquivos revisados (1/1), sinais candidatos (1)"));
         assert!(prepare(&first).is_err());
         assert_eq!(store.snapshot().unwrap().executions.len(),1);
         body["idempotencyKey"]=json!(model::id());

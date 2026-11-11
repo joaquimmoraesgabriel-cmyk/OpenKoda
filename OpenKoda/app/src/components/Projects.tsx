@@ -24,13 +24,16 @@ interface ProjectsProps {
   busy: boolean;
   initialProjectId?: string;
   initialCreate?: boolean;
+  panel?: 'overview'|'settings';
+  insights?: React.ReactNode;
+  onArchived?: () => void;
 }
 
-export default function Projects({ projects, assessments, action, onNewAssessment, onOpenAssessment, busy, initialProjectId, initialCreate }: ProjectsProps) {
+export default function Projects({ projects, assessments, action, onNewAssessment, onOpenAssessment, busy, initialProjectId, initialCreate, panel, insights, onArchived }: ProjectsProps) {
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState(initialProjectId ?? '');
   const [creating, setCreating] = useState(!!initialCreate);
-  const [tab, setTab] = useState('Visão geral');
+  const [tab, setTab] = useState(panel === 'settings' ? 'Configurações' : 'Visão geral');
   const [name, setName] = useState('');
   const [kind, setKind] = useState<Kind>('code');
   const [target, setTarget] = useState('');
@@ -39,7 +42,7 @@ export default function Projects({ projects, assessments, action, onNewAssessmen
   const live = projects.filter(project => !project.archived);
   const project = live.find(project => project.id === selected);
   const filtered = live.filter(project => (project.name + ' ' + project.target).toLowerCase().includes(query.toLowerCase()));
-  const history = assessments.filter(item => item.projectId === project?.id);
+  const history = assessments.filter(item => item.projectId === project?.id).sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt));
   const page = useRef<HTMLElement>(null);
   const listTrigger = useRef('');
   const restoreFocus = useRef(false);
@@ -83,6 +86,7 @@ export default function Projects({ projects, assessments, action, onNewAssessmen
     setDescription('');
   }
 
+  if (panel && !project) return null;
   if (!creating && !project) return <section ref={page} className="projects-page" aria-label="Lista de projetos">
     <header className="projects-heading">
       <div className="projects-title"><h1 tabIndex={-1}>Projetos</h1><span className="count" aria-label={`${live.length} projetos ativos`}>{live.length}</span></div>
@@ -102,7 +106,7 @@ export default function Projects({ projects, assessments, action, onNewAssessmen
   </section>;
 
   return <section ref={page} className="projects-page project-detail" aria-label="Detalhes do projeto">
-    <button className="project-back" type="button" onClick={backToProjects}><ArrowLeft size={16}/>Voltar aos projetos</button>
+    {!panel && <button className="project-back" type="button" onClick={backToProjects}><ArrowLeft size={16}/>Voltar aos projetos</button>}
     {creating ? <form className="form-page" onSubmit={event => void create(event).catch(() => {})}>
       <div className="detail-heading"><div><h1>Novo projeto</h1><p>Defina o alvo e o contexto do seu trabalho.</p></div></div>
       <div className="project-form-sheet">
@@ -116,8 +120,8 @@ export default function Projects({ projects, assessments, action, onNewAssessmen
         <div className="form-actions"><button className="button" type="button" onClick={backToProjects}>Cancelar</button><button className="button primary" disabled={busy} type="submit">{busy ? 'Salvando…' : 'Criar projeto'}</button></div>
       </div>
     </form> : project && <>
-      <div className="detail-heading"><div><h1 tabIndex={-1}>{project.name}</h1><p>Projeto local · {kindLabels[project.kind]}</p></div><button className="button primary" onClick={() => onNewAssessment(project.id)}><Play size={16}/>Nova avaliação neste projeto</button></div>
-      <Tabs items={['Visão geral','Alvos e escopo','Avaliações','Configurações']} selected={tab} onChange={setTab}/>
+      <div className="detail-heading"><div><h1 tabIndex={-1}>{project.name}</h1><p>{kindLabels[project.kind]}</p></div>{!panel && <button className="button primary" onClick={() => onNewAssessment(project.id)}><Play size={16}/>Nova avaliação neste projeto</button>}</div>
+      {panel!=='settings' && <Tabs items={panel?['Visão geral','Alvos e escopo','Avaliações']:['Visão geral','Alvos e escopo','Avaliações','Configurações']} selected={tab} onChange={setTab}/>}
       {tab === 'Visão geral' && <div className="project-overview">
         <section className="content-section">
           <h2>Alvo cadastrado</h2>
@@ -140,11 +144,12 @@ export default function Projects({ projects, assessments, action, onNewAssessmen
             <Play size={17}/><strong>{a.title}</strong><Status value={a.status}/>
           </button>) : <p className="muted">As avaliações deste projeto aparecerão aqui.</p>}
         </section>
+        {insights}
       </div>}
         {tab==='Alvos e escopo'&&<ProjectTargets key={project.id} project={project} action={action} busy={busy}/>}
         {tab==='Avaliações'&&<section className="content-section">{history.length?history.map(a=><button key={a.id} className="history-row" onClick={()=>onOpenAssessment(a.id)}><Play size={17}/><strong>{a.title}</strong><Status value={a.status}/></button>):<Empty title="Nenhuma avaliação neste projeto" description="Crie uma avaliação para definir o objetivo e revisar o trabalho." action={<button className="button primary" onClick={()=>onNewAssessment(project.id)}>Nova avaliação neste projeto</button>}/>}</section>}
         {tab==='Avaliações'&&<AssessmentComparison key={project.id} projectId={project.id} assessments={history}/>}
-        {tab==='Configurações'&&<><DataPolicy key={project.id} projectId={project.id} action={action} busy={busy}/><CredentialReferences key={'credentials-'+project.id} projectId={project.id} action={action} busy={busy}/><section className="content-section"><h2>Arquivar projeto</h2><p className="muted">Retire o projeto da lista ativa, preservando suas avaliações e evidências.</p>{confirmArchive?<Notice tone="warning">Arquivar “{project.name}”?<div className="inline-actions"><button className="button" onClick={()=>setConfirmArchive(false)}>Manter projeto</button><button className="button danger" disabled={busy} onClick={()=>void action('project.archive',{id:project.id}).then(()=>{setSelected('');setConfirmArchive(false);}).catch(()=>{})}>Confirmar arquivamento</button></div></Notice>:<button className="button" onClick={()=>setConfirmArchive(true)}><Archive size={16}/>Arquivar projeto</button>}</section></>}
+        {tab==='Configurações'&&<><DataPolicy key={project.id} projectId={project.id} action={action} busy={busy}/><CredentialReferences key={'credentials-'+project.id} projectId={project.id} action={action} busy={busy}/><section className="content-section"><h2>Arquivar projeto</h2><p className="muted">Retire o projeto da lista ativa, preservando suas avaliações e evidências.</p>{confirmArchive?<Notice tone="warning">Arquivar “{project.name}”?<div className="inline-actions"><button className="button" onClick={()=>setConfirmArchive(false)}>Manter projeto</button><button className="button danger" disabled={busy} onClick={()=>void action('project.archive',{id:project.id}).then(()=>{setSelected('');setConfirmArchive(false);onArchived?.();}).catch(()=>{})}>Confirmar arquivamento</button></div></Notice>:<button className="button" onClick={()=>setConfirmArchive(true)}><Archive size={16}/>Arquivar projeto</button>}</section></>}
     </>}
   </section>;
 }

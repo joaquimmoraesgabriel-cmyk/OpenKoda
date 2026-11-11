@@ -1,5 +1,11 @@
 # OpenKoda desktop
 
+**0.1.17 para Windows x64.** Na tela inicial, clique em **Criar projeto**. Em **Análise local**, escolha a pasta e indique se a verificação deve abranger todo o código ou apenas um arquivo ou subpasta. Em **Web/API**, informe a URL. Em **Rede**, indique o IP ou CIDR. Escolha um dos seus modelos ou use a análise nativa. Descreva o que você quer verificar e clique em **Criar projeto**.
+
+A conversa mostra as etapas executadas, os resultados e as mensagens do modelo. Use o **+** ao lado do projeto para abrir outra conversa. Na barra da mensagem você pode trocar o provedor e o modelo, anexar texto ou uma imagem, escolher quando solicitar aprovação e interromper o trabalho em andamento. Os controles no alto abrem a visão geral ou as configurações do projeto. **Mostrar ao lado da conversa** permite manter os dois abertos.
+
+A verificação inicial usa regras locais para código, consulta cabeçalhos HTTP para Web/API e testa conexões TCP para rede. Em **Opções avançadas**, você pode escolher a janela de execução e, na análise de rede, as portas. Se o ripgrep estiver instalado no Kali gerenciado, a análise local também oferece a busca em evidências selecionadas. Para acessar os controles técnicos anteriores, abra **Configurações → Geral → Abrir área técnica**.
+
 **0.1.16 para Windows x64.** Em **Configurações → IA e modelos → Adicionar provedor**, escolha o serviço e use **Salvar chave e buscar modelos**. Marque os modelos que deseja usar nas avaliações e clique em **Ativar provedor**. Você também pode escolher o modelo padrão da instalação. O cadastro consulta o catálogo diretamente no provedor. O botão **Testar conexão** envia uma mensagem ao modelo mediante revisão do custo. [Instalador local](releases/0.1.16-local-20261111/OpenKoda_0.1.16_x64-setup.exe)
 
 Se a chave já estiver salva, abra o provedor na lista para escolher ou gerenciar os modelos. Em **Nova avaliação**, o campo **Modelo da avaliação** permite usar o padrão ou escolher outro modelo habilitado. Em uma avaliação existente, use **Alterar modelo** antes de revisar o envio.

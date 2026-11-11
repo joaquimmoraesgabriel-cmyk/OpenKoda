@@ -2,7 +2,7 @@ import { Assessment, Kind, Payload, Project, Settings, Snapshot, terminalStatuse
 import { validEvidenceView } from './data-policy';
 
 export const previewStorageKey = 'openkoda.preview.v1';
-type PreviewState = Snapshot & { creationReceipts?: Record<string, Assessment> };
+type PreviewState = Snapshot & { creationReceipts?: Record<string, Assessment>; launches?: Record<string,{projectId:string;assessmentId:string;intent:string}> };
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export const defaultSettings: Settings = {provider:'compatible',endpoint:'',model:'',mode:'assisted',theme:'light',language:'pt-BR',retentionDays:90,timeoutSeconds:600,outputLimitKiB:256,hasApiKey:false};
 export const emptySnapshot = (): Snapshot => ({schema:'openkoda.snapshot-view.v1',projection:{schema:'openkoda.projection.v1',redactorVersion:'openkoda.redactor.v1',mode:'no_credential_configured',redacted:false,omittedFields:[],reasonCodes:[]},projects:[],assessments:[],findings:[],settings:{...defaultSettings}});
@@ -14,7 +14,7 @@ function validSnapshot(s:PreviewState):boolean {
   if(!s||!Array.isArray(s.projects)||!Array.isArray(s.assessments)||!Array.isArray(s.findings)||!strings(s.settings,['provider','endpoint','model','mode','theme','language']))return false;
   if(!['retentionDays','timeoutSeconds','outputLimitKiB'].every(key=>Number.isInteger(s.settings[key as keyof Settings])))return false;
   if(!s.projects.every(p=>strings(p,['id','name','kind','target','description','createdAt'])&&['code','web','network','files'].includes(p.kind)))return false;
-  if(!s.assessments.every(a=>strings(a,['id','projectId','title','kind','target','objective','status','createdAt','updatedAt','summary'])&&s.projects.some(p=>p.id===a.projectId&&p.kind===a.kind&&p.target===a.target)&&Array.isArray(a.events)&&a.events.every(e=>strings(e,['id','at','message','kind']))&&Array.isArray(a.evidence)&&a.evidence.every(validEvidenceView)&&Array.isArray(a.coverage)&&a.coverage.every(c=>typeof c==='string')))return false;
+  if(!s.assessments.every(a=>strings(a,['id','projectId','title','kind','target','objective','status','createdAt','updatedAt','summary'])&&s.projects.some(p=>p.id===a.projectId&&p.kind===a.kind&&(p.target===a.target||p.additionalTargets?.some(t=>t.target===a.target&&t.kind===a.kind)))&&Array.isArray(a.events)&&a.events.every(e=>strings(e,['id','at','message','kind']))&&Array.isArray(a.evidence)&&a.evidence.every(validEvidenceView)&&Array.isArray(a.coverage)&&a.coverage.every(c=>typeof c==='string')))return false;
   if (s.creationReceipts !== undefined) {
     if (!s.creationReceipts || typeof s.creationReceipts !== 'object' || Array.isArray(s.creationReceipts)) return false;
     const ids = new Set(s.assessments.map(a => a.id));
@@ -33,11 +33,63 @@ export function createPreviewTransport(storage: Pick<Storage,'getItem'|'setItem'
     if(action==='environment.status')return {status:'unavailable',distro:'OpenKoda-Kali',message:'O ambiente Kali só pode ser consultado no aplicativo desktop.',tools:[]} as T;
     const s=read(); const now=new Date().toISOString();
     if(action==='snapshot'){
-      const {creationReceipts, ...view}=s;
+      const {creationReceipts, launches, ...view}=s;
       return structuredClone(view) as T;
     }
     let result:unknown;
     switch(action){
+      case 'project.launch': {
+        const key=text(payload,'idempotencyKey',36);
+        if (!uuid.test(key)) throw new Error('Chave de idempotência inválida.');
+        const intent=JSON.stringify(payload), receipt=s.launches?.[key];
+        if (receipt) {
+          if(receipt.intent!==intent) throw new Error('scope_idempotency_conflict');
+          return {projectId:receipt.projectId,assessmentId:receipt.assessmentId,replayed:true} as T;
+        }
+        const k=kind(payload),root=validateTarget(text(payload,'root',4096),k);
+        const objective=text(payload,'objective',4000),title=text(payload,'title',160);
+        let project=s.projects.find(p=>!p.archived && p.kind===k && p.target===root && (!payload.projectId||payload.projectId===p.id));
+        if(!project) {
+          if(payload.projectId)throw new Error('Projeto indisponível.');
+          project={id:crypto.randomUUID(),kind:k,target:root,name:text(payload,'name',120),description:objective,createdAt:now};
+          s.projects.unshift(project);
+        }
+        let target=root;
+        if(payload.relativeTarget) {
+          const relative=text(payload,'relativeTarget',4096).replaceAll('\\','/');
+          if(!['code','files'].includes(k)||relative.split('/').some(part=>!part||part==='.'||part==='..'||part.includes(':')))throw new Error('Informe um caminho dentro do projeto.');
+          target=root.replace(/[\\/]+$/,'')+'/'+relative;
+          project.additionalTargets??=[];
+          if(!project.additionalTargets.some(t=>t.target===target))project.additionalTargets.push({id:crypto.randomUUID(),kind:k,target,label:relative,createdAt:now});
+        }
+        const id=crypto.randomUUID();
+        s.assessments.unshift({id,projectId:project.id,title,kind:k,target,objective,status:'draft',createdAt:now,updatedAt:now,
+          events:[{id:crypto.randomUUID(),at:now,message:'Conversa criada na prévia. Abra o aplicativo desktop para analisar o alvo.',kind:'info'}],evidence:[],coverage:[],summary:''});
+        s.launches??={};s.launches[key]={projectId:project.id,assessmentId:id,intent};
+        result={projectId:project.id,assessmentId:id,replayed:false};
+        break;
+      }
+      case 'project.newConversation': {
+        const key=text(payload,'idempotencyKey',36);
+        if(!uuid.test(key))throw new Error('Chave de idempotência inválida.');
+        const intent=JSON.stringify(payload), receipt=s.launches?.[key];
+        if(receipt){
+          if(receipt.intent!==intent)throw new Error('scope_idempotency_conflict');
+          const previous=s.assessments.find(a=>a.id===receipt.assessmentId);
+          if(!previous)throw new Error('Conversa indisponível.');
+          return structuredClone(previous) as T;
+        }
+        const project=s.projects.find(p=>p.id===payload.projectId && !p.archived);
+        if(!project)throw new Error('Escolha um projeto ativo.');
+        const source=s.assessments.find(a=>a.id===payload.sourceAssessmentId && a.projectId===project.id);
+        if(payload.sourceAssessmentId && !source)throw new Error('A conversa de origem não pertence a este projeto.');
+        const a:Assessment={id:crypto.randomUUID(),projectId:project.id,kind:source?.kind??project.kind,target:source?.target??project.target,
+          title:text(payload,'title',160),objective:source?.objective??'Revisar este projeto em conversa.',aiSelection:source?.aiSelection,
+          status:'draft',createdAt:now,updatedAt:now,events:[],evidence:[],coverage:[],summary:''};
+        s.assessments.unshift(a);
+        s.launches??={};s.launches[key]={projectId:project.id,assessmentId:a.id,intent};
+        result=a;break;
+      }
       case 'project.create': {const k=kind(payload);const p:Project={id:crypto.randomUUID(),name:text(payload,'name',160),kind:k,target:validateTarget(text(payload,'target'),k),description:typeof payload.description==='string'?payload.description.slice(0,4000):'',createdAt:now};s.projects.unshift(p);result=p;break;}
       case 'project.archive':{const p=s.projects.find(p=>p.id===payload.id);if(!p)throw new Error('Projeto não encontrado.');p.archived=true;result={ok:true};break;}
       case 'assessment.create': {

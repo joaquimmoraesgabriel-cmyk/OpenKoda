@@ -8,7 +8,7 @@ async function appearance(page: Page) {
 }
 
 test('Geral compartilha o perfil, a busca encontra categorias sem acentos e fontes se aplicam em outras páginas', async({page})=>{
-  await page.goto('/');
+  await page.goto('/?area=tecnica');
   await page.getByRole('button',{name:'Configurações',exact:true}).click();
   await page.getByLabel('Nome de exibição').fill('Usuária de teste');
   await page.getByRole('button',{name:'Salvar nome'}).click();
@@ -38,7 +38,7 @@ test('Geral compartilha o perfil, a busca encontra categorias sem acentos e font
 });
 
 test('aparência é aplicada no dispositivo, mantém o formato anterior dos dados e sobrevive à reabertura', async ({page}) => {
-  await page.goto('/');
+  await page.goto('/?area=tecnica');
   const open = () => appearance(page);
   await open();
   await expect(page.getByRole('heading', {name:'Aparência', exact:true})).toBeVisible();
@@ -89,7 +89,7 @@ test('falha ao salvar tema preserva as escolhas anteriores e mantém o rascunho 
       write.call(this, key, value);
     };
   });
-  await page.goto('/');
+  await page.goto('/?area=tecnica');
   await appearance(page);
   await page.getByRole('radio', {name:'Escuro'}).check();
   await page.getByRole('radio', {name:'Compacta'}).check();
@@ -110,7 +110,7 @@ test('armazenamento visual indisponível conserva tema, oferece descarte e permi
       write.call(this, k, value);
     };
   }, appearanceStorageKey);
-  await page.goto('/');
+  await page.goto('/?area=tecnica');
   await appearance(page);
   await page.getByRole('radio', {name:'Escuro'}).check();
   await page.getByRole('radio', {name:'Compacta'}).check();

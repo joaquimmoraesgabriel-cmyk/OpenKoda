@@ -87,6 +87,7 @@ async function nativeFixture(page:Page, environmentReady=false, bridgeMode='succ
       }
       if(oldInventory && (action==='environment.status' || action==='packages.catalog')){
         await oldInventory;
+        if(action==='environment.status')document.documentElement.dataset.oldInventoryReturned='true';
         if (action==='packages.catalog') return {version:'1',inventoryVerified:true,distro:previousName,tools:[{
           package:'previous-fixture',name:'Ferramenta do executor anterior',group:'Teste',description:'Inventário antigo',adapter:'',
           executionReady:true,availability:'Disponível',installed:true,version:'1',
@@ -238,7 +239,7 @@ async function nativeFixture(page:Page, environmentReady=false, bridgeMode='succ
 async function calls(page:Page,action:string){return page.evaluate(name=>(window as unknown as {__contractCalls:{action:string;payload:Record<string,unknown>}[]}).__contractCalls.filter(call=>call.action===name),action);}
 
 test('plano exige revisão explícita e permite cancelar durante a operação',async({page})=>{
-  await nativeFixture(page);await page.goto('/');await openAssessmentList(page);await page.getByText('Avaliação de contrato',{exact:true}).click();
+  await nativeFixture(page);await page.goto('/?area=tecnica');await openAssessmentList(page);await page.getByText('Avaliação de contrato',{exact:true}).click();
   await expect(page.getByRole('button',{name:'Aprovar plano',exact:true})).toBeDisabled();
   expect(await calls(page,'plan.approve')).toEqual([]);expect(await calls(page,'plan.run')).toEqual([]);
   await page.getByRole('checkbox',{name:'Revisei o alvo, os efeitos e os limites deste plano e autorizo esta operação.'}).check();
@@ -257,7 +258,7 @@ test('plano exige revisão explícita e permite cancelar durante a operação',a
 });
 
 test('ambiente preparado não é apresentado como executor disponível',async({page})=>{
-  await nativeFixture(page,true);await page.goto('/');
+  await nativeFixture(page,true);await page.goto('/?area=tecnica');
   await expect(page.getByRole('button',{name:'Kali preparado',exact:true})).toBeVisible();
   await expect(page.getByRole('button',{name:'Kali pronto para executar',exact:true})).toHaveCount(0);
   await page.getByRole('button',{name:'Kali preparado',exact:true}).click();
@@ -266,7 +267,7 @@ test('ambiente preparado não é apresentado como executor disponível',async({p
 });
 
 test('revisão de avaliação desconhecida exige nota e reconhecimento sem repetir execução',async({page})=>{
-  await nativeFixture(page,false,'success','none','available','none','unknown');await page.goto('/');await openAssessmentList(page);await page.getByText('Avaliação de contrato',{exact:true}).click();
+  await nativeFixture(page,false,'success','none','available','none','unknown');await page.goto('/?area=tecnica');await openAssessmentList(page);await page.getByText('Avaliação de contrato',{exact:true}).click();
   const panel=page.locator('.assessment-reconciliation');
   await expect(panel).toContainText('Efeitos enviados antes da interrupção podem ter ocorrido e não são desfeitos.');
   await expect(panel.getByRole('button',{name:'Registrar revisão da interrupção',exact:true})).toBeDisabled();
@@ -281,7 +282,7 @@ test('revisão de avaliação desconhecida exige nota e reconhecimento sem repet
 });
 
 test('reconciliação recusada mantém estado desconhecido e pede nova confirmação',async({page})=>{
-  await nativeFixture(page,false,'success','none','available','none','unknown-refusal');await page.goto('/');await openAssessmentList(page);await page.getByText('Avaliação de contrato',{exact:true}).click();
+  await nativeFixture(page,false,'success','none','available','none','unknown-refusal');await page.goto('/?area=tecnica');await openAssessmentList(page);await page.getByText('Avaliação de contrato',{exact:true}).click();
   const panel=page.locator('.assessment-reconciliation');
   await panel.getByLabel('Nota sobre a interrupção',{exact:true}).fill('Revisão da interrupção local.');
   await panel.getByRole('checkbox',{name:'Entendo que efeitos já enviados não são desfeitos e que esta revisão não repete a operação.'}).check();
@@ -293,7 +294,7 @@ test('reconciliação recusada mantém estado desconhecido e pede nova confirma�
 });
 
 async function openEvidenceImport(page:Page,mode='import'){
-  await nativeFixture(page,false,'success','none','available','none',mode);await page.goto('/');await openAssessmentList(page);await page.getByText('Avaliação de contrato',{exact:true}).click();
+  await nativeFixture(page,false,'success','none','available','none',mode);await page.goto('/?area=tecnica');await openAssessmentList(page);await page.getByText('Avaliação de contrato',{exact:true}).click();
   await page.locator('summary').filter({hasText:/^Evidências$/}).click();await page.locator('summary').filter({hasText:/^Importar texto$/}).click();
   await page.getByLabel('Nome do texto importado',{exact:true}).fill('Trecho de log declarado');await page.getByLabel('Origem declarada',{exact:true}).fill('Texto copiado manualmente do laboratório.');
 }
@@ -323,7 +324,7 @@ test('importação mede bytes UTF-8 e conserva recusa do backend sem repetir',as
 });
 
 test('mensagem exige contexto visível e consentimento específico',async({page})=>{
-  await nativeFixture(page);await page.goto('/');await openAssessmentList(page);await page.getByText('Avaliação de contrato',{exact:true}).click();
+  await nativeFixture(page);await page.goto('/?area=tecnica');await openAssessmentList(page);await page.getByText('Avaliação de contrato',{exact:true}).click();
   await page.locator('summary').filter({hasText:'Conversa com a IA'}).click();
   await page.getByLabel('Sua mensagem',{exact:true}).fill('Analise os limites da observação.');
   await expect(page.getByRole('button',{name:'Enviar mensagem',exact:true})).toBeDisabled();
@@ -356,7 +357,7 @@ async function saveKey(page:Page, value:string) {
   await wizard.getByRole('button',{name:'Salvar chave e buscar modelos'}).click();
 }
 test('credencial chega ao cofre e ativação e teste de conexão são ações distintas',async({page})=>{
-  await nativeFixture(page);await page.goto('/');await openProviderSettings(page);
+  await nativeFixture(page);await page.goto('/?area=tecnica');await openProviderSettings(page);
   await page.getByRole('button',{name:'Conectar com chave de API'}).click();
   await saveKey(page,'fixture-not-a-real-secret');
   const wizard=page.getByRole('dialog');
@@ -372,7 +373,7 @@ test('credencial chega ao cofre e ativação e teste de conexão são ações di
 });
 
 test('catálogo e modelos ativados alimentam configurações, rascunhos e avaliação existente',async({page})=>{
-  await nativeFixture(page);await page.goto('/');await openProviderSettings(page);
+  await nativeFixture(page);await page.goto('/?area=tecnica');await openProviderSettings(page);
   await beginProvider(page,'OpenRouter');
   await expect(page.getByRole('dialog')).toContainText('https://openrouter.ai/api/v1');
   await saveKey(page,'synthetic-not-a-key');
@@ -420,7 +421,7 @@ test('catálogo e modelos ativados alimentam configurações, rascunhos e avalia
 
 test('provedor salvo sem modelo na versão anterior pode ser ativado sem redigitar a chave', async({page})=>{
   await nativeFixture(page,false,'success','none','available','none','legacy-provider');
-  await page.goto('/');await openProviderSettings(page);
+  await page.goto('/?area=tecnica');await openProviderSettings(page);
   await page.getByRole('button',{name:'Escolher modelos e ativar'}).click();
   const wizard=page.getByRole('dialog');
   await expect(wizard.getByRole('checkbox',{name:'fixture-model'})).toBeChecked();
@@ -432,7 +433,7 @@ test('provedor salvo sem modelo na versão anterior pode ser ativado sem redigit
 
 test('novos provedores admitem consulta repetida e retomada após salvar a chave',async({page})=>{
   await nativeFixture(page,false,'success','none','available','none','catalog-transient');
-  await page.goto('/');await openProviderSettings(page);
+  await page.goto('/?area=tecnica');await openProviderSettings(page);
   await page.getByRole('button',{name:'Adicionar provedor'}).click();
   const wizard=page.getByRole('dialog');
   for(const domain of ['api.anthropic.com','generativelanguage.googleapis.com','api.deepseek.com','api.x.ai'])await expect(wizard.getByText(domain,{exact:true})).toBeVisible();
@@ -453,7 +454,7 @@ test('novos provedores admitem consulta repetida e retomada após salvar a chave
 });
 
 test('voltar ou cancelar descarta a chave não salva e conserva o padrão',async({page})=>{
-  await nativeFixture(page);await page.goto('/');await openProviderSettings(page);
+  await nativeFixture(page);await page.goto('/?area=tecnica');await openProviderSettings(page);
   await beginProvider(page,'OpenAI');
   const wizard=page.getByRole('dialog');
   const credential=wizard.getByLabel('Chave de API',{exact:true});
@@ -470,7 +471,7 @@ test('voltar ou cancelar descarta a chave não salva e conserva o padrão',async
 });
 
 test('ativar um segundo provedor conserva o padrão até a troca explícita',async({page})=>{
-  await nativeFixture(page);await page.goto('/');await openProviderSettings(page);
+  await nativeFixture(page);await page.goto('/?area=tecnica');await openProviderSettings(page);
   await beginProvider(page,'OpenAI');await saveKey(page,'first-provider-fixture');
   const wizard=page.getByRole('dialog');
   await wizard.getByRole('button',{name:'Ativar provedor'}).click();
@@ -488,7 +489,7 @@ test('ativar um segundo provedor conserva o padrão até a troca explícita',asy
 });
 
 test('nenhum modelo no catálogo mantém a credencial pendente e permite voltar sem redigitá-la',async({page})=>{
-  await nativeFixture(page);await page.goto('/');await openProviderSettings(page);
+  await nativeFixture(page);await page.goto('/?area=tecnica');await openProviderSettings(page);
   await beginProvider(page,'Anthropic');await saveKey(page,'empty-catalog-fixture');
   const wizard=page.getByRole('dialog');
   await expect(wizard.getByRole('status')).toContainText('O provedor não retornou modelos');
@@ -501,7 +502,7 @@ test('nenhum modelo no catálogo mantém a credencial pendente e permite voltar 
   expect(await calls(page,'ai.test')).toEqual([]);
 });
 test('cópias do Kali mantêm a origem parada após inspeção, exportação e restauração',async({page})=>{
-  await nativeFixture(page,true);await page.goto('/');
+  await nativeFixture(page,true);await page.goto('/?area=tecnica');
   await page.getByRole('button',{name:'Kali e ferramentas',exact:true}).click();
   await page.getByRole('button',{name:'Manutenção',exact:true}).click();
   const panel=page.getByRole('region',{name:'Cópias do Kali'});
@@ -533,7 +534,7 @@ test('cópias do Kali mantêm a origem parada após inspeção, exportação e r
 });
 
 test('cópias do Kali com detalhes ocultos permitem consultar o histórico e exigem nova revisão',async({page})=>{
-  await nativeFixture(page,true,'success','none','archive-metadata');await page.goto('/');
+  await nativeFixture(page,true,'success','none','archive-metadata');await page.goto('/?area=tecnica');
   await page.getByRole('button',{name:'Kali e ferramentas',exact:true}).click();
   await page.getByRole('button',{name:'Manutenção',exact:true}).click();
   const panel=page.getByRole('region',{name:'Cópias do Kali'});
@@ -549,7 +550,7 @@ test('cópias do Kali com detalhes ocultos permitem consultar o histórico e exi
 
 test('cópias do Kali anteriores sem formato exibem VHDX e exigem revisão antes de restaurar',async({page})=>{
   await nativeFixture(page,true,'success','none','archive-legacy-vhdx');
-  await page.goto('/');
+  await page.goto('/?area=tecnica');
   await page.getByRole('button',{name:'Kali e ferramentas',exact:true}).click();
   await page.getByRole('button',{name:'Manutenção',exact:true}).click();
   const panel=page.getByRole('region',{name:'Cópias do Kali'});
@@ -566,7 +567,7 @@ test('cópias do Kali anteriores sem formato exibem VHDX e exigem revisão antes
 
 async function openRecoveryCandidate(page: Page, mode: string) {
   await nativeFixture(page, true, 'success', 'none', mode);
-  await page.goto('/');
+  await page.goto('/?area=tecnica');
   await page.getByRole('button', { name: 'Kali e ferramentas', exact: true }).click();
   await page.getByRole('button', { name: 'Manutenção', exact: true }).click();
   const panel = page.getByRole('region', { name: 'Cópias do Kali' });
@@ -582,7 +583,7 @@ async function openRecoveryCandidate(page: Page, mode: string) {
 
 async function openSupport(page: Page, mode?: string) {
   if(mode) await nativeFixture(page,true,'success','none',mode);
-  await page.goto('/');
+  await page.goto('/?area=tecnica');
   await page.getByRole('button',{name:'Configurações',exact:true}).click();
   await page.getByRole('button',{name:'Diagnóstico e suporte',exact:true}).click();
   return page.getByRole('region',{name:'Pacote de suporte local'});
@@ -684,9 +685,9 @@ test('troca de executor preserva a identidade nova quando o inventário anterior
   await review.getByRole('checkbox').check();
   await review.getByRole('button',{name:'Confirmar troca de executor'}).click();
   await expect(panel.getByRole('status')).toContainText('Executor vinculado');
-  expect(await calls(page,'projectPurge.status')).toHaveLength(0);
+  await expect(page.locator('html')).not.toHaveAttribute('data-old-inventory-returned','true');
   await page.evaluate(() => (window as unknown as {__releaseOldInventory: () => void}).__releaseOldInventory());
-  await expect.poll(async () => (await calls(page,'projectPurge.status')).length).toBeGreaterThan(0);
+  await expect(page.locator('html')).toHaveAttribute('data-old-inventory-returned','true');
   await page.getByRole('button',{name:'Ambiente',exact:true}).click();
   await expect(page.getByText(targetId,{exact:true})).toBeVisible();
   await page.getByRole('button',{name:'Ferramentas',exact:true}).click();
@@ -720,7 +721,7 @@ for (const mode of ['hidden', 'expired', 'lost']) {
 }
 
 test('preparação do Kali só aplica o plano depois da revisão',async({page})=>{
-  await nativeFixture(page);await page.goto('/');await page.getByRole('button',{name:'Kali e ferramentas',exact:true}).click();
+  await nativeFixture(page);await page.goto('/?area=tecnica');await page.getByRole('button',{name:'Kali e ferramentas',exact:true}).click();
   await page.getByRole('button',{name:'Ambiente',exact:true}).click();await page.getByRole('button',{name:'Revisar preparação do Kali',exact:true}).click();
   await expect(page.getByLabel('Detalhes do plano de manutenção')).toContainText('Criar distribuição dedicada de teste');
   await expect(page.getByRole('button',{name:'Executar operação revisada',exact:true})).toBeDisabled();expect(await calls(page,'environment.provision')).toEqual([]);
@@ -736,7 +737,7 @@ test('preparação guiada do Windows reconsulta os requisitos após reabrir', as
     await page.getByRole('button',{name:'Kali e ferramentas',exact:true}).click();
     await page.getByRole('button',{name:'Ambiente',exact:true}).click();
   }
-  await page.goto('/');
+  await page.goto('/?area=tecnica');
   await openEnvironment();
   const guidance = page.getByRole('region',{name:'Preparar o Windows para o WSL'});
   await guidance.getByRole('button',{name:'Verificar requisitos do Windows'}).click();
@@ -751,7 +752,7 @@ test('preparação guiada do Windows reconsulta os requisitos após reabrir', as
 });
 
 test('imagem oficial exige escolha explícita e revisão após falha da preparação padrão',async({page})=>{
-  await nativeFixture(page,false,'success','none','standard-error');await page.goto('/');await page.getByRole('button',{name:'Kali e ferramentas',exact:true}).click();
+  await nativeFixture(page,false,'success','none','standard-error');await page.goto('/?area=tecnica');await page.getByRole('button',{name:'Kali e ferramentas',exact:true}).click();
   await page.getByRole('button',{name:'Ambiente',exact:true}).click();
   expect(await calls(page,'environment.image.plan')).toEqual([]);
   await page.getByRole('button',{name:'Revisar preparação do Kali',exact:true}).click();
@@ -775,7 +776,7 @@ test('imagem oficial exige escolha explícita e revisão após falha da prepara�
 });
 
 test('hash divergente da imagem mantém erro e descarta aprovação de um plano anterior',async({page})=>{
-  await nativeFixture(page,false,'success','none','mismatch');await page.goto('/');await page.getByRole('button',{name:'Kali e ferramentas',exact:true}).click();
+  await nativeFixture(page,false,'success','none','mismatch');await page.goto('/?area=tecnica');await page.getByRole('button',{name:'Kali e ferramentas',exact:true}).click();
   await page.getByRole('button',{name:'Ambiente',exact:true}).click();await page.getByRole('button',{name:'Revisar preparação do Kali',exact:true}).click();
   await page.getByRole('checkbox',{name:'Revisei o ambiente, a origem e os efeitos deste plano e autorizo sua execução.'}).check();
   await page.getByRole('button',{name:'Preparar com imagem oficial verificada',exact:true}).click();
@@ -786,7 +787,7 @@ test('hash divergente da imagem mantém erro e descarta aprovação de um plano 
 });
 
 test('imagem alternativa não é oferecida quando o backend informa registro existente',async({page})=>{
-  await nativeFixture(page,false,'success','none','registered');await page.goto('/');await page.getByRole('button',{name:'Kali e ferramentas',exact:true}).click();
+  await nativeFixture(page,false,'success','none','registered');await page.goto('/?area=tecnica');await page.getByRole('button',{name:'Kali e ferramentas',exact:true}).click();
   await page.getByRole('button',{name:'Ambiente',exact:true}).click();
   await expect(page.getByRole('heading',{name:'Ambiente requer atenção',exact:true})).toBeVisible();
   await expect(page.getByRole('button',{name:'Preparar com imagem oficial verificada',exact:true})).toHaveCount(0);
@@ -794,7 +795,7 @@ test('imagem alternativa não é oferecida quando o backend informa registro exi
 });
 
 async function reviewEnvironmentRepair(page:Page,mode='repair'){
-  await nativeFixture(page,false,'success','none',mode);await page.goto('/');await page.getByRole('button',{name:'Kali e ferramentas',exact:true}).click();
+  await nativeFixture(page,false,'success','none',mode);await page.goto('/?area=tecnica');await page.getByRole('button',{name:'Kali e ferramentas',exact:true}).click();
   await page.getByRole('button',{name:'Ambiente',exact:true}).click();
   expect(await calls(page,'environment.repair.plan')).toEqual([]);expect(await calls(page,'environment.repair.apply')).toEqual([]);
   await page.getByRole('button',{name:'Revisar recuperação do Kali',exact:true}).click();
@@ -827,7 +828,7 @@ test('recuperação Kali com erro preserva diagnóstico e impede reenviar o mesm
 });
 
 async function openRecovery(page:Page,mode='success'){
-  await nativeFixture(page,false,'success','none','available',mode);await page.goto('/');
+  await nativeFixture(page,false,'success','none','available',mode);await page.goto('/?area=tecnica');
   await page.getByRole('button',{name:'Configurações',exact:true}).click();await page.getByRole('button',{name:'Backup e recuperação',exact:true}).click();
   await expect(page.getByRole('heading',{name:'Ativação de uma cópia',exact:true})).toBeVisible();
 }
@@ -891,7 +892,7 @@ test('ativação bloqueada preserva aviso e só pode ser cancelada explicitament
 });
 
 test('candidato só é validado com revisão humana e evidência selecionada',async({page})=>{
-  await nativeFixture(page);await page.goto('/');await page.getByRole('button',{name:'Achados',exact:true}).click();
+  await nativeFixture(page);await page.goto('/?area=tecnica');await page.getByRole('button',{name:'Achados',exact:true}).click();
   await page.getByText('Candidato de contrato',{exact:true}).click();
   expect(await calls(page,'finding.validate')).toEqual([]);
   await page.getByRole('button',{name:'Validar candidato',exact:true}).click();
@@ -909,7 +910,7 @@ test('candidato só é validado com revisão humana e evidência selecionada',as
 });
 
 test('registro manual conserva candidato separado de validação',async({page})=>{
-  await nativeFixture(page);await page.goto('/');await openAssessmentList(page);await page.getByText('Avaliação de contrato',{exact:true}).click();
+  await nativeFixture(page);await page.goto('/?area=tecnica');await openAssessmentList(page);await page.getByText('Avaliação de contrato',{exact:true}).click();
   await page.getByRole('navigation',{name:'Seções',exact:true}).getByRole('button',{name:'Achados',exact:true}).click();
   await page.getByRole('button',{name:'Registrar candidato',exact:true}).click();
   await page.getByLabel('Título do candidato',{exact:true}).fill('Observação para revisão');
@@ -923,7 +924,7 @@ test('registro manual conserva candidato separado de validação',async({page})=
 });
 
 test('bridge Kali limita a UI a diagnóstico e hash da evidência selecionada',async({page})=>{
-  await nativeFixture(page,true);await page.goto('/');await openAssessmentList(page);await page.getByText('Avaliação de contrato',{exact:true}).click();
+  await nativeFixture(page,true);await page.goto('/?area=tecnica');await openAssessmentList(page);await page.getByText('Avaliação de contrato',{exact:true}).click();
   await page.locator('summary').filter({hasText:'Kali: diagnóstico e integridade'}).click();
   const panel=page.locator('.kali-bridge');
   expect(await calls(page,'kali.mcp.diagnose')).toEqual([]);expect(await calls(page,'kali.mcp.hashEvidence')).toEqual([]);
@@ -940,7 +941,7 @@ test('bridge Kali limita a UI a diagnóstico e hash da evidência selecionada',a
 });
 
 test('falha do bridge fica visível e consultar estado não repete a operação',async({page})=>{
-  await nativeFixture(page,true,'failure');await page.goto('/');await openAssessmentList(page);await page.getByText('Avaliação de contrato',{exact:true}).click();
+  await nativeFixture(page,true,'failure');await page.goto('/?area=tecnica');await openAssessmentList(page);await page.getByText('Avaliação de contrato',{exact:true}).click();
   await page.locator('summary').filter({hasText:'Kali: diagnóstico e integridade'}).click();
   const panel=page.locator('.kali-bridge');
   await panel.getByRole('button',{name:'Diagnosticar Kali nesta avaliação',exact:true}).click();
@@ -953,7 +954,7 @@ test('falha do bridge fica visível e consultar estado não repete a operação'
 });
 
 test('limite do hash no Kali é medido em bytes UTF-8 antes do envio',async({page})=>{
-  await nativeFixture(page,true,'oversized');await page.goto('/');await openAssessmentList(page);await page.getByText('Avaliação de contrato',{exact:true}).click();
+  await nativeFixture(page,true,'oversized');await page.goto('/?area=tecnica');await openAssessmentList(page);await page.getByText('Avaliação de contrato',{exact:true}).click();
   await page.locator('summary').filter({hasText:'Kali: diagnóstico e integridade'}).click();
   const panel=page.locator('.kali-bridge');
   await panel.getByLabel('Evidência para verificar no Kali',{exact:true}).selectOption('evidence-fixture');
@@ -963,7 +964,7 @@ test('limite do hash no Kali é medido em bytes UTF-8 antes do envio',async({pag
 });
 
 test('cancelamento do bridge permanece solicitado até o processo confirmar término',async({page})=>{
-  await nativeFixture(page,true,'cancel');await page.goto('/');await openAssessmentList(page);await page.getByText('Avaliação de contrato',{exact:true}).click();
+  await nativeFixture(page,true,'cancel');await page.goto('/?area=tecnica');await openAssessmentList(page);await page.getByText('Avaliação de contrato',{exact:true}).click();
   await page.locator('summary').filter({hasText:'Kali: diagnóstico e integridade'}).click();
   const panel=page.locator('.kali-bridge');
   await panel.getByRole('button',{name:'Diagnosticar Kali nesta avaliação',exact:true}).click();
@@ -978,7 +979,7 @@ test('cancelamento do bridge permanece solicitado até o processo confirmar tér
 });
 
 test('sessão desconhecida só tenta reconciliação após ação explícita e preserva recusa',async({page})=>{
-  await nativeFixture(page,true,'unknown-error');await page.goto('/');await openAssessmentList(page);await page.getByText('Avaliação de contrato',{exact:true}).click();
+  await nativeFixture(page,true,'unknown-error');await page.goto('/?area=tecnica');await openAssessmentList(page);await page.getByText('Avaliação de contrato',{exact:true}).click();
   await page.locator('summary').filter({hasText:'Kali: diagnóstico e integridade'}).click();
   const panel=page.locator('.kali-bridge');
   await expect(panel.getByText('Efeito desconhecido',{exact:true})).toBeVisible();
@@ -992,7 +993,7 @@ test('sessão desconhecida só tenta reconciliação após ação explícita e p
 });
 
 async function prepareRemediation(page:Page,mode='success'){
-  await nativeFixture(page,false,'success',mode);await page.goto('/');
+  await nativeFixture(page,false,'success',mode);await page.goto('/?area=tecnica');
   await page.getByRole('button',{name:'Achados',exact:true}).click();await page.getByText('Candidato de contrato',{exact:true}).click();
   await page.getByRole('button',{name:'Correção',exact:true}).click();
   await page.getByRole('button',{name:'Preparar correção local',exact:true}).click();
