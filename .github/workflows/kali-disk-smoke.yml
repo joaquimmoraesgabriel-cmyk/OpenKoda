@@ -1,0 +1,46 @@
+name: Kali APT disk recovery
+on:
+  push:
+    paths:
+      - '.github/workflows/kali-disk-smoke.yml'
+      - 'OpenKoda/app/scripts/environment-helper.py'
+      - 'OpenKoda/app/scripts/test-apt-disk-full.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  apt-disk:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Prepare disposable Kali with APT
+        run: |
+          docker build -t openkoda-apt-lab - <<'DOCKERFILE'
+          FROM kalilinux/kali-rolling
+          RUN apt-get -o APT::Update::Error-Mode=any update && apt-get install -y --no-install-recommends python3 gnupg
+          DOCKERFILE
+      - name: Exercise APT with a full temporary index volume
+        id: exercise
+        working-directory: OpenKoda/app/scripts
+        run: |
+          docker run --rm --init --network none \
+            --tmpfs /etc/openkoda:rw,size=4m --tmpfs /var/lib/openkoda:rw,size=8m \
+            --tmpfs /var/lib/openkoda/apt/lists:rw,size=2m \
+            --mount "type=bind,src=$PWD/environment-helper.py,dst=/lab/environment-helper.py,readonly" \
+            --mount "type=bind,src=$PWD/test-apt-disk-full.py,dst=/lab/test.py,readonly" \
+            openkoda-apt-lab python3 /lab/test.py 2>&1 | tee "$RUNNER_TEMP/openkoda-apt.log"
+      - name: Retain the recovery receipt
+        if: ${{ !cancelled() && steps.exercise.outcome != 'skipped' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: kali-apt-disk-recovery
+          path: ${{ runner.temp }}/openkoda-apt.log
+          if-no-files-found: error
