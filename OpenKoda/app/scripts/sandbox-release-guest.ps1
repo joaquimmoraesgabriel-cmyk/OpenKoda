@@ -71,6 +71,68 @@ function Read-Renderer([string]$Expression) {
         $response.result.result.value
     } finally { $token.Dispose() }
 }
+function Find-WindowControl($App,$Type,[string]$Name,[switch]$Prefix) {
+    $deadline = [DateTime]::UtcNow.AddSeconds(35)
+    $typeFilter = [System.Windows.Automation.PropertyCondition]::new(
+        [System.Windows.Automation.AutomationElement]::ControlTypeProperty,$Type)
+    $names = @()
+    do {
+        $App.Refresh()
+        if ($App.HasExited) { throw 'Installed app exited before its controls appeared.' }
+        if ($App.MainWindowHandle -ne [IntPtr]::Zero) {
+            $window = [System.Windows.Automation.AutomationElement]::FromHandle($App.MainWindowHandle)
+            $items = $window.FindAll([System.Windows.Automation.TreeScope]::Descendants,$typeFilter)
+            $names = @(foreach ($item in $items) { $item.Current.Name })
+            foreach ($item in $items) {
+                $caption = $item.Current.Name
+                if (($caption -eq $Name -or ($Prefix -and $caption.StartsWith($Name,[StringComparison]::Ordinal))) -and $item.Current.IsEnabled) { return $item }
+            }
+        }
+        Start-Sleep -Milliseconds 200
+    } until ([DateTime]::UtcNow -ge $deadline)
+    throw "Missing control '$Name' in installed app. Available: $(@($names | Select-Object -First 18) -join ', ')"
+}
+function Invoke-WindowButton($App,[string]$Name,[switch]$Prefix) {
+    $element = Find-WindowControl $App ([System.Windows.Automation.ControlType]::Button) $Name -Prefix:$Prefix
+    $element.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+}
+function Read-ProjectFixture([string]$Profile) {
+    $reader = @'
+import json, sqlite3, sys
+from pathlib import Path
+db = Path(sys.argv[1]) / 'openkoda.sqlite3'
+with sqlite3.connect(db.as_uri() + '?mode=ro', uri=True) as conn:
+    state = json.loads(conn.execute('SELECT json FROM app_state WHERE id=1').fetchone()[0])
+print(json.dumps({'projects': [{k: p[k] for k in ('name','id','target','kind')} for p in state['projects']], 'assessments': len(state['assessments'])}))
+'@
+    $raw = & python -c $reader $Profile
+    if ($LASTEXITCODE -ne 0) { throw 'Could not read the installed fixture database.' }
+    $raw | ConvertFrom-Json
+}
+function Test-InstalledWindow($App,[int]$Iteration,[string]$Profile,[string]$Target,[string]$ExpectedId) {
+    Add-Type -AssemblyName UIAutomationClient
+    Add-Type -AssemblyName UIAutomationTypes
+    Invoke-WindowButton $App 'Projetos'
+    $state = Read-ProjectFixture $Profile
+    if ($state.assessments -ne 0 -or @($state.projects).Count -ne ($Iteration-1)) { throw 'Unexpected initial native state.' }
+    if ($Iteration -eq 1) {
+        Invoke-WindowButton $App 'Novo projeto'
+        foreach ($field in @(@('Nome do projeto','Startup fixture'),@('Alvo',$Target))) {
+            $control = Find-WindowControl $App ([System.Windows.Automation.ControlType]::Edit) $field[0]
+            $control.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).SetValue($field[1])
+        }
+        Invoke-WindowButton $App 'Criar projeto'
+    } else {
+        if ($state.projects[0].id -ne $ExpectedId) { throw 'Project identity changed after reopening.' }
+        Invoke-WindowButton $App 'Startup fixture' -Prefix
+    }
+    $null = Find-WindowControl $App ([System.Windows.Automation.ControlType]::Button) 'Nova avaliação neste projeto'
+    $after = Read-ProjectFixture $Profile
+    $saved = @($after.projects)
+    $uuid = [guid]::Empty
+    if ($saved.Count -ne 1 -or $after.assessments -ne 0 -or $saved[0].name -ne 'Startup fixture' -or $saved[0].kind -ne 'code' -or $saved[0].target -ne $Target -or -not [guid]::TryParse($saved[0].id,[ref]$uuid)) { throw 'Installed project did not match the UI fixture.' }
+    return $uuid.ToString()
+}
 try {
     if ($GitHubHosted) {
         if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted' -or $env:RUNNER_OS -ne 'Windows' -or !$env:GITHUB_WORKSPACE -or !$env:RUNNER_TEMP) { throw 'A disposable GitHub-hosted Windows runner is required.' }
@@ -120,6 +182,7 @@ try {
     $result.stage = 'launch'
     $cacheRoot = if ($GitHubHosted) { $runnerTemp } else { $env:TEMP }
     $browserCache = Join-Path $cacheRoot ('openkoda-webview-'+[guid]::NewGuid())
+    $project = $null
     $probe = @'
 (async () => {
   const main = document.querySelector('main');
@@ -138,7 +201,20 @@ try {
         $launch.UseShellExecute = $false
         $launch.EnvironmentVariables['WEBVIEW2_USER_DATA_FOLDER'] = $browserCache
         $launch.EnvironmentVariables['WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS'] = "--remote-debugging-address=127.0.0.1 --remote-debugging-port=$port"
+        if ($GitHubHosted) { $launch.EnvironmentVariables['WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS'] = '--force-renderer-accessibility' }
         $app = [Diagnostics.Process]::Start($launch)
+        if ($GitHubHosted) {
+            try {
+                $project = Test-InstalledWindow $app $iteration $profileRoot $destination $project
+                $result.starts += @{iteration=$iteration;view='Projetos';projects=($iteration-1);verifiedProjectId=$project;transport='Windows UI Automation'}
+            } catch {
+                $result.diagnostics = Get-StartupDiagnostics $app $port $browserCache $profileRoot $null
+                throw
+            }
+            $app.Kill(); if (-not $app.WaitForExit(10000)) { throw 'Owned process failed to exit.' }
+            $app.Dispose(); $app = $null
+            continue
+        }
         $deadline = [DateTime]::UtcNow.AddSeconds(75)
         $tab = $null
         $observed = [ordered]@{available=$false;targets=@();failure=$null}
