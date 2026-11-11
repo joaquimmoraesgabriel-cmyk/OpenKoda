@@ -61,8 +61,9 @@ fn expected(name: &str, version: i64) -> Result<Vec<(&'static str, &'static str)
         _ => return Err("Banco fora do conjunto de recuperação revisado.".into()),
     };
     let mut schema=base.to_vec();
-    if matches!(name, "environment.sqlite3" | "environment-history.sqlite3") && version == 1 {
+    if matches!(name, "environment.sqlite3" | "environment-history.sqlite3") && version >= 1 {
         schema.push(ENVIRONMENT_SWITCH);
+        if version >= 2 { schema.push(crate::environment::REMOVAL_TABLE); }
     }
     if name=="openkoda.sqlite3" && version>=7 {
         schema.extend(crate::work_store::WORK_SCHEMA.iter().copied().filter(|(table,_)|version>=8||*table!="work_ai_dispositions"));
@@ -75,7 +76,7 @@ pub(super) fn verify_schema(db: &Connection, name: &str) -> Result<i64, String> 
     let version: i64 = db.query_row("PRAGMA user_version", [], |r| r.get(0)).map_err(failure)?;
     let valid_version = match name {
         "openkoda.sqlite3" => (1..=core::STORE_VERSION).contains(&version),
-        "environment.sqlite3" | "environment-history.sqlite3" => (0..=1).contains(&version),
+        "environment.sqlite3" | "environment-history.sqlite3" => (0..=2).contains(&version),
         _ => version == 0,
     };
     if !valid_version { return Err("Versão de banco não reconhecida para a cópia de recuperação.".into()); }
@@ -213,14 +214,18 @@ mod tests {
     #[test]
     fn historical_environment_copies_keep_legacy_and_switched_schemas_distinct() {
         let dir = tempfile::tempdir().unwrap();
-        for version in [0, 1] {
+        for version in [0, 1, 2] {
             let source = dir.path().join(format!("source-{version}.sqlite3"));
             let db = Connection::open(&source).unwrap();
             for (_, ddl) in ENVIRONMENT { db.execute_batch(ddl).unwrap(); }
-            if version == 1 {
+            if version >= 1 {
                 db.execute_batch(ENVIRONMENT_SWITCH.1).unwrap();
                 db.execute("INSERT INTO environment_switches VALUES (?1,?2,?3,?4,?5)",
                     ["target-id","plan-id","previous-state","selected-registration","recorded-time"]).unwrap();
+            }
+            if version == 2 {
+                db.execute_batch(crate::environment::REMOVAL_TABLE.1).unwrap();
+                db.execute("INSERT INTO environment_removals VALUES (?1,?2,?3)", ["removal-plan","original","removal-record"]).unwrap();
             }
             db.pragma_update(None, "user_version", version).unwrap();
             let packet = prepare_database(&source, "environment.sqlite3", &|_| false).unwrap();
@@ -228,11 +233,15 @@ mod tests {
             packet.write_new(&destination).unwrap();
             let historical = Connection::open(&destination).unwrap();
             assert_eq!(verify_schema(&historical, "environment-history.sqlite3").unwrap(), version);
-            if version == 1 {
+            if version >= 1 {
                 let previous: String = historical.query_row("SELECT previous_state FROM environment_switches", [], |r| r.get(0)).unwrap();
                 assert_eq!(previous, "previous-state");
             }
-            historical.pragma_update(None, "user_version", 1 - version).unwrap();
+            if version == 2 {
+                let retired: String = historical.query_row("SELECT data FROM environment_removals", [], |r| r.get(0)).unwrap();
+                assert_eq!(retired, "removal-record");
+            }
+            historical.pragma_update(None, "user_version", (version + 1) % 3).unwrap();
             assert!(verify_schema(&historical, "environment-history.sqlite3").is_err());
         }
     }

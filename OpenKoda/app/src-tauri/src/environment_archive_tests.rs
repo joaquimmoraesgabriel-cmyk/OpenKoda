@@ -330,7 +330,7 @@ fn environment_migration_preserves_v0_state_and_rejects_unknown_versions_without
     drop(db);
     let migrated=EnvironmentManager::with_runner(dir.path().into(),f.runner.clone()).unwrap();assert_eq!(migrated.state().unwrap().id,existing.id);drop(migrated);
     let db=Connection::open(&path).unwrap();let version:i64=db.pragma_query_value(None,"user_version",|r|r.get(0)).unwrap();
-    assert_eq!(version,1);db.pragma_update(None,"user_version",2).unwrap();drop(db);
+    assert_eq!(version,2);db.pragma_update(None,"user_version",3).unwrap();drop(db);
     let before=fs::read(&path).unwrap();assert!(EnvironmentManager::with_runner(dir.path().into(),f.runner.clone()).is_err());
     assert_eq!(before,fs::read(&path).unwrap());
 }

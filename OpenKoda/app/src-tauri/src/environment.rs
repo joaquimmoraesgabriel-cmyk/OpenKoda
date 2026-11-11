@@ -18,6 +18,11 @@ use std::{
 
 #[path = "environment_archives.rs"]
 mod archives;
+#[path = "environment_host.rs"]
+mod host;
+#[path = "environment_removal.rs"]
+mod removal;
+pub(crate) use removal::REMOVAL_TABLE;
 
 pub const DISTRO: &str = "OpenKoda-Kali";
 const HELPER: &str = include_str!("../../scripts/environment-helper.py");
@@ -45,6 +50,8 @@ struct EnvironmentState {
     updated_at: String,
     #[serde(default)]
     install_exit: Option<InstallExit>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    host_checkpoint: Option<host::Checkpoint>,
 }
 #[derive(Clone,Debug,Serialize,Deserialize)]
 #[serde(rename_all="camelCase",deny_unknown_fields)]
@@ -224,14 +231,14 @@ pub struct EnvironmentManager {
 }
 
 pub fn supports(action: &str) -> bool {
-    archives::supports(action) || matches!(action, "environment.status" | "environment.diagnose" | "environment.plan" |
+    removal::supports(action) || archives::supports(action) || matches!(action, "environment.host.check" | "environment.host.resume" | "environment.status" | "environment.diagnose" | "environment.plan" |
         "environment.provision" | "environment.resume" | "packages.catalog" | "packages.refresh" |
         "packages.plan" | "packages.apply" | "environment.image.plan" | "environment.image.provision" |
         "environment.repair.plan" | "environment.repair.apply")
 }
 
 pub fn is_maintenance(action: &str) -> bool {
-    archives::exclusive(action) || matches!(action, "environment.provision" | "environment.resume" | "packages.refresh" | "packages.apply" | "environment.image.provision" | "environment.repair.apply")
+    (removal::supports(action) && action != "environment.removal.status") || archives::exclusive(action) || matches!(action, "environment.provision" | "environment.resume" | "packages.refresh" | "packages.apply" | "environment.image.provision" | "environment.repair.apply")
 }
 
 fn now() -> String { chrono::Utc::now().to_rfc3339() }
@@ -302,7 +309,7 @@ impl EnvironmentManager {
         let root = root.canonicalize().map_err(|e| e.to_string())?;
         let mut connection = Connection::open(root.join("environment.sqlite3")).map_err(|e| e.to_string())?;
         connection.busy_timeout(Duration::from_secs(5)).map_err(|e| e.to_string())?;
-        let supported=|version:i64|if matches!(version,0|1){Ok(())}else{Err("Versão de registro de ambiente não reconhecida.".to_string())};
+        let supported=|version:i64|if matches!(version,0..=2){Ok(())}else{Err("Versão de registro de ambiente não reconhecida.".to_string())};
         let version=connection.pragma_query_value(None,"user_version",|row|row.get(0)).map_err(|e|e.to_string())?;
         supported(version)?;
         connection.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;").map_err(|e| e.to_string())?;
@@ -317,11 +324,12 @@ impl EnvironmentManager {
                     CREATE TABLE IF NOT EXISTS environment_switches(environment_id TEXT PRIMARY KEY, plan_id TEXT UNIQUE NOT NULL, previous_state TEXT NOT NULL, selected_registration TEXT NOT NULL, activated_at TEXT NOT NULL);
                     PRAGMA user_version=1;").map_err(|e|e.to_string())?;
             }
+            if version < 2 { removal::migrate(&migration)?; }
             migration.prepare("SELECT environment_id,plan_id,previous_state,selected_registration,activated_at FROM environment_switches LIMIT 0").map_err(|e|e.to_string())?;
             migration.commit().map_err(|e|e.to_string())?;
         }
         let initial = EnvironmentState { id: uuid::Uuid::new_v4().to_string(), phase: "absent".into(), registration: None,
-            last_error: None, last_output: String::new(), updated_at: now(), install_exit:None };
+            last_error: None, last_output: String::new(), updated_at: now(), install_exit:None, host_checkpoint:None };
         connection.execute("INSERT OR IGNORE INTO environment_state(id,data) VALUES(1,?1)", [serde_json::to_string(&initial).map_err(|e| e.to_string())?]).map_err(|e| e.to_string())?;
         let archives = archives::ArchiveStore::open(&root)?;
         let manager = Self { root, archives, connection: Mutex::new(connection), operation: Mutex::new(()), runner, images };
@@ -339,7 +347,7 @@ impl EnvironmentManager {
         let raw: String = connection.query_row("SELECT data FROM environment_state WHERE id=1", [], |r| r.get(0)).map_err(|e| e.to_string())?;
         let state: EnvironmentState = serde_json::from_str(&raw).map_err(|_| "Registro de ambiente inválido; nada foi apagado.")?;
         uuid::Uuid::parse_str(&state.id).map_err(|_| "Identidade de ambiente inválida.")?;
-        if !["absent", "installing", "bootstrap", "ready", "maintenance", "degraded"].contains(&state.phase.as_str()) {
+        if !["absent", "installing", "bootstrap", "ready", "maintenance", "degraded", "retiring"].contains(&state.phase.as_str()) {
             return Err("Estado de ambiente desconhecido; é necessário diagnóstico.".into());
         }
         Ok(state)
@@ -449,13 +457,23 @@ print('ready' if ready else 'unavailable')"#;
 
     pub fn handle(&self, action: &str, payload: Value) -> Result<Value, String> {
         if !payload.is_object() || payload.to_string().len() > 65536 { return Err("Solicitação de ambiente inválida.".into()); }
-        if archives::supports(action) {
-            let _operation = self.operation.try_lock().map_err(|_| "Outra operação do ambiente está em andamento.")?;
-            return self.archive_action(action, payload);
-        }
         // During a backup, even catalog/diagnose would start Linux and break
         // the confirmed offline interval. Serialize them with maintenance.
         let _operation = self.operation.try_lock().map_err(|_| "Outra operação do ambiente está em andamento.")?;
+        if matches!(action, "environment.host.check" | "environment.host.resume") {
+            empty(&payload)?;
+            return self.host_readiness(action == "environment.host.check");
+        }
+        if removal::supports(action) { return self.removal_action(action, payload); }
+        let state = self.state()?;
+        if state.phase == "retiring" {
+            if matches!(action, "environment.status" | "environment.diagnose") {
+                empty(&payload)?;
+                return Ok(json!({"status":"degraded","phase":"retiring","distro":state.registration.map(|r|r.name),"environmentId":state.id,"executorReady":false,"managedRegistration":true,"tools":[],"message":"Retirada em andamento. Consulte Remoção do Kali em Manutenção."}));
+            }
+            if action != "environment.archive.list" { return Err("Confira a retirada pendente em Manutenção antes de usar o executor.".into()); }
+        }
+        if archives::supports(action) { return self.archive_action(action, payload); }
         if self.archives.stop_pending()? && matches!(action, "environment.status" | "environment.diagnose") {
             let state=self.state()?;
             return Ok(json!({"status":"degraded","distro":state.registration.as_ref().map_or(DISTRO,|r|r.name.as_str()),"message":"Confira o estado da parada em Manutenção → Cópias do Kali.","tools":[],"phase":"archive_stop_unknown","executorReady":false}));
@@ -931,6 +949,52 @@ mod tests {
     // Option outline from the complete Portuguese help observed on Windows,
     // whose process exit code was -1. Capability parsing is locale independent.
     const WSL_HELP: &str = "Uso: wsl.exe\n    --exec, -e <CommandLine>\n    --distribution, -d <DistroName>\n    --user, -u <UserName>\n    --help\n    --install [Distribuição] [Opções...]\n        Opções:\n            --location <Location>\n            --name <Name>\n            --no-launch, -n\n    --mount <Disk>\n            --name <Name>\n    --list, -l [Opções]\n    --terminate, -t <Distro>\n    --unregister <Distro>\n";
+    #[test]
+    fn guided_host_preparation_reopens_checkpoint_and_rechecks_windows_without_installing() {
+        let dir = tempfile::tempdir().unwrap();
+        let before = json!({"windowsBuild":22631,"architecture":"x64","hypervisor":true,
+            "virtualMachinePlatform":false,"wslClient":false,"freeBytes":1024,"boot":"first-boot"});
+        let runner = fake(vec![("Windows prerequisites",success(before.to_string())),("WSL registry",success("[]"))]);
+        let manager = EnvironmentManager::with_runner(dir.path().into(),runner.clone()).unwrap();
+        assert!(manager.handle("environment.host.resume",json!({})).unwrap().is_null());
+        assert!(manager.handle("environment.host.check",json!({"shell":"bad"})).is_err());
+        assert!(runner.calls.lock().unwrap().is_empty());
+        let first = manager.handle("environment.host.check",json!({})).unwrap();
+        assert_eq!(first["step"],"prepare_wsl");
+        assert_eq!(first["rebootObserved"],false);
+        assert_eq!(manager.state().unwrap().phase,"absent");
+        drop(manager);
+
+        let mut after = before;
+        after["boot"] = json!("next-boot");
+        after["virtualMachinePlatform"] = json!(true);
+        after["wslClient"] = json!(true);
+        let pending = ProcessResult {timed_out:true,..success("incomplete")};
+        let runner = fake(vec![
+            ("Windows prerequisites",success(after.to_string())),("WSL host status",pending),
+            ("WSL host capabilities",success(WSL_HELP)),("WSL host version",success("Versão do WSL: 2.6.2.0")),
+            ("WSL registry",success("[]")),
+            ("Windows prerequisites",success(after.to_string())),("WSL host status",success("Ok")),
+            ("WSL host capabilities",success(WSL_HELP)),("WSL host version",success("WSL version: 2.6.2.0")),
+            ("WSL registry",success("[]")),
+        ]);
+        let reopened = EnvironmentManager::with_runner(dir.path().into(),runner.clone()).unwrap();
+        let incomplete = reopened.handle("environment.host.resume",json!({})).unwrap();
+        assert_eq!(incomplete["startedAt"],first["startedAt"]);
+        assert_eq!(incomplete["rebootObserved"],true);
+        assert_eq!(incomplete["step"],"inspect");
+        let ready = reopened.handle("environment.host.check",json!({})).unwrap();
+        assert_eq!(ready["startedAt"],first["startedAt"]);
+        assert_eq!(ready["step"],"review_kali");
+        assert_eq!(ready["wslVersion"],"2.6.2.0");
+        for probe in runner.calls.lock().unwrap().iter().filter(|call| call.executable.ends_with("wsl.exe")) {
+            assert_eq!(probe.args.len(),1);
+            assert!(matches!(probe.args[0].as_str(),"--status"|"--help"|"--version"));
+        }
+        assert_eq!(reopened.state().unwrap().phase,"absent");
+        assert!(!reopened.install_location().exists());
+    }
+
     #[test]
     fn complete_wsl_help_with_exit_minus_one_allows_only_a_reviewable_plan() {
         let dir=tempfile::tempdir().unwrap();

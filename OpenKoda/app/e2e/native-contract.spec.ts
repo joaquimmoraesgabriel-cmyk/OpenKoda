@@ -83,6 +83,14 @@ async function nativeFixture(page:Page, environmentReady=false, bridgeMode='succ
         }]};
         return {status:'ready',distro:previousName,environmentId:formerId,message:'Diagnóstico anterior',tools:[],executorReady:true};
       }
+      if(action==='environment.host.check'||action==='environment.host.resume'){
+        if(action==='environment.host.resume' && !sessionStorage.getItem('host-checkpoint')) return null;
+        if(action==='environment.host.check') sessionStorage.setItem('host-checkpoint','test');
+        const resumed = action==='environment.host.resume';
+        return {step:resumed?'review_kali':'prepare_wsl',startedAt:now,checkedAt:now,rebootObserved:resumed,
+          windowsBuild:22631,architecture:'x64',virtualMachinePlatform:resumed,hypervisor:true,
+          virtualizationFirmware:null,freeBytes:16*2**30,distributionCount:0,wslClient:resumed,wslVersion:resumed?'2.6.1':null};
+      }
       if(action==='environment.status'||action==='environment.diagnose')return {status:environmentReady?'ready':imageMode==='registered'||imageMode.startsWith('repair')?'degraded':'unavailable',distro:'OpenKoda-Kali',message:'Ambiente de contrato sem executor.',tools:[],executorReady:false,managedRegistration:environmentReady||imageMode==='registered'||imageMode.startsWith('repair'),imageProvisionAvailable:!environmentReady&&imageMode!=='registered'&&!imageMode.startsWith('repair'),repairAvailable:imageMode.startsWith('repair')};
       if(action==='packages.catalog')return {version:'1',tools:[],inventoryVerified:false,distro:'OpenKoda-Kali'};
       if(action==='environment.archive.list' && activationFixture){
@@ -538,6 +546,26 @@ test('preparação do Kali só aplica o plano depois da revisão',async({page})=
   await page.getByRole('button',{name:'Executar operação revisada',exact:true}).click();
   await expect(page.getByText('Preparação encerrada. Consulte o estado verificado do ambiente.',{exact:true})).toBeVisible();
   expect((await calls(page,'environment.provision'))[0].payload).toEqual({planId:'maintenance-fixture',digest:'maintenance-fixture-digest'});
+});
+
+test('preparação guiada do Windows reconsulta os requisitos após reabrir', async ({page}) => {
+  await nativeFixture(page);
+  async function openEnvironment() {
+    await page.getByRole('button',{name:'Kali e ferramentas',exact:true}).click();
+    await page.getByRole('button',{name:'Ambiente',exact:true}).click();
+  }
+  await page.goto('/');
+  await openEnvironment();
+  const guidance = page.getByRole('region',{name:'Preparar o Windows para o WSL'});
+  await guidance.getByRole('button',{name:'Verificar requisitos do Windows'}).click();
+  await expect(guidance.getByLabel('Comando manual para o administrador')).toHaveText('wsl --install --no-distribution');
+  expect(await calls(page,'environment.provision')).toHaveLength(0);
+  await page.reload();
+  await openEnvironment();
+  await expect(guidance.getByRole('status')).toContainText('O WSL respondeu');
+  await expect(guidance.getByLabel('Comando manual para o administrador')).toHaveCount(0);
+  expect(await calls(page,'environment.host.check')).toHaveLength(0);
+  expect(await calls(page,'environment.provision')).toHaveLength(0);
 });
 
 test('imagem oficial exige escolha explícita e revisão após falha da preparação padrão',async({page})=>{

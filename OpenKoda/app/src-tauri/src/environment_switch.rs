@@ -44,7 +44,7 @@ impl EnvironmentManager {
         }
     }
 
-    fn restored_candidate(&self,id:&str)->Result<EnvironmentState,String>{
+    fn restored_candidate(&self,id:&str,current:&EnvironmentState)->Result<EnvironmentState,String>{
         uuid(id)?;
         if self.switched_before(id)?{return Err("Esta restauração já foi ativada. Uma nova restauração fornece uma identidade nova.".into())}
         let record=self.archives.get(id)?;
@@ -52,7 +52,7 @@ impl EnvironmentManager {
         if record.status!="inactive" || restore.id!=id || restore.backup.source_id==id{return Err("A restauração ainda não tem um marcador novo e confirmado.".into())}
         let registered=self.clone_registration(id)?;
         if Some(&registered)!=record.registration.as_ref(){return Err("O registro WSL diverge da restauração conferida.".into())}
-        Ok(EnvironmentState{id:id.into(),phase:"ready".into(),registration:Some(registered),last_error:None,last_output:String::new(),updated_at:now(),install_exit:None})
+        Ok(EnvironmentState{id:id.into(),phase:"ready".into(),registration:Some(registered),last_error:None,last_output:String::new(),updated_at:now(),install_exit:None,host_checkpoint:current.host_checkpoint.clone()})
     }
 
     fn switch_payload(&self,current:&EnvironmentState,target:&EnvironmentState)->Result<Value,String>{
@@ -69,7 +69,7 @@ impl EnvironmentManager {
 
     pub(super) fn activate_plan(&self,selection:Selection)->Result<Value,String>{
         let current=self.switch_origin()?;
-        let target=self.restored_candidate(&selection.id)?;
+        let target=self.restored_candidate(&selection.id,&current)?;
         self.save_plan(ACTIVATE,self.switch_payload(&current,&target)?)
     }
 
@@ -77,7 +77,7 @@ impl EnvironmentManager {
         let plan=self.consume_plan(approval,ACTIVATE)?;
         let current=self.switch_origin()?;
         let id=plan.payload["targetEnvironmentId"].as_str().ok_or("Identidade do clone ausente.")?;
-        let target=self.restored_candidate(id)?;
+        let target=self.restored_candidate(id,&current)?;
         if self.switch_payload(&current,&target)?!=plan.payload {return Err("O vínculo mudou. Revise outra troca de executor.".into())}
         let probe=self.helper(&target,"probe",vec![],45)?;
         if probe["environmentId"]!=target.id || probe["user"]!="openkoda" || !healthy_probe(&probe) {

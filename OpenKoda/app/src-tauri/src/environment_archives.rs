@@ -29,7 +29,7 @@ struct PageRequest { before_id: Option<String> }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all="camelCase", deny_unknown_fields)]
-struct SpoolInventory { raw_captures: u32, terminal_captures: u32, session_records: u32 }
+pub(super) struct SpoolInventory { raw_captures: u32, terminal_captures: u32, session_records: u32 }
 // Existing receipts implicitly describe a raw VHDX. New exports use WSL's TAR stream.
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
@@ -365,7 +365,7 @@ impl EnvironmentManager {
         stop_check(&current,&inventory,name)
     }
 
-    fn inspect_spool(&self,state:&EnvironmentState)->Result<SpoolInventory,String>{
+    pub(super) fn spool_inventory(&self,state:&EnvironmentState)->Result<SpoolInventory,String>{
         let registration=self.owned_registration(state)?;
         let command=CommandSpec{
             purpose:"WSL archive spool inventory", executable:system_binary("wsl.exe"),
@@ -376,8 +376,12 @@ impl EnvironmentManager {
         let result=self.runner.run(&command)?;
         if checked(&result).is_err()||!user_stderr_ok(&result.stderr){return Err("O inventário do spool não pôde ser confirmado. Confira as capturas e sessões pendentes antes de exportar.".into())}
         let inventory:SpoolInventory=serde_json::from_str(result.stdout.trim()).map_err(|_|"Inventário de capturas inválido.")?;
-        if inventory.raw_captures>0{return Err("Há bytes de captura no Kali. Em Configurações → Dados e privacidade, revise a retenção das capturas no Kali antes de exportar o disco.".into())}
         if inventory.terminal_captures>256 || inventory.session_records>100000{return Err("Inventário de capturas acima do limite.".into())}
+        Ok(inventory)
+    }
+    fn inspect_spool(&self,state:&EnvironmentState)->Result<SpoolInventory,String>{
+        let inventory=self.spool_inventory(state)?;
+        if inventory.raw_captures>0{return Err("Há bytes de captura no Kali. Em Configurações → Dados e privacidade, revise a retenção das capturas no Kali antes de exportar o disco.".into())}
         Ok(inventory)
     }
     fn archive_export_plan(&self)->Result<Value,String>{

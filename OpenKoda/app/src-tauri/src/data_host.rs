@@ -165,11 +165,15 @@ fn archive_receipt_controls(raw: &Value, view: &mut Value) {
 fn archive_view(action: &str, raw: Value, redactor: &dyn DataRedactor) -> Value {
     let mut view = project_value(raw.clone(), redactor);
     match action {
-        "environment.archive.exportPlan" | "environment.archive.importPlan" | "environment.archive.activatePlan" => {
+        "environment.archive.exportPlan" | "environment.archive.importPlan" | "environment.archive.activatePlan" | "environment.removal.plan" => {
             // Do not issue a usable review digest if the user cannot see the whole reviewed payload.
             if redactor.mode() == RedactionMode::MetadataOnly || view["payload"] != raw["payload"] {
                 view["digest"] = Value::Null;
             }
+        }
+        "environment.removal.inspect" if redactor.mode() == RedactionMode::MetadataOnly ||
+            view["record"]["registration"] != raw["record"]["registration"] => {
+            view["confirmedNow"] = json!(false);
         }
         "environment.archive.list" if redactor.mode() == RedactionMode::MetadataOnly => {
             if let (Some(records), Some(views)) = (raw["records"].as_array(), view["records"].as_array_mut()) {
@@ -201,7 +205,7 @@ pub(crate) fn project_response(action:&str,value:Value,store:&Store,redactor:&dy
     }
     let state=store.snapshot()?;
     let replaced=replace_evidence(store,&state,value,redactor)?;
-    let mut projected=if action.starts_with("environment.archive.") {
+    let mut projected=if action.starts_with("environment.archive.") || action.starts_with("environment.removal.") {
         archive_view(action, replaced, redactor)
     } else { project_value(replaced,redactor) };
     if let Some(object)=projected.as_object_mut(){

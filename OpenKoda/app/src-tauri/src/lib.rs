@@ -295,9 +295,9 @@ async fn request(
                     services.supervisor.shared_arbiter().ensure_quiescent(&store)?;
                 }
                 if services.kali.has_unresolved()&&!matches!(request.action.as_str(),"environment.repair.plan"|"environment.repair.apply"){return Err("Reconcilie sessões MCP com término não confirmado antes da manutenção.".into());}
-                if matches!(request.action.as_str(),"environment.archive.activatePlan"|"environment.archive.activate")
+                if matches!(request.action.as_str(),"environment.archive.activatePlan"|"environment.archive.activate"|"environment.removal.plan"|"environment.removal.detach")
                     && (services.retention.has_unresolved()? || services.remediation.has_unresolved()?) {
-                    return Err("Reconcilie a retenção e a correção pendentes antes de trocar o executor.".into());
+                    return Err("Reconcilie a retenção e a correção pendentes antes de alterar o executor.".into());
                 }
                 if store.snapshot()?.assessments.iter().any(|a| core::active(&a.status)) {
                     return Err("Manutenção bloqueada enquanto há avaliações ativas ou com efeito desconhecido.".into());
