@@ -72,7 +72,7 @@ pub struct ScopeResult {pub assessment_id:String,pub scope_id:String,pub revisio
 #[derive(Clone,Debug,Serialize,Deserialize,PartialEq,Eq)]
 #[serde(rename_all="camelCase",deny_unknown_fields)]
 pub struct ScopeReceipt {pub idempotency_key:String,pub action:String,pub assessment_id:String,pub request_digest:String,pub created_at:String,pub result:ScopeResult}
-#[derive(Clone,Deserialize)]
+#[derive(Clone,Deserialize,Serialize)]
 #[serde(rename_all="camelCase",deny_unknown_fields)]
 pub struct CreationScope {pub methods:Vec<String>,pub window:ScopeWindow,pub project_digest:String,pub catalog_version:String,pub acknowledge_scope:bool}
 
@@ -141,6 +141,9 @@ pub fn validate_state(s:&Snapshot)->Result<(),String>{
     for a in &s.assessments{binding(s,a)?;}
     ids.clear();for r in &s.scope_revisions{if !ids.insert(&r.id)||!owners.contains(&r.assessment_id){return Err(err("scope_integrity_error"));}}
     let mut keys=HashSet::new();for receipt in &s.scope_receipts{core::valid_id(&receipt.idempotency_key)?;stamp(&receipt.created_at)?;let source=assessment(s,&receipt.assessment_id)?;let result=assessment(s,&receipt.result.assessment_id)?;
+        if receipt.action == "assessment.create" && (source.id != result.id || source.id != simple_creation_id(&source.project_id, &receipt.idempotency_key)) {
+            return Err(err("scope_integrity_error"));
+        }
         if !keys.insert((&receipt.action,&receipt.assessment_id,&receipt.idempotency_key))||!sha(&receipt.request_digest)||source.project_id!=result.project_id||result.scope_id.as_ref()!=Some(&receipt.result.scope_id)||receipt.result.revision_id.as_ref().is_some_and(|id|!s.scope_revisions.iter().any(|r|&r.id==id&&r.assessment_id==result.id)){return Err(err("scope_integrity_error"));}
     }Ok(())
 }
@@ -262,9 +265,12 @@ fn derive_preview(s:&Snapshot,p:&Derive,work:&[Value])->Result<Value,String>{
     let proposal=json!({"projectId":a.project_id,"title":title,"body":body(a,&objective,&methods,&window)?,"copyFields":p.copy_fields});
     Ok(json!({"sourceAssessmentId":a.id,"expectedStateDigest":p.expected_state_digest,"reviewDigest":hash(&json!({"action":"assessment.deriveCreate","stateDigest":p.expected_state_digest,"proposal":proposal})),"proposal":proposal,"canCreate":status["actions"]["canDerive"],"reasonCodes":status["actions"]["reasonCodes"],"limits":LIMITS}))
 }
-fn replay(s:&Snapshot,action:&str,aid:&str,key:&str,request:&str)->Result<Option<ScopeResult>,String>{core::valid_id(key)?;if let Some(r)=s.scope_receipts.iter().find(|r|r.action==action&&r.assessment_id==aid&&r.idempotency_key==key){if r.request_digest!=request{return Err(err("scope_idempotency_conflict"));}return Ok(Some(r.result.clone()));}if s.scope_receipts.iter().filter(|r|r.assessment_id==aid).count()>=1000{return Err(err("scope_limit_reached"));}Ok(None)}
-fn receipt(s:&mut Snapshot,action:&str,aid:&str,key:&str,request:&str,result:ScopeResult){s.scope_receipts.push(ScopeReceipt{idempotency_key:key.into(),action:action.into(),assessment_id:aid.into(),request_digest:request.into(),created_at:model::now(),result});}
-fn scope_result(s:&Snapshot,aid:&str)->Result<ScopeResult,String>{let a=assessment(s,aid)?;let b=binding(s,a)?.ok_or_else(||err("scope_integrity_error"))?;Ok(ScopeResult{assessment_id:aid.into(),scope_id:b.id.clone(),revision_id:b.current_revision_id.clone()})}
+pub(crate) fn simple_creation_id(project_id: &str, key: &str) -> String {
+    scope_targets::derived_id("openkoda.single-assessment.v1", &[project_id, key])
+}
+pub(crate) fn replay(s:&Snapshot,action:&str,aid:&str,key:&str,request:&str)->Result<Option<ScopeResult>,String>{core::valid_id(key)?;if let Some(r)=s.scope_receipts.iter().find(|r|r.action==action&&r.assessment_id==aid&&r.idempotency_key==key){if r.request_digest!=request{return Err(err("scope_idempotency_conflict"));}return Ok(Some(r.result.clone()));}if s.scope_receipts.iter().filter(|r|r.assessment_id==aid).count()>=1000{return Err(err("scope_limit_reached"));}Ok(None)}
+pub(crate) fn receipt(s:&mut Snapshot,action:&str,aid:&str,key:&str,request:&str,result:ScopeResult){s.scope_receipts.push(ScopeReceipt{idempotency_key:key.into(),action:action.into(),assessment_id:aid.into(),request_digest:request.into(),created_at:model::now(),result});}
+pub(crate) fn scope_result(s:&Snapshot,aid:&str)->Result<ScopeResult,String>{let a=assessment(s,aid)?;let b=binding(s,a)?.ok_or_else(||err("scope_integrity_error"))?;Ok(ScopeResult{assessment_id:aid.into(),scope_id:b.id.clone(),revision_id:b.current_revision_id.clone()})}
 pub fn handle(action:&str,payload:Value,store:&Store,redact:impl Fn(&str)->String)->Result<Value,String>{
     if combined_supports(action){return handle_combined(action,payload,store);}
     if !payload.is_object()||payload.to_string().len()>16384{return Err(err("scope_invalid_input"));}

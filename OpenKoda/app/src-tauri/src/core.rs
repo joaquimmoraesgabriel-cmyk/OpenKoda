@@ -207,7 +207,7 @@ impl Store {
             "snapshot" => { empty(&request.payload)?; encode(self.snapshot()?) }
             "project.create" => self.create_project(decode(request.payload)?),
             "project.archive" => self.archive_project(decode(request.payload)?),
-            "assessment.create" => self.create_assessment(decode(request.payload)?),
+            "assessment.create" => self.create_assessment(request.payload),
             "evidence.import" => self.import_evidence(decode(request.payload)?),
             "assessment.start" | "assessment.pause" | "assessment.cancel" => {
                 let input: IdInput = decode(request.payload)?;
@@ -275,20 +275,59 @@ impl Store {
         })
     }
 
-    fn create_assessment(&self, input: AssessmentInput) -> Result<Value, String> {
+    fn create_assessment(&self, mut payload: Value) -> Result<Value, String> {
+        // Absence keeps the original caller contract. An explicitly invalid key must
+        // never silently turn a retry into a new, unkeyed creation.
+        let key = payload.as_object_mut().and_then(|fields| fields.remove("idempotencyKey"))
+            .map(decode::<String>).transpose()?;
+        let mut input: AssessmentInput = decode(payload)?;
+        let intent = if let Some(key) = key {
+            // The typed shape fixes JSON field order, including the scope window.
+            // Methods form a set. Duplicates are still rejected by initialize.
+            if let Some(scope) = &mut input.scope { scope.methods.sort(); }
+            let canonical = serde_json::to_string(&input).map_err(db_error)?;
+            Some((key, hash(&canonical)))
+        } else { None };
         valid_id(&input.project_id)?;
+        let assessment_id = match &intent {
+            Some((key, _)) => {
+                valid_id(key)?;
+                crate::scope::simple_creation_id(&input.project_id, key)
+            }
+            None => id(),
+        };
+        let replay = |state: &Snapshot| -> Result<Option<Value>, String> {
+            let Some((key, digest)) = &intent else { return Ok(None); };
+            let Some(result) = crate::scope::replay(state, "assessment.create", &assessment_id, key, digest)? else {
+                return Ok(None);
+            };
+            let saved = state.assessments.iter().find(|a| a.id == result.assessment_id && a.project_id == input.project_id)
+                .ok_or("scope_integrity_error: avaliação do recibo não encontrada no projeto.")?;
+            encode(saved).map(Some)
+        };
+        // Archived projects remain readable. Only a new creation needs an active
+        // project and a current scope. An exact replay does not edit either one.
+        if intent.is_some() {
+            if let Some(saved) = replay(&self.snapshot()?)? { return Ok(saved); }
+        }
         let title = text(&input.title, "Título", 160, true)?;
         let objective = text(&input.objective, "Objetivo", 4000, true)?;
         let target = validate_target(&input.kind, &input.target)?;
         self.mutate(|s| {
+            // A concurrent caller may have committed since the read-only lookup.
+            if let Some(saved) = replay(s)? { return Ok(saved); }
             let project = s.projects.iter().find(|p| p.id == input.project_id && !p.archived).ok_or("Projeto não encontrado ou arquivado.")?;
             if project.kind != input.kind || project.target != target { return Err("O alvo e a modalidade devem corresponder ao projeto selecionado. Cadastre outro projeto para outro escopo.".into()); }
-            let mut assessment = Assessment { id:id(), project_id:input.project_id, title, kind:input.kind, target, objective,
+            let mut assessment = Assessment { id:assessment_id.clone(), project_id:input.project_id.clone(), title, kind:input.kind, target, objective,
                 status:"draft".into(), created_at:now(), updated_at:now(),
                 events:vec![event("Rascunho criado. Nenhuma operação foi iniciada.", "info")],
                 evidence:vec![], coverage:vec![], summary:String::new(), scope_id:None };
             crate::scope::initialize(s,&mut assessment,input.scope.as_ref())?;
             s.assessments.push(assessment.clone());
+            if let Some((key, digest)) = &intent {
+                let result = crate::scope::scope_result(s, &assessment_id)?;
+                crate::scope::receipt(s, "assessment.create", &assessment_id, key, digest, result);
+            }
             encode(assessment)
         })
     }
@@ -583,7 +622,7 @@ struct IdInput { id:String }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ProjectInput { name:String,kind:String,target:String,#[serde(default)]description:String }
-#[derive(Deserialize)]
+#[derive(Deserialize, serde::Serialize)]
 #[serde(rename_all="camelCase",deny_unknown_fields)]
 struct AssessmentInput { project_id:String,title:String,kind:String,target:String,objective:String,#[serde(default)]scope:Option<crate::scope::CreationScope> }
 #[derive(Deserialize)]
@@ -623,6 +662,116 @@ mod tests {
         call(&store,"project.archive",json!({"id":p["id"]})).unwrap();drop(store);
         let reopened=Store::open(dir.path().into()).unwrap();let s=reopened.snapshot().unwrap();assert!(s.projects[0].archived);assert_eq!(s.assessments[0].id,a["id"].as_str().unwrap());
         assert!(call(&reopened,"assessment.create",json!({"projectId":p["id"],"title":"Outra","kind":"web","target":p["target"],"objective":"teste"})).is_err());
+    }
+    #[test]
+    fn single_creation_replays_one_reviewed_assessment_after_reopen_and_archive() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path().into()).unwrap();
+        let p = project(&store);
+        let payload = json!({
+            "projectId":p["id"], "title":"Revisão", "kind":"web", "target":p["target"],
+            "objective":"Rever um alvo", "idempotencyKey":id(),
+            "scope":crate::scope::test_creation(&store, p["id"].as_str().unwrap(), &["http.headers.v1","ai.remote-review.v1"])
+        });
+        let first = call(&store, "assessment.create", payload.clone()).unwrap();
+        drop(store);
+        let store = Store::open(dir.path().into()).unwrap();
+        call(&store, "project.archive", json!({"id":p["id"]})).unwrap();
+        let history = encode(store.snapshot().unwrap()).unwrap();
+        let scope = &payload["scope"];
+        let reordered: Value = serde_json::from_str(&format!(
+            r#"{{"scope":{{"window":{{"endsAt":null,"startsAt":null}},"methods":["ai.remote-review.v1","http.headers.v1"],"catalogVersion":{},"acknowledgeScope":true,"projectDigest":{}}},"idempotencyKey":{},"objective":"Rever um alvo","target":{},"kind":"web","title":"Revisão","projectId":{}}}"#,
+            scope["catalogVersion"], scope["projectDigest"], payload["idempotencyKey"], p["target"], p["id"]
+        )).unwrap();
+        assert_eq!(call(&store, "assessment.create", reordered).unwrap(), first);
+        let mut changed = payload.clone();
+        changed["scope"]["methods"] = json!([]);
+        assert!(call(&store, "assessment.create", changed).unwrap_err().contains("scope_idempotency_conflict"));
+        let mut fresh = payload;
+        fresh["idempotencyKey"] = json!(id());
+        assert!(call(&store, "assessment.create", fresh).is_err());
+        assert_eq!(encode(store.snapshot().unwrap()).unwrap(), history);
+        assert_eq!(history["scopeReceipts"].as_array().unwrap().len(), 1);
+        assert_eq!(history["scopeRevisions"].as_array().unwrap().len(), 1);
+        assert_eq!(history["scopeReceipts"][0]["result"]["revisionId"], history["scopeRevisions"][0]["id"]);
+    }
+
+    #[test]
+    fn single_creation_concurrent_draft_retries_are_atomic_and_project_scoped() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path().into()).unwrap();
+        let p = project(&store);
+        let payload = json!({"projectId":p["id"],"title":"Revisão","kind":"web","target":p["target"],
+            "objective":"Rever um alvo","idempotencyKey":id()});
+        store.fail_commit_when(|s| !s.scope_receipts.is_empty());
+        assert!(call(&store, "assessment.create", payload.clone()).is_err());
+        let initial = store.snapshot().unwrap();
+        assert!(initial.assessments.is_empty() && initial.assessment_scopes.is_empty() && initial.scope_receipts.is_empty());
+        let barrier = std::sync::Barrier::new(2);
+        let submit = || {
+            barrier.wait();
+            call(&store, "assessment.create", payload.clone()).unwrap()
+        };
+        let first = std::thread::scope(|threads| {
+            let other = threads.spawn(submit);
+            let created = submit();
+            assert_eq!(created, other.join().unwrap());
+            created
+        });
+        let state = store.snapshot().unwrap();
+        assert_eq!((state.assessments.len(),state.assessment_scopes.len(),state.scope_receipts.len()), (1,1,1));
+        assert!(state.scope_receipts[0].result.revision_id.is_none() && state.scope_revisions.is_empty());
+        let mut changed = payload.clone();
+        changed["title"] = json!("Outra avaliação");
+        assert!(call(&store, "assessment.create", changed).unwrap_err().contains("scope_idempotency_conflict"));
+        let mut other_project = payload.clone();
+        other_project["projectId"] = project(&store)["id"].clone();
+        let other = call(&store, "assessment.create", other_project).unwrap();
+        assert_ne!(first["id"], other["id"]);
+        assert_ne!(first["projectId"], other["projectId"]);
+        let mut fresh = payload.clone();
+        fresh["idempotencyKey"] = json!(id());
+        assert_ne!(first["id"], call(&store, "assessment.create", fresh).unwrap()["id"]);
+        for invalid in [Value::Null, json!(""), json!("invalid"), json!(42)] {
+            let mut bad = payload.clone();
+            bad["idempotencyKey"] = invalid;
+            assert!(call(&store, "assessment.create", bad).is_err());
+        }
+        let mut legacy = payload;
+        legacy.as_object_mut().unwrap().remove("idempotencyKey");
+        assert_ne!(call(&store, "assessment.create", legacy.clone()).unwrap()["id"],
+            call(&store, "assessment.create", legacy).unwrap()["id"]);
+        let state = store.snapshot().unwrap();
+        assert_eq!((state.assessments.len(),state.scope_receipts.len()), (5,3));
+    }
+
+    #[test]
+    fn single_creation_receipt_is_bound_to_its_assessment_and_replays_at_capacity() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path().into()).unwrap();
+        let p = project(&store);
+        let payload = json!({"projectId":p["id"],"title":"Original","kind":"web","target":p["target"],
+            "objective":"Rever um alvo","idempotencyKey":id()});
+        let created = call(&store, "assessment.create", payload.clone()).unwrap();
+        assert!(store.mutate(|s| {
+            s.scope_receipts[0].idempotency_key = id();
+            Ok(())
+        }).unwrap_err().contains("scope_integrity_error"));
+        store.mutate(|s| {
+            let mut existing = s.scope_receipts[0].clone();
+            existing.action = "assessment.scopeSave".into();
+            for _ in 1..1000 {
+                existing.idempotency_key = id();
+                s.scope_receipts.push(existing.clone());
+            }
+            Ok(())
+        }).unwrap();
+        let state = store.snapshot().unwrap();
+        assert_eq!(state.scope_receipts.len(), 1000);
+        assert!(crate::scope::replay(&state, "assessment.scopeSave", created["id"].as_str().unwrap(),
+            &id(), &hash("new request")).unwrap_err().contains("scope_limit_reached"));
+        assert_eq!(call(&store, "assessment.create", payload).unwrap(), created);
+        assert_eq!(store.snapshot().unwrap().scope_receipts.len(), 1000);
     }
     #[test] fn invalid_scope_and_secret_fields_rejected(){
         let dir=tempfile::tempdir().unwrap();let s=Store::open(dir.path().into()).unwrap();let p=project(&s);

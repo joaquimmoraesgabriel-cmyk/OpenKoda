@@ -281,6 +281,54 @@ try {
     for (const item of oldAssessment.evidence) expect(snapshot().assessments.find(a => a.id === legacy.assessmentId).evidence.find(e => e.id === item.id)).toEqual(item);
     return { adoptedRevisionId: adopted.saved.revisionId, objectiveAndOldProofsPreserved: true, oldPlansNotBackfilled: true, newPlanScopeRef: plan.scopeRef, hits: traffic.length };
   });
+  await gate('single-assessment-create-replays-without-duplication', async () => {
+    const project = await request('project.create', { name: 'Retry of single assessment', kind: 'web', target: result.target });
+    const options = await request('assessment.scopeOptions', { projectId: project.id });
+    const scope = { methods: ['http.headers.v1'], window: unboundedScopeWindow(), projectDigest: options.projectDigest,
+      catalogVersion: options.catalogVersion, acknowledgeScope: true };
+    const before = fingerprint(), entries = [];
+    for (const mode of ['draft', 'reviewed']) {
+      const input = { projectId: project.id, title: `Retry of ${mode} creation`, kind: 'web', target: result.target,
+        objective: 'Observe only the approved local target.', idempotencyKey: randomUUID(), ...(mode === 'reviewed' ? { scope } : {}) };
+      const start = snapshot();
+      // Discard the committed response. Recover the identity independently from the database.
+      await request('assessment.create', input);
+      const committed = fingerprint();
+      const created = committed.state.assessments.filter(row => !start.assessments.some(previous => previous.id === row.id));
+      expect(created).toHaveLength(1);
+      const assessmentId = created[0].id;
+      expect(created[0]).toMatchObject({ projectId: project.id, title: input.title });
+      const receiptRows = committed.state.scopeReceipts.filter(row => row.action === 'assessment.create' && row.idempotencyKey === input.idempotencyKey);
+      expect(receiptRows).toHaveLength(1);
+      expect(receiptRows[0].assessmentId).toBe(assessmentId);
+      const sequential = await request('assessment.create', input);
+      const concurrent = await Promise.all([request('assessment.create', input), request('assessment.create', input)]);
+      expect([sequential, ...concurrent].map(reply => reply.id)).toEqual([assessmentId, assessmentId, assessmentId]);
+      expect(fingerprint().sha256).toBe(committed.sha256);
+      await denied('assessment.create', { ...input, title: 'Different title reusing the key' }, 'scope_idempotency_conflict');
+      expect((await scopeStatus(assessmentId)).phase).toBe(mode === 'reviewed' ? 'draft' : 'unreviewed');
+      entries.push({ mode, input, assessmentId, detail: { assessmentId, assessmentsCreated: created.length,
+        receiptsForKey: receiptRows.length, sameAssessmentId: true, responseDiscarded: true,
+        concurrentReplays: concurrent.length, conflictingPayloadRejected: true } });
+    }
+    const saved = fingerprint();
+    await closeApp(); await openApp(binary);
+    for (const entry of entries) {
+      const reply = await request('assessment.create', entry.input);
+      expect(reply.id).toBe(entry.assessmentId);
+      entry.detail.sameIdAfterReopen = true;
+    }
+    expect(fingerprint().sha256).toBe(saved.sha256);
+    const fresh = await request('assessment.create', { ...entries[1].input, idempotencyKey: randomUUID() });
+    expect(fresh.id).not.toBe(entries[1].assessmentId);
+    const after = fingerprint();
+    expect(after.state.assessments.filter(item => item.projectId === project.id)).toHaveLength(3);
+    expect(after.state.executions).toEqual(before.state.executions);
+    expect(after.state.plans).toEqual(before.state.plans);
+    expect(after.requests).toBe(before.requests);
+    expect(traffic).toHaveLength(1);
+    return { draft: entries[0].detail, reviewed: entries[1].detail, newKeyCreatesDistinctAssessment: true };
+  });
   await gate('scope-restart-preserves-authority-and-history', async () => {
     const before = fingerprint(); finalHash = before.sha256; expect(before.requests).toBe(0); expect(before.vault).toBe(0);
     await writeFile(join(directory, 'final-before-restart.json'), JSON.stringify(before, null, 2));
