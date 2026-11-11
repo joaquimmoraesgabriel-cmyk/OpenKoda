@@ -138,6 +138,14 @@ async fn request(
             return scope_targets::handle_catalog(&request.action,request.payload,&store);
         }
         if scope::supports(&request.action) {
+            if request.action == scope::COMBINED_DERIVE_CREATE {
+                return scope::dispatch_combined_derivation(
+                    request.payload, &store, &services.environment_gate, || {
+                        ensure_purge_access(&services, scope::COMBINED_DERIVE_CREATE)?;
+                        allow_new_work(&services)
+                    },
+                );
+            }
             if scope::mutates(&request.action)&&request.action!="assessment.scopeRevoke" {
                 let _lease=services.environment_gate.try_write().map_err(|_|"scope_busy: aguarde ou reconcilie o trabalho antes de revisar o escopo.")?;
                 ensure_purge_access(&services,&request.action)?;allow_new_work(&services)?;

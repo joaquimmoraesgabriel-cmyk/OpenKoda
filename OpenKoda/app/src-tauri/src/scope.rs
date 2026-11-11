@@ -353,7 +353,101 @@ fn commit_fields(payload:&mut Value,ack:&str,has_key_in_proposal:bool)->Result<(
     let review=object.remove("reviewDigest").and_then(|v|v.as_str().map(str::to_owned)).ok_or_else(||err("scope_review_changed"))?;
     let key=if has_key_in_proposal{object.get("idempotencyKey").cloned()}else{object.remove("idempotencyKey")}.and_then(|v|v.as_str().map(str::to_owned)).ok_or_else(||err("scope_invalid_input"))?;core::valid_id(&key)?;Ok((review,key))
 }
+pub(crate) const COMBINED_DERIVE_CREATE: &str = "assessment.combinedDeriveCreate";
+
+pub(crate) fn dispatch_combined_derivation(
+    payload: Value,
+    store: &Store,
+    environment: &std::sync::RwLock<()>,
+    authorize: impl Fn() -> Result<(), String>,
+) -> Result<Value, String> {
+    let commit = CombinedDerivationCommit::parse(payload)?;
+    {
+        // Committed retries share a lease with each other and with workers.
+        let _read = environment.try_read().map_err(|_| err("scope_busy"))?;
+        authorize()?;
+        if let Some(result) = commit.receipt(&store.snapshot()?)? {
+            return derivation_response(store, &result, true);
+        }
+    }
+    let _write = environment.try_write().map_err(|_| err("scope_busy"))?;
+    // The environment and the receipt may have changed across the lease switch.
+    authorize()?;
+    commit.create(store)
+}
+
+struct CombinedDerivationCommit {
+    proposal: CombinedDerive,
+    review: String,
+    digest: String,
+}
+
+impl CombinedDerivationCommit {
+    fn parse(mut payload: Value) -> Result<Self, String> {
+        if !payload.is_object() || payload.to_string().len() > 65536 {
+            return Err(err("scope_invalid_input"));
+        }
+        let digest = hash(&payload);
+        let (review, _) = commit_fields(&mut payload, "acknowledgeNewAssessment", true)?;
+        Ok(Self { proposal: decode(payload)?, review, digest })
+    }
+
+    fn receipt(&self, snapshot: &Snapshot) -> Result<Option<ScopeResult>, String> {
+        replay(snapshot, COMBINED_DERIVE_CREATE, &self.proposal.assessment_id,
+               &self.proposal.idempotency_key, &self.digest)
+    }
+
+    fn create(self, store: &Store) -> Result<Value, String> {
+        let input = &self.proposal;
+        let source_id = &input.assessment_id;
+        let _scope = store.scope_gate.lock().map_err(|_| err("scope_busy"))?;
+        let work = admitted_work(store, source_id)?;
+        let (result, replayed) = store.mutate(|snapshot| {
+            if let Some(result) = self.receipt(snapshot)? {
+                return Ok((result, true));
+            }
+            let preview = combined_derive_preview(snapshot, input, &work)?;
+            if preview["canCreate"] != true {
+                return Err(err("assessment_work_active"));
+            }
+            if preview["reviewDigest"] != self.review {
+                return Err(err("scope_review_changed"));
+            }
+            let source = assessment(snapshot, source_id)?;
+            let source_scope = current_ref(snapshot, source_id)?;
+            let source_legacy_digest = source_scope.is_none().then(|| hash(&json!({
+                "id":source.id,"projectId":source.project_id,"objective":source.objective,
+                "kind":source.kind,"target":source.target
+            })));
+            let origin = ScopeOrigin {
+                source_assessment_id: source_id.clone(),
+                source_legacy_digest,
+                source_scope,
+                copy_fields: input.copy_fields.clone(),
+                created_at: model::now(),
+            };
+            let project_id = source.project_id.clone();
+            let body = decode(preview["proposal"]["body"].clone())?;
+            let result = insert_combined(
+                snapshot, preview["assessmentId"].as_str().unwrap(), &project_id,
+                preview["proposal"]["title"].as_str().unwrap(), body, Some(origin),
+            )?;
+            receipt(snapshot, COMBINED_DERIVE_CREATE, source_id, &input.idempotency_key, &self.digest, result.clone());
+            Ok((result, false))
+        })?;
+        derivation_response(store, &result, replayed)
+    }
+}
+
+fn derivation_response(store: &Store, result: &ScopeResult, replayed: bool) -> Result<Value, String> {
+    Ok(json!({"created":!replayed,"replayed":replayed,"assessmentId":result.assessment_id,
+              "scopeStatus":status(store, &result.assessment_id)?}))
+}
+
 fn handle_combined(action:&str,mut payload:Value,store:&Store)->Result<Value,String>{
+    if action == COMBINED_DERIVE_CREATE {
+        return CombinedDerivationCommit::parse(payload)?.create(store);
+    }
     if !payload.is_object()||payload.to_string().len()>65536{return Err(err("scope_invalid_input"));}
     match action{
         "assessment.combinedOptions"=>{let p:ProjectInput=decode(payload)?;scope_targets::catalog_options(&store.snapshot()?,&p.project_id)},
@@ -370,11 +464,7 @@ fn handle_combined(action:&str,mut payload:Value,store:&Store)->Result<Value,Str
             let(result,replayed)=store.mutate(|s|{if let Some(r)=replay(s,action,&p.assessment_id,&key,&request)?{return Ok((r,true));}let v=combined_edit_preview(s,&p,&work)?;if v["canCommit"]!=true{return Err(err("scope_frozen"));}if v["reviewDigest"]!=review{return Err(err("scope_review_changed"));}let body:ScopeBody=decode(v["proposal"].clone())?;let a=assessment(s,&p.assessment_id)?;let b=binding(s,a)?.ok_or_else(||err("scope_integrity_error"))?;let previous=current(s,b)?.cloned();if previous.as_ref().is_some_and(|r|r.number>=100){return Err(err("scope_limit_reached"));}let r=revision(&a.id,body,previous.as_ref(),true);let aid=a.id.clone();let rid=r.id.clone();let a=s.assessments.iter_mut().find(|a|a.id==aid).unwrap();a.objective=r.body.objective.clone();a.kind=r.body.kind.clone();a.target=r.body.target.clone();a.updated_at=model::now();s.scope_revisions.push(r);let b=s.assessment_scopes.iter_mut().find(|b|b.assessment_id==aid).unwrap();b.current_revision_id=Some(rid);b.generation+=1;let result=scope_result(s,&aid)?;receipt(s,action,&aid,&key,&request,result.clone());Ok((result,false))})?;
             Ok(json!({"saved":!replayed,"replayed":replayed,"assessmentId":result.assessment_id,"revisionId":result.revision_id,"scopeStatus":status(store,&result.assessment_id)?}))
         },
-        "assessment.combinedDeriveCreate"=>{
-            let request=hash(&payload);let(review,key)=commit_fields(&mut payload,"acknowledgeNewAssessment",true)?;let p:CombinedDerive=decode(payload)?;let _guard=store.scope_gate.lock().map_err(|_|err("scope_busy"))?;let work=admitted_work(store,&p.assessment_id)?;
-            let(result,replayed)=store.mutate(|s|{if let Some(r)=replay(s,action,&p.assessment_id,&key,&request)?{return Ok((r,true));}let v=combined_derive_preview(s,&p,&work)?;if v["canCreate"]!=true{return Err(err("assessment_work_active"));}if v["reviewDigest"]!=review{return Err(err("scope_review_changed"));}let source=assessment(s,&p.assessment_id)?.clone();let source_ref=current_ref(s,&source.id)?;let origin=ScopeOrigin{source_assessment_id:source.id.clone(),source_legacy_digest:if source_ref.is_none(){Some(hash(&json!({"id":source.id,"projectId":source.project_id,"objective":source.objective,"kind":source.kind,"target":source.target})))}else{None},source_scope:source_ref,copy_fields:p.copy_fields.clone(),created_at:model::now()};let body:ScopeBody=decode(v["proposal"]["body"].clone())?;let result=insert_combined(s,v["assessmentId"].as_str().unwrap(),&source.project_id,v["proposal"]["title"].as_str().unwrap(),body,Some(origin))?;receipt(s,action,&source.id,&key,&request,result.clone());Ok((result,false))})?;
-            Ok(json!({"created":!replayed,"replayed":replayed,"assessmentId":result.assessment_id,"scopeStatus":status(store,&result.assessment_id)?}))
-        },_=>Err(err("scope_unknown_action"))
+        _=>Err(err("scope_unknown_action"))
     }
 }
 

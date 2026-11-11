@@ -391,10 +391,39 @@ try {
     const input = { assessmentId, expectedStateDigest: status.stateDigest, projectCatalogDigest: catalog.projectCatalogDigest, idempotencyKey: randomUUID(), title: 'Derived combined fixture', copyFields: ['objective', 'window', 'targets', 'exclusions'] };
     const preview = await pure(() => request('assessment.combinedDerivePreview', input)); expect(preview.canCreate).toBe(true);
     const commit = { ...input, reviewDigest: preview.reviewDigest, acknowledgeNewAssessment: true };
-    const before = structuredClone(snapshot().assessments.find(a => a.id === assessmentId)); const created = await request('assessment.combinedDeriveCreate', commit); derivedId = created.assessmentId;
-    expect(created.scopeStatus.phase).toBe('unreviewed'); expect(created.scopeStatus.revision.review).toBeNull(); expect((await pure(() => request('assessment.combinedDeriveCreate', commit))).replayed).toBe(true);
-    const child = snapshot().assessments.find(a => a.id === derivedId); expect(child.evidence).toEqual([]); expect(snapshot().assessments.find(a => a.id === assessmentId)).toEqual(before);
-    for (const table of ['plans', 'executions', 'findings', 'validations']) expect(snapshot()[table].filter(row => row.assessmentId === derivedId)).toEqual([]);
+    const action = 'assessment.combinedDeriveCreate';
+    const before = snapshot();
+    const created = await request(action, commit);
+    derivedId = created.assessmentId;
+    expect(created.created).toBe(true);
+    expect(created.replayed).toBe(false);
+    expect(created.scopeStatus.phase).toBe('unreviewed');
+    expect(created.scopeStatus.revision.review).toBeNull();
+
+    const persisted = snapshot();
+    const child = persisted.assessments.find(a => a.id === derivedId);
+    expect(child).toBeDefined();
+    expect(persisted.assessments.filter(a => a.id !== derivedId)).toEqual(before.assessments);
+    expect(persisted.assessments).toHaveLength(before.assessments.length + 1);
+    const receipts = persisted.scopeReceipts.filter(r => r.idempotencyKey === commit.idempotencyKey);
+    expect(receipts).toHaveLength(1);
+    expect(receipts[0]).toMatchObject({ action, assessmentId, result: { assessmentId: derivedId, scopeId: child.scopeId, revisionId: created.scopeStatus.revision.id } });
+
+    const repeat = () => request(action, commit);
+    const expectReplay = replay => {
+      expect(replay).toMatchObject({ created: false, replayed: true, assessmentId: derivedId });
+      expect(replay.scopeStatus.revision.id).toBe(receipts[0].result.revisionId);
+    };
+    expectReplay(await pure(repeat));
+    // Both clients must receive the existing result. Await both before capturing a failure.
+    const replays = await pure(() => Promise.allSettled([repeat(), repeat()]));
+    for (const replay of replays) {
+      if (replay.status === 'rejected') throw replay.reason;
+      expectReplay(replay.value);
+    }
+    await denied(action, { ...commit, title: 'Different request using the same key' }, 'scope_idempotency_conflict');
+    expect(child.evidence).toEqual([]);
+    for (const table of ['plans', 'executions', 'findings', 'validations']) expect(persisted[table].filter(row => row.assessmentId === derivedId)).toEqual([]);
     const oldIds = status.targetOptions.map(v => v.targetRef.entryId); expect(created.scopeStatus.targetOptions.every(v => !oldIds.includes(v.targetRef.entryId))).toBe(true);
     await denied('assessment.targetPlan', targetPlanInput(created.scopeStatus, secondary.id, 'source.rules.v1'), 'scope_unreviewed');
     const edit = { assessmentId: derivedId, expectedStateDigest: created.scopeStatus.stateDigest, projectCatalogDigest: catalog.projectCatalogDigest, objective: child.objective, window: unboundedScopeWindow(), selection };
@@ -402,7 +431,9 @@ try {
     const saved = await request('assessment.combinedScopeSave', { ...edit, reviewDigest: reviewed.reviewDigest, idempotencyKey: randomUUID(), acknowledgeScope: true });
     const planned = await request('assessment.targetPlan', targetPlanInput(saved.scopeStatus, secondary.id, 'source.rules.v1')); expect(planned.targetRef).not.toEqual(sourcePlan.targetRef);
     await request('plan.revoke', { id: planned.id, digest: planned.digest });
-    return { derivedId, allEntryIdsRemapped: true, noProofOrApprovalCopied: true, reviewRequired: true, parentPreserved: true };
+    return { derivedId, assessmentsBefore: before.assessments.length, assessmentsAfter: persisted.assessments.length,
+      receipt: receipts[0], concurrentReplays: replays.length, conflictingPayloadRejected: true,
+      allEntryIdsRemapped: true, noProofOrApprovalCopied: true, reviewRequired: true, parentPreserved: true };
   });
   await gate('combined-revocation-and-restart-preserve-history', async () => {
     status = await scopeStatus(assessmentId);

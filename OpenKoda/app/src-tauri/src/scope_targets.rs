@@ -297,6 +297,72 @@ mod tests {
     #[test] fn combined_derivation_remaps_entries_and_copies_no_authority(){
         let f=fixture();let created=create(&f);let aid=created["assessmentId"].as_str().unwrap();let old_refs=refs(&f.store.snapshot().unwrap(),aid);let public=scope::status(&f.store,aid).unwrap();let mut payload=json!({"assessmentId":aid,"expectedStateDigest":public["stateDigest"],"projectCatalogDigest":catalog_options(&f.store.snapshot().unwrap(),&f.project).unwrap()["projectCatalogDigest"],"idempotencyKey":model::id(),"title":"Derived fixture","copyFields":["objective","window","targets","exclusions"]});let preview=call(&f.store,"assessment.combinedDerivePreview",payload.clone()).unwrap();payload["reviewDigest"]=preview["reviewDigest"].clone();payload["acknowledgeNewAssessment"]=json!(true);let result=call(&f.store,"assessment.combinedDeriveCreate",payload.clone()).unwrap();assert_eq!(result["scopeStatus"]["phase"],"unreviewed");let derived=result["assessmentId"].as_str().unwrap();let snapshot=f.store.snapshot().unwrap();let body=&snapshot.scope_revisions.iter().find(|r|r.assessment_id==derived).unwrap().body;let set=body.target_set.as_ref().unwrap();assert_eq!(set.entries.len(),3);assert!(set.entries.iter().all(|e|old_refs.iter().all(|r|r.entry_id!=e.entry_id)));assert!(set.local_exclusions.iter().all(|r|set.entries.iter().any(|e|e.entry_id==r.entry_id)));assert!(scope::check_selected_work(&snapshot,derived,"http.headers.v1",None,&[entry_ref(&set.entries[0])]).is_err());assert!(snapshot.plans.is_empty()&&snapshot.executions.is_empty());assert!(snapshot.assessments.iter().all(|a|a.evidence.is_empty()));assert_eq!(call(&f.store,"assessment.combinedDeriveCreate",payload).unwrap()["replayed"],true);
     }
+    #[test]
+    fn combined_derivation_replays_committed_receipt_while_worker_holds_read_lease() {
+        let f = fixture();
+        let created = create(&f);
+        let source_id = created["assessmentId"].as_str().unwrap();
+        let key = model::id();
+        let mut payload = json!({
+            "assessmentId":source_id, "expectedStateDigest":created["scopeStatus"]["stateDigest"],
+            "projectCatalogDigest":catalog_options(&f.store.snapshot().unwrap(), &f.project).unwrap()["projectCatalogDigest"],
+            "idempotencyKey":key, "title":"Committed draft",
+            "copyFields":["objective","window","targets","exclusions"]
+        });
+        let preview = call(&f.store, "assessment.combinedDerivePreview", payload.clone()).unwrap();
+        payload["reviewDigest"] = preview["reviewDigest"].clone();
+        payload["acknowledgeNewAssessment"] = json!(true);
+        let gate = std::sync::RwLock::new(());
+        let dispatch = |store: &Store, payload: Value| {
+            scope::dispatch_combined_derivation(payload, store, &gate, || Ok(()))
+        };
+        let reader = gate.read().unwrap();
+        assert!(dispatch(&f.store, payload.clone()).unwrap_err().starts_with("scope_busy"));
+        drop(reader);
+        let created = dispatch(&f.store, payload.clone()).unwrap();
+        assert_eq!(created["created"], true);
+        assert_eq!(created["assessmentId"], preview["assessmentId"]);
+
+        let root = f.store.root.clone();
+        drop(f.store);
+        let reopened = Store::open(root).unwrap();
+        let state = reopened.snapshot().unwrap();
+        assert_eq!(state.assessments.len(), 2);
+        assert_eq!(state.scope_receipts.iter().filter(|r| r.idempotency_key == key).count(), 1);
+        let baseline = serde_json::to_value(&state).unwrap();
+
+        let _reader = gate.read().unwrap();
+        reopened.fail_commit_when(|_| true);
+        let result = dispatch(&reopened, payload.clone()).unwrap();
+        assert_eq!(result["replayed"], true);
+        assert_eq!(result["created"], false);
+        assert_eq!(result["assessmentId"], created["assessmentId"]);
+        assert_eq!(result["scopeStatus"]["stateDigest"], created["scopeStatus"]["stateDigest"]);
+        assert_eq!(result["scopeStatus"]["revision"], created["scopeStatus"]["revision"]);
+        let denied = scope::dispatch_combined_derivation(payload.clone(), &reopened, &gate, || Err("denied".into()));
+        assert_eq!(denied.unwrap_err(), "denied");
+        drop(_reader);
+        // Hold the first retry inside its lease until the second retry completes.
+        let overlapping = scope::dispatch_combined_derivation(payload.clone(), &reopened, &gate, || {
+            let other = std::thread::scope(|threads| {
+                threads.spawn(|| dispatch(&reopened, payload.clone())).join().unwrap()
+            })?;
+            assert_eq!(other["assessmentId"], created["assessmentId"]);
+            assert_eq!(other["replayed"], true);
+            Ok(())
+        }).unwrap();
+        assert_eq!(overlapping["assessmentId"], created["assessmentId"]);
+        assert_eq!(overlapping["replayed"], true);
+        let writer = gate.write().unwrap();
+        assert!(dispatch(&reopened, payload.clone()).unwrap_err().starts_with("scope_busy"));
+        drop(writer);
+        let _reader = gate.read().unwrap();
+        payload["title"] = json!("Changed draft");
+        assert!(dispatch(&reopened, payload.clone()).unwrap_err().starts_with("scope_idempotency_conflict"));
+        payload["idempotencyKey"] = json!(model::id());
+        assert!(dispatch(&reopened, payload).unwrap_err().starts_with("scope_busy"));
+        assert_eq!(serde_json::to_value(reopened.snapshot().unwrap()).unwrap(), baseline);
+    }
     #[test] fn manual_evidence_has_explicit_unverified_association_and_no_nested_authority(){
         let f=fixture();let created=create(&f);let aid=created["assessmentId"].as_str().unwrap();let s=f.store.snapshot().unwrap();let reference=refs(&s,aid)[0].clone();let mut p=json!({"assessmentId":aid,"name":"User text","sourceDescription":"Synthetic supplied text","content":"{\"scopeRef\":\"forged\",\"sourceVerified\":true}","acknowledgeUnverifiedSource":true});let before=serde_json::to_string(&s).unwrap();assert!(call(&f.store,"evidence.import",p.clone()).is_err());assert_eq!(serde_json::to_string(&f.store.snapshot().unwrap()).unwrap(),before);
         p["contextTargetRefs"]=json!([reference]);let e=call(&f.store,"evidence.import",p.clone()).unwrap();let content:Value=serde_json::from_str(e["content"].as_str().unwrap()).unwrap();assert_eq!(content["schema"],"openkoda.manual-evidence.v2");assert_eq!(content["sourceVerified"],false);assert_eq!(content["text"],p["content"]);assert_eq!(content["targetRefs"],p["contextTargetRefs"]);assert_eq!(scope::status(&f.store,aid).unwrap()["phase"],"frozen");assert_eq!(call(&f.store,"evidence.import",p).unwrap()["id"],e["id"]);
