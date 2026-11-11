@@ -20,7 +20,6 @@ const arguments_ = process.argv.slice(2);
 if (arguments_.length !== 2 || arguments_[0] !== '--expected-sha256' || !/^[a-f0-9]{64}$/.test(arguments_[1])) throw new Error('Use --expected-sha256 <reviewed custom-protocol debug SHA-256>.');
 const runDirectory = resolve(appRoot, '.local', `native-smoke-${randomUUID()}`);
 const dataDirectory = join(runDirectory, 'data');
-const profileDirectory = join(runDirectory, 'webview');
 const fixtureDirectory = join(runDirectory, 'fixture-project');
 await access(binary); // Never runs the app or creates a misleading result if no binary exists.
 await mkdir(fixtureDirectory, { recursive: true });
@@ -70,6 +69,9 @@ async function unusedLoopbackPort() {
 async function openApp() {
   expect(await fileHash(binary), 'The exact reviewed native artifact must survive every restart').toBe(arguments_[1]);
   const port = await unusedLoopbackPort();
+  // A WebView2 host can outlive an abrupt exit and keep the previous CDP port.
+  // The fixture's SQLite profile stays the same across all process restarts.
+  const profileDirectory = join(runDirectory, 'webview-' + port);
   child = spawn(binary, [], {
     cwd: appRoot, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'],
     env: { ...process.env, OPENKODA_DATA_DIR: dataDirectory, WEBVIEW2_USER_DATA_FOLDER: profileDirectory,
@@ -100,6 +102,7 @@ async function openApp() {
   await expect(navigationButton('Projetos')).toBeVisible();
   await browser.contexts()[0].tracing.start({ screenshots: true, snapshots: true, sources: true });
   await expect(page.locator('#main-content')).toHaveAttribute('aria-busy', 'false', { timeout: 45_000 });
+  await openProjectsAndWaitForIpc();
 }
 async function closeApp(traceName) {
   if (browser) {

@@ -1,6 +1,8 @@
 # OpenKoda desktop
 
-**0.1.17 para Windows x64.** Na tela inicial, clique em **Criar projeto**. Em **Análise local**, escolha a pasta e indique se a verificação deve abranger todo o código ou apenas um arquivo ou subpasta. Em **Web/API**, informe a URL. Em **Rede**, indique o IP ou CIDR. Escolha um dos seus modelos ou use a análise nativa. Descreva o que você quer verificar e clique em **Criar projeto**.
+**0.1.17 para Windows x64.** [Instalador local](releases/0.1.17-local-20261111/OpenKoda_0.1.17_x64-setup.exe) · [Registro dos testes](IMPLEMENTACAO.md)
+
+Na tela inicial, clique em **Criar projeto**. Em **Análise local**, escolha a pasta e indique se a verificação deve abranger todo o código ou apenas um arquivo ou subpasta. Em **Web/API**, informe a URL. Em **Rede**, indique o IP ou CIDR. Escolha um dos seus modelos ou use a análise nativa. Descreva o que você quer verificar e clique em **Criar projeto**.
 
 A conversa mostra as etapas executadas, os resultados e as mensagens do modelo. Use o **+** ao lado do projeto para abrir outra conversa. Na barra da mensagem você pode trocar o provedor e o modelo, anexar texto ou uma imagem, escolher quando solicitar aprovação e interromper o trabalho em andamento. Os controles no alto abrem a visão geral ou as configurações do projeto. **Mostrar ao lado da conversa** permite manter os dois abertos.
 
