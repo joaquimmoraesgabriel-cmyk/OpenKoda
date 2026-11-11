@@ -1,6 +1,12 @@
-# Validação local da 0.1.9
+# Validação da 0.1.9
 
-O instalador x64 sem assinatura passou na extração e no ciclo local de instalação da 0.1.8, atualização para 0.1.9 e desinstalação. Os dois percursos conferiram os hashes do executável e dos cinco recursos fornecidos. Os dados de teste e o estado de registro e atalhos foram preservados. [Manifesto](../releases/0.1.9-local-20261111/release.json) · [Guia de uso](GUIA-0.1.9.md)
+O instalador x64 sem assinatura passou na extração do executável e dos cinco recursos distribuídos. [Manifesto](../releases/0.1.9-local-20261111/release.json) · [Guia de uso](GUIA-0.1.9.md)
+
+## Instalador e abertura em perfil limpo
+
+O instalador local tem 7.284.584 bytes e SHA-256 `e004aad8451a1d82467c96d4d7738efc5fa0378325d41061b3795587755a715d`. O ensaio instalou a 0.1.8, atualizou para esse pacote e desinstalou a 0.1.9. Conferiu o executável e os cinco recursos, além dos dados sintéticos, do registro e dos atalhos ao término. [Registro do ensaio local](https://github.com/joaquimmoraesgabriel-cmyk/OpenKoda/blob/b00c083dbbfb4feab4901c7f8bcc93f34c60f136/OpenKoda/app/docs/RETOMADA-0.1.9.md)
+
+O GitHub Actions compilou o commit `bda2bd73e5587a528b5be131f21b8e73f2802be6` no Windows Server 2025. O instalador dessa compilação tem SHA-256 `4fe0849ef9ae7b3557c1dfe1fa564d002172cebfccdf7e9d7420ec93afd610e7`. Em um perfil limpo, o teste abriu o programa instalado, criou um projeto pela interface e abriu o programa novamente. A interface mostrou o projeto salvo e o SQLite confirmou o mesmo UUID nas duas aberturas. A desinstalação preservou o banco. O recibo JSON tem SHA-256 `d38ef8367e8e92e21db15018c62d172d92ee69fa547f2d7bb1805128649de404`. [Execução aprovada e recibo](https://github.com/joaquimmoraesgabriel-cmyk/OpenKoda/actions/runs/43028109086)
 
 ## Resultados
 
@@ -25,6 +31,6 @@ As referências V-01 a V-06 foram comparadas com capturas em 1440 × 810. Os pro
 
 ## Limites da entrega
 
-Os testes nativos usaram perfis sintéticos. O executável de produção instalado ainda precisa ser aberto e reaberto em outra conta Windows ou VM. Também estão pendentes uma instalação limpa sem WebView2, a matriz de versões Windows/WSL e falhas físicas de reboot e pouco disco. A interrupção do instalador foi simulada entre dois processos reais do NSIS. O teste de acessibilidade cobre os percursos registrados. O reteste desta versão não incluiu nova chamada paga à OpenAI.
+Os testes nativos usaram perfis sintéticos. Estão pendentes uma instalação limpa sem WebView2, a matriz de versões Windows/WSL e falhas físicas de reboot e pouco disco. A interrupção do instalador foi simulada entre dois processos reais do NSIS. O teste de acessibilidade cobre os percursos registrados. O reteste desta versão não incluiu nova chamada paga à OpenAI.
 
-O instalador tem 7,284,584 bytes e SHA-256 `e004aad8451a1d82467c96d4d7738efc5fa0378325d41061b3795587755a715d`. Os estados dos critérios de aceitação e os cenários externos podem ser consultados na [matriz](ACCEPTANCE-STATUS.md) e no [roadmap](ROADMAP.md).
+Os estados dos critérios de aceitação e os cenários externos podem ser consultados na [matriz](ACCEPTANCE-STATUS.md) e no [roadmap](ROADMAP.md).
