@@ -2,7 +2,7 @@
 # -SelfTest is synthetic; -ValidateOnly checks artifacts without starting an installer/app.
 # -AllowSameVersionRebuild checks replacement of a rebuilt package, not schema migration.
 param(
-    [string]$OldReleaseManifest = (Join-Path $PSScriptRoot '../releases/0.1.0-local-20261107/release.json'),
+    [string]$OldReleaseManifest = (Join-Path $PSScriptRoot '../releases/0.1.17-local-20261111/release.json'),
     [string]$NewReleaseManifest = (Join-Path $PSScriptRoot '../.local/package-windows.json'),
     [string]$NewSourceBinary,
     [switch]$AllowSameVersionRebuild,

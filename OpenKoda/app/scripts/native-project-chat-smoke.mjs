@@ -98,7 +98,7 @@ try {
   assert.equal(state.executions.length, 1);
   result.checks.push('Duas conversas, rascunho individual e uma única execução');
 
-  const overview = page.getByRole('button', { name: 'Visão geral do projeto' });
+  const overview = page.getByRole('button', { name: 'Painel do projeto' });
   await overview.click();
   await page.getByRole('button', { name: 'Mostrar ao lado da conversa' }).click();
   await expect(input).toBeVisible();

@@ -23,7 +23,7 @@ test('árvore, painel e navegação compacta mantêm o foco e o espaço do chat'
   await expect(page.getByRole('textbox',{name:'Mensagem da conversa'})).toBeVisible();
   await page.getByRole('button',{name:'Mostrar lista de projetos'}).click();
   await expect(tree).toBeVisible();
-  const overview=page.getByRole('button',{name:'Visão geral do projeto'});
+  const overview=page.getByRole('button',{name:'Painel do projeto'});
   await overview.click();
   await expect(page.getByRole('button',{name:'Fechar painel'})).toBeFocused();
   await page.keyboard.press('Escape');

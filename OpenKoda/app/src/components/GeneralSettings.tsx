@@ -34,7 +34,7 @@ export default function GeneralSettings({windowOptions}: {windowOptions?: ReactN
           try { saveComposerShortcut(next); setShortcut(next); setComposerMessage('Atalho salvo.'); }
           catch { setComposerMessage('O dispositivo não permitiu salvar o atalho.'); }
         }}><option value="modifier-enter">Ctrl + Enter</option><option value="enter">Enter</option></select></div>
-      <p className="muted">Na conversa da avaliação, o atalho abre a revisão. Após a autorização, ele envia a mensagem. Shift + Enter insere uma linha.</p>
+      <p className="muted">Use o atalho para enviar a mensagem. Quando o envio exigir confirmação, o OpenKoda abrirá a revisão. Shift + Enter insere uma linha.</p>
       <span role="status">{composerMessage}</span>
     </section>
     <HostConnectivity/>

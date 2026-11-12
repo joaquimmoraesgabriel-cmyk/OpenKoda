@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { ArrowDown, ArrowUp, FileText, Folder, Globe, ListChecks, LoaderCircle, Network, Paperclip, ShieldCheck, Square, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, FileText, Folder, Globe, ListChecks, LoaderCircle, Network, ShieldCheck, Square, X } from 'lucide-react';
 import { request, native } from '../api';
 import { providers,type AiSelection } from '../ai-provider';
 import { operationMatchesTargets,validOperationProposal,type OperationProposal } from '../ai-operation';
 import type { ScopeRef } from '../scope';
 import { ChatVerification } from './ChatVerification';
 import { validBudgetReview,usd,type BudgetReview,type BudgetStatus } from '../ai-budget';
-import { approvalModes,prepareChat,readChatAttachment,type ApprovalMode } from '../project-chat';
+import { prepareChat,readChatAttachment,type ApprovalMode } from '../project-chat';
 import { openingAnalysisEvent,takeOpeningAnalysis } from '../chat-opening';
-import { composerShortcut,composerSubmitKey } from '../composer-preference';
+import { composerShortcut,matchesComposerShortcut } from '../composer-preference';
 import { errorMessage,statusLabels,type Action,type Assessment,type ExecutionPlan,type Settings } from '../types';
 import { ChatPlanApproval } from './ChatPlanApproval';
 import ProjectKaliTools from './ProjectKaliTools';
@@ -16,6 +16,7 @@ import { finishDraft, readDraft, updateDraft, useChatDraft, type ChatDraft } fro
 import { ConversationTimeline, type ChatMessage } from './ConversationTimeline';
 import { ConversationText } from './ConversationText';
 import { ChatModelPicker } from './ChatModelPicker';
+import { ChatComposerMenus } from './ChatComposerMenus';
 import './project-conversation.css';
 
 type Turn=Awaited<ReturnType<typeof prepareChat>>&{budget?:BudgetReview;selection:AiSelection;line:string;opening:boolean;draft:ChatDraft;image?:string;signal:AbortSignal};
@@ -155,6 +156,12 @@ function Conversation({assessment,plans,action,busy,onAdvanced,onModels}:Props){
     try{const prepared=await readChatAttachment(f);if(mount.current)updateDraft(assessment.id,{attachment:prepared});}catch(e){if(mount.current)setError(errorMessage(e));}finally{if(mount.current)setLoadingFile(false);}
   }
   const disabled=busy||running||!!approval||loadingFile;
+  const shortcut=composerShortcut();
+  const canSend=native && !disabled && !!sel && !!draft.trim();
+  function changeApproval(next:ApprovalMode){
+    setMode(next);
+    try{localStorage.setItem('openkoda.chat.approval.'+assessment.id,next);}catch{/* The choice still applies to this conversation. */}
+  }
   const TargetIcon=assessment.kind==='web'?Globe:assessment.kind==='network'?Network:Folder;
   const workLabel=remote.stopping||stopping?'Interrompendo o trabalho…':phase|| (remote.requestId?'Aguardando resposta do provedor…':localRunning?statusLabels[assessment.status]:'');
   return <section className="project-chat" aria-label="Conversa do projeto">
@@ -181,16 +188,21 @@ function Conversation({assessment,plans,action,busy,onAdvanced,onModels}:Props){
     <div className="project-chat-bottom">
       {awayFromEnd&&<button type="button" className="chat-jump" aria-label="Voltar à mensagem mais recente" title="Voltar à mensagem mais recente" onClick={followEnd}><ArrowDown size={17}/></button>}
       {error&&<div className="chat-error" role="alert">{error}{onAdvanced&&<button type="button" onClick={onAdvanced}>Revisar avaliação</button>}</div>}
-      <form className="project-composer" onSubmit={e=>{e.preventDefault();if(!disabled)void prepare(draft);}}>
+      <form className="project-composer" onSubmit={e=>{e.preventDefault();if(canSend)void prepare(draft);}}>
         {attachment&&<div className="chat-attachment">{attachment.image?<img alt="Anexo selecionado" src={'data:image/jpeg;base64,'+attachment.image}/>:<FileText size={16}/>}<span>{attachment.name}</span><button type="button" disabled={disabled} onClick={()=>updateDraft(assessment.id,{attachment:undefined})} aria-label="Remover anexo"><X size={14}/></button></div>}
-        <textarea ref={input} aria-label="Mensagem da conversa" rows={2} maxLength={8000} value={draft} disabled={!!approval} onChange={e=>updateDraft(assessment.id,{text:e.target.value})} placeholder={proposing?'O que você quer verificar neste alvo?':'Envie uma mensagem sobre o projeto…'} onKeyDown={e=>{if(composerSubmitKey(e.nativeEvent,composerShortcut())){e.preventDefault();if(!disabled)void prepare(draft);}}}/>
-        <div className="project-composer-tools"><input type="file" hidden ref={file} onChange={e=>{void attach(e.target.files?.[0]);e.currentTarget.value='';}}/><button type="button" aria-label="Anexar foto ou arquivo" title="Anexar foto ou arquivo" disabled={disabled||proposing} onClick={()=>file.current?.click()}><Paperclip size={17}/></button>
-          <button type="button" aria-pressed={proposing} disabled={disabled||!!attachment||!native} className="chat-intent-button" title="Pedir verificação" aria-label="Pedir verificação" onClick={()=>updateDraft(assessment.id,{proposing:!proposing})}><ListChecks size={16}/><span>Verificação</span></button>
+        {proposing&&<div className="chat-attachment"><ListChecks size={16}/><span>Verificação</span><button type="button" disabled={disabled} aria-label="Voltar à conversa" onClick={()=>updateDraft(assessment.id,{proposing:false})}><X size={14}/></button></div>}
+        <textarea ref={input} aria-label="Mensagem da conversa" rows={2} maxLength={8000} value={draft} disabled={!!approval} onChange={e=>updateDraft(assessment.id,{text:e.target.value})} placeholder={proposing?'O que você quer verificar neste alvo?':'Envie uma mensagem sobre o projeto…'} onKeyDown={e=>{
+          if(!matchesComposerShortcut(e.nativeEvent,composerShortcut()))return;
+          e.preventDefault();
+          if(!e.repeat && canSend)e.currentTarget.form?.requestSubmit();
+        }}/>
+        <div className="project-composer-tools"><input type="file" hidden ref={file} onChange={e=>{void attach(e.target.files?.[0]);e.currentTarget.value='';}}/>
+          <ChatComposerMenus mode={mode} onMode={changeApproval} proposing={proposing} hasAttachment={!!attachment} disabled={disabled} canPropose={native}
+            onAttach={()=>file.current?.click()} onPropose={()=>updateDraft(assessment.id,{proposing:!proposing})}/>
           <ChatModelPicker value={sel} disabled={disabled} onModels={onModels} onChange={async choice=>{await action('ai.selection.save',{assessmentId:assessment.id,aiSelection:choice});}}/>
-          <label className="chat-permission"><ShieldCheck size={16}/><select aria-label="Modo de aprovação" value={mode} disabled={disabled} onChange={e=>{const next=e.target.value as ApprovalMode;setMode(next);try{localStorage.setItem('openkoda.chat.approval.'+assessment.id,next);}catch{/* session only */}}}>{(Object.entries(approvalModes) as [ApprovalMode,string][]).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></label>
-          {running?<button className="chat-send" type="button" disabled={stopping||remote.stopping} aria-label="Cancelar trabalho" title="Cancelar trabalho" onClick={()=>void stop()}><Square size={16}/></button>:<button className="chat-send" type="submit" disabled={!native||disabled||!sel||!draft.trim()} aria-label="Enviar mensagem" title="Enviar mensagem"><ArrowUp size={18}/></button>}
+          {running?<button className="chat-send" type="button" disabled={stopping||remote.stopping} aria-label="Cancelar trabalho" title="Cancelar trabalho" onClick={()=>void stop()}><Square size={14} fill="currentColor"/></button>:<button className="chat-send" type="submit" disabled={!canSend} aria-label="Enviar mensagem" aria-keyshortcuts={shortcut==='enter'?'Enter':'Control+Enter Meta+Enter'} title={shortcut==='enter'?'Enviar mensagem (Enter)':'Enviar mensagem (Ctrl + Enter)'}><ArrowUp size={18}/></button>}
         </div></form>
-        <small>{sel?'A conversa usa '+providers[sel.provider].name+'. O envio inclui a mensagem, os turnos recentes, o contexto do projeto e o anexo escolhido.':'Escolha um modelo ativo para conversar.'}</small>
+        <small>{sel?providers[sel.provider].name+' recebe a mensagem e o contexto do projeto'+(proposing?'.':', incluindo turnos recentes e o anexo escolhido.'):'Escolha um modelo ativo para conversar.'}</small>
     </div>
   </section>;
 }

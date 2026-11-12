@@ -1,0 +1,55 @@
+/* Shared workspace proportions, following the observed Codex desktop shell. */
+.app-shell.project-shell {
+  --surface: light-dark(#ffffff, #202021);
+  --subtle: light-dark(#f7f7f8, #19191a);
+  --selection: light-dark(#ebebed, #303032);
+  --line: light-dark(#e7e7e9, #38383b);
+  --control-line: light-dark(#c1c1c6, #65656a);
+  --muted: light-dark(#63636b, #b5b5bc);
+  --panel-radius: 18px;
+  background: var(--subtle);
+}
+.project-shell .workspace-main {
+  border-start-start-radius: 14px;
+  border-block-start: 1px solid var(--line);
+}
+.project-shell .project-rail {
+  background: var(--subtle);
+  border-inline-end: 0;
+  gap: 7px;
+}
+.project-shell .rail-button { border-radius: 11px; }
+.project-shell .rail-button[aria-current]::before { display: none; }
+.project-shell .project-tree { padding-block: 16px; }
+.project-shell .tree-new {
+  border-color: transparent;
+  background: transparent;
+  justify-content: flex-start;
+  font-weight: 500;
+}
+.project-shell .tree-new:hover { background: var(--selection); }
+.project-shell .tree-chat {
+  border-inline-start: 0;
+  border-radius: 9px;
+  padding-inline-start: 12px;
+  padding-block: 8px;
+  font-size: .85rem;
+}
+.project-shell .tree-chat[aria-current=page] { font-weight: 500; }
+.project-shell .tree-project { font-weight: 500; }
+.project-shell .desk-bar { border-block-end-color: transparent; }
+.project-shell .settings-layout { background: var(--subtle); }
+.project-shell .settings-menu .settings-group button[aria-current=page] {
+  box-shadow: none;
+  background: var(--selection);
+  font-weight: 550;
+}
+.project-shell .settings-group button[aria-current=page]::after { display: none; }
+.project-shell .settings-sheet { padding-block: clamp(24px, 4vh, 48px); }
+.project-shell .settings-section-title { font-weight: 620; }
+.project-shell .workspace-status { background: var(--surface); }
+.project-shell .workspace-projection { border-bottom: 1px solid var(--line); }
+.project-shell :is(.dashboard-panel,.profile-hero,.usage-summary-card) { border: 1px solid var(--line); }
+@media (max-width: 760px) {
+  .project-shell .workspace-main { border-start-start-radius: 10px; }
+}

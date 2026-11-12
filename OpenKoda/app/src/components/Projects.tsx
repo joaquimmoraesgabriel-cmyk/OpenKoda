@@ -33,7 +33,8 @@ export default function Projects({ projects, assessments, action, onNewAssessmen
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState(initialProjectId ?? '');
   const [creating, setCreating] = useState(!!initialCreate);
-  const [tab, setTab] = useState(panel === 'settings' ? 'Configurações' : 'Visão geral');
+  const [tab, setTab] = useState('Visão geral');
+  const [catalogOpen, setCatalogOpen] = useState(false);
   const [name, setName] = useState('');
   const [kind, setKind] = useState<Kind>('code');
   const [target, setTarget] = useState('');
@@ -120,9 +121,10 @@ export default function Projects({ projects, assessments, action, onNewAssessmen
         <div className="form-actions"><button className="button" type="button" onClick={backToProjects}>Cancelar</button><button className="button primary" disabled={busy} type="submit">{busy ? 'Salvando…' : 'Criar projeto'}</button></div>
       </div>
     </form> : project && <>
-      <div className="detail-heading"><div><h1 tabIndex={-1}>{project.name}</h1><p>{kindLabels[project.kind]}</p></div>{!panel && <button className="button primary" onClick={() => onNewAssessment(project.id)}><Play size={16}/>Nova avaliação neste projeto</button>}</div>
-      {panel!=='settings' && <Tabs items={panel?['Visão geral','Alvos e escopo','Avaliações']:['Visão geral','Alvos e escopo','Avaliações','Configurações']} selected={tab} onChange={setTab}/>}
-      {tab === 'Visão geral' && <div className="project-overview">
+      <div className="detail-heading"><div><h1 tabIndex={-1}>{project.name}</h1><p>{kindLabels[project.kind]}</p></div>{!panel && <button className="button primary" onClick={() => onNewAssessment(project.id)}><Play size={16}/>Nova avaliação neste projeto</button>}{panel==='overview'&&<button className="button" disabled={busy} onClick={()=>onNewAssessment(project.id)}><Plus size={15}/>Nova conversa</button>}</div>
+      {!panel && <Tabs items={['Visão geral','Alvos e escopo','Avaliações','Configurações']} selected={tab} onChange={setTab}/>}
+      {panel==='overview' && insights}
+      {!panel && tab === 'Visão geral' && <div className="project-overview">
         <section className="content-section">
           <h2>Alvo cadastrado</h2>
           <div className="target-row">
@@ -144,12 +146,12 @@ export default function Projects({ projects, assessments, action, onNewAssessmen
             <Play size={17}/><strong>{a.title}</strong><Status value={a.status}/>
           </button>) : <p className="muted">As avaliações deste projeto aparecerão aqui.</p>}
         </section>
-        {insights}
       </div>}
-        {tab==='Alvos e escopo'&&<ProjectTargets key={project.id} project={project} action={action} busy={busy}/>}
-        {tab==='Avaliações'&&<section className="content-section">{history.length?history.map(a=><button key={a.id} className="history-row" onClick={()=>onOpenAssessment(a.id)}><Play size={17}/><strong>{a.title}</strong><Status value={a.status}/></button>):<Empty title="Nenhuma avaliação neste projeto" description="Crie uma avaliação para definir o objetivo e revisar o trabalho." action={<button className="button primary" onClick={()=>onNewAssessment(project.id)}>Nova avaliação neste projeto</button>}/>}</section>}
-        {tab==='Avaliações'&&<AssessmentComparison key={project.id} projectId={project.id} assessments={history}/>}
-        {tab==='Configurações'&&<><DataPolicy key={project.id} projectId={project.id} action={action} busy={busy}/><CredentialReferences key={'credentials-'+project.id} projectId={project.id} action={action} busy={busy}/><section className="content-section"><h2>Arquivar projeto</h2><p className="muted">Retire o projeto da lista ativa, preservando suas avaliações e evidências.</p>{confirmArchive?<Notice tone="warning">Arquivar “{project.name}”?<div className="inline-actions"><button className="button" onClick={()=>setConfirmArchive(false)}>Manter projeto</button><button className="button danger" disabled={busy} onClick={()=>void action('project.archive',{id:project.id}).then(()=>{setSelected('');setConfirmArchive(false);onArchived?.();}).catch(()=>{})}>Confirmar arquivamento</button></div></Notice>:<button className="button" onClick={()=>setConfirmArchive(true)}><Archive size={16}/>Arquivar projeto</button>}</section></>}
+        {!panel&&tab==='Alvos e escopo'&&<ProjectTargets key={project.id} project={project} action={action} busy={busy}/>}
+        {panel==='settings'&&<details className="disclosure spaced" open={catalogOpen} onToggle={event=>setCatalogOpen(event.currentTarget.open)}><summary>Alvos e escopo</summary>{catalogOpen&&<div className="disclosure-body"><ProjectTargets project={project} action={action} busy={busy}/></div>}</details>}
+        {!panel&&tab==='Avaliações'&&<section className="content-section">{history.length?history.map(a=><button key={a.id} className="history-row" onClick={()=>onOpenAssessment(a.id)}><Play size={17}/><strong>{a.title}</strong><Status value={a.status}/></button>):<Empty title="Nenhuma avaliação neste projeto" description="Crie uma avaliação para definir o objetivo e revisar o trabalho." action={<button className="button primary" onClick={()=>onNewAssessment(project.id)}>Nova avaliação neste projeto</button>}/>}</section>}
+        {(panel==='overview'||(!panel&&tab==='Avaliações'))&&<AssessmentComparison key={project.id} projectId={project.id} assessments={history}/>}
+        {(panel==='settings'||(!panel&&tab==='Configurações'))&&<><DataPolicy key={project.id} projectId={project.id} action={action} busy={busy}/><CredentialReferences key={'credentials-'+project.id} projectId={project.id} action={action} busy={busy}/><section className="content-section"><h2>Arquivar projeto</h2><p className="muted">Retire o projeto da lista ativa, preservando suas avaliações e evidências.</p>{confirmArchive?<Notice tone="warning">Arquivar “{project.name}”?<div className="inline-actions"><button className="button" onClick={()=>setConfirmArchive(false)}>Manter projeto</button><button className="button danger" disabled={busy} onClick={()=>void action('project.archive',{id:project.id}).then(()=>{setSelected('');setConfirmArchive(false);onArchived?.();}).catch(()=>{})}>Confirmar arquivamento</button></div></Notice>:<button className="button" onClick={()=>setConfirmArchive(true)}><Archive size={16}/>Arquivar projeto</button>}</section></>}
     </>}
   </section>;
 }

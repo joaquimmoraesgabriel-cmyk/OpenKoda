@@ -67,7 +67,12 @@ test('cada conversa recupera seu rascunho e anexo sem enviar mensagens', async (
   const projects = page.getByRole('complementary', { name: 'Projetos e conversas' });
   const input = page.getByRole('textbox', { name: 'Mensagem da conversa' });
   await input.fill('Revisar este trecho');
-  await page.locator('.project-composer input[type=file]').setInputFiles({
+  await page.getByRole('button', { name: 'Adicionar à mensagem' }).click();
+  const [chooser] = await Promise.all([
+    page.waitForEvent('filechooser'),
+    page.getByRole('menuitem', { name: 'Anexar foto ou arquivo' }).click(),
+  ]);
+  await chooser.setFiles({
     name: 'trecho.txt', mimeType: 'text/plain', buffer: Buffer.from('Conteúdo de teste'),
   });
   await expect(page.getByRole('button', { name: 'Remover anexo' })).toBeVisible();
@@ -96,6 +101,74 @@ test('uma resposta recebida em outra conversa limpa apenas o turno enviado', asy
   await projects.getByRole('button', { name: 'Conversa A', exact: true }).click();
   await expect(input).toBeEmpty();
   expect(await page.evaluate(() => window.__conversationTest.calls.filter(c => c.action === 'ai.ask').length)).toBe(1);
+});
+
+test('o teclado envia uma vez, respeita o IME e conserva o rascunho recusado', async ({ page }) => {
+  await installChat(page);
+  const chat = page.getByRole('region', { name: 'Conversa do projeto' });
+  const input = chat.getByRole('textbox', { name: 'Mensagem da conversa' });
+  const tooLarge = 'á'.repeat(4050);
+  await input.fill(tooLarge);
+  await input.press('Enter');
+  await expect(chat.getByRole('alert')).toContainText('8.000 bytes');
+  await expect(input).toHaveValue(tooLarge);
+  await chat.getByRole('button', { name: 'Modo de aprovação' }).click();
+  await chat.getByRole('menuitemradio', { name: 'Sempre solicitar' }).click();
+  await input.fill('Linha um');
+  await input.press('Shift+Enter');
+  await input.press('x');
+  await expect(input).toHaveValue('Linha um\nx');
+  await input.dispatchEvent('keydown', { key: 'Enter', isComposing: true, keyCode: 229 });
+  const approve = chat.getByRole('button', { name: 'Autorizar envio' });
+  await expect(approve).toHaveCount(0);
+  await input.press('Enter');
+  await chat.getByRole('button', { name: 'Recusar' }).click();
+  await expect(input).toHaveValue('Linha um\nx');
+  const count = (action: string) => page.evaluate(action => window.__conversationTest.calls.filter(c => c.action === action).length, action);
+  expect(await count('ai.ask')).toBe(0);
+  await input.focus();
+  await page.keyboard.down('Enter');
+  await page.keyboard.down('Enter');
+  await page.keyboard.up('Enter');
+  await approve.click();
+  await expect.poll(() => count('ai.ask')).toBe(1);
+  await input.press('Enter');
+  expect(await count('ai.ask')).toBe(1);
+  await page.evaluate(() => window.dispatchEvent(new Event('fixture:reply')));
+  await expect(input).toBeEmpty();
+});
+
+test('Ctrl + Enter escolhido continua enviando e os menus trocam em um clique', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('openkoda.composer.submit.v1', 'modifier-enter'));
+  await installChat(page);
+  const chat = page.getByRole('region', { name: 'Conversa do projeto' });
+  const input = chat.getByRole('textbox', { name: 'Mensagem da conversa' });
+  const add = chat.getByRole('button', { name: 'Adicionar à mensagem' });
+  await add.focus();
+  await page.keyboard.press('ArrowDown');
+  const attachment = chat.getByRole('menuitem', { name: 'Anexar foto ou arquivo' });
+  await expect(attachment).toBeFocused();
+  await page.keyboard.press('ArrowDown');
+  await expect(chat.getByRole('menuitemcheckbox', { name: 'Pedir verificação' })).toBeFocused();
+  await chat.getByRole('button', { name: 'Modo de aprovação' }).click();
+  await expect(chat.getByRole('menu', { name: 'Adicionar à mensagem' })).toBeHidden();
+  await expect(chat.getByRole('menuitemradio', { name: 'Solicitar para ações de risco' })).toHaveAttribute('aria-checked', 'true');
+  await page.keyboard.press('Escape');
+  await expect(chat.getByRole('button', { name: 'Modo de aprovação' })).toBeFocused();
+  await chat.getByRole('button', { name: 'Modo de aprovação' }).click();
+  await page.keyboard.press('Shift+Tab');
+  await expect(chat.getByRole('menu', { name: 'Modo de aprovação' })).toBeHidden();
+  await expect(chat.getByRole('button', { name: 'Modo de aprovação' })).toBeFocused();
+  await chat.getByRole('button', { name: 'Modo de aprovação' }).click();
+  await page.keyboard.press('Tab');
+  await expect(chat.getByRole('menu', { name: 'Modo de aprovação' })).toBeHidden();
+  await expect(chat.getByRole('button', { name: 'Escolher modelo' })).toBeFocused();
+  await input.fill('Dados de teste');
+  await input.press('Enter');
+  await expect(input).toHaveValue('Dados de teste\n');
+  expect(await page.evaluate(() => window.__conversationTest.calls.filter(c => c.action === 'ai.ask').length)).toBe(0);
+  await input.press('Control+Enter');
+  await expect.poll(() => page.evaluate(() => window.__conversationTest.calls.filter(c => c.action === 'ai.ask').length)).toBe(1);
 });
 
 test('o seletor se ancora na barra, aceita teclado e fecha por Escape e clique fora', async ({ page }) => {

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Folder, Globe2, LayoutDashboard, Maximize2, Network, PanelRight, PanelLeft, Plus, Settings2, X } from 'lucide-react';
+import { Folder, Globe2, LayoutDashboard, Maximize2, Network, PanelRight, PanelLeft, Plus, X } from 'lucide-react';
 import { type Action, type Assessment, type Payload, type Project, type Snapshot, errorMessage } from '../types';
 import Projects from './Projects';
 import ProjectInsights from './ProjectInsights';
@@ -31,6 +31,7 @@ export default function ProjectDesk({snapshot,busy,action,selected,onSelect,onAd
   const mobileMenu=useRef<HTMLButtonElement>(null);
   const panelLauncher=useRef<HTMLButtonElement|null>(null);
   const panelClose=useRef<HTMLButtonElement>(null);
+  const panelOpen=panel!==undefined;
   const pendingFocus=useRef(false);
   const project=live.find(p=>p.id===(snapshot.assessments.find(a=>a.id===selected)?.projectId || projectId)) ?? live[0];
   const history=snapshot.assessments.filter(a=>a.projectId===project?.id && activeIds.has(a.projectId)).sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt));
@@ -48,16 +49,19 @@ export default function ProjectDesk({snapshot,busy,action,selected,onSelect,onAd
     compact.addEventListener('change',onResize);
     return ()=>compact.removeEventListener('change',onResize);
   },[tree]);
-  useEffect(()=>{if(panel)panelClose.current?.focus({preventScroll:true});},[panel]);
+  useEffect(()=>{if(panelOpen)panelClose.current?.focus({preventScroll:true});},[panelOpen]);
   function closePanel(){
     setPanel(undefined);
     panelLauncher.current?.focus({preventScroll:true});
   }
   useEffect(()=>{if(!launch && chat && chat.id!==selected)onSelect(chat.id);},[launch,chat?.id,selected,onSelect]);
-  useEffect(()=>{if(pendingFocus.current){main.current?.focus();pendingFocus.current=false;}},[launch,project?.id,chat?.id]);
+  useEffect(()=>{if(pendingFocus.current){main.current?.focus();pendingFocus.current=false;}},[launch,project?.id,chat?.id,panelOpen]);
   function openChat(id:string){pendingFocus.current=true;onSelect(id);setLaunch(false);setPanel(undefined);setTree(false);setError('');}
   function openProject(id:string){setProjectId(id);openChat(snapshot.assessments.filter(a=>a.projectId===id).sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt))[0]?.id??'');}
-  function showPanel(value:'overview'|'settings',trigger:HTMLButtonElement){panelLauncher.current=trigger;setPanel(value);setSplit(false);setTree(false);}
+  function togglePanel(){
+    if(panelOpen){closePanel();return;}
+    setPanel('overview');setSplit(false);setTree(false);
+  }
   async function newChat(p:Project){
     if(working.current)return;
     working.current=true;setStarting(true);setError('');
@@ -90,18 +94,27 @@ export default function ProjectDesk({snapshot,busy,action,selected,onSelect,onAd
         <header className="desk-bar"><div className="desk-location">
           <button className="desk-tree-toggle" aria-controls="project-tree" aria-expanded={!treeCollapsed} aria-label={treeCollapsed?'Mostrar lista de projetos':'Recolher lista de projetos'} title={treeCollapsed?'Mostrar lista de projetos':'Recolher lista de projetos'} onClick={()=>setTreeCollapsed(!treeCollapsed)}><PanelLeft size={17}/></button>
           <ProjectIcon className="desk-location-icon" size={17}/><div><h1 title={project.name}>{project.name}</h1>{chat&&<small title={chat.title}>{chat.title}</small>}</div></div>
-          <div className="desk-actions"><button title="Visão geral do projeto" aria-label="Visão geral do projeto" aria-expanded={panel==='overview'} onClick={e=>showPanel('overview',e.currentTarget)}><LayoutDashboard size={17}/><span>Visão geral</span></button><button title="Configurações do projeto" aria-label="Configurações do projeto" aria-expanded={panel==='settings'} onClick={e=>showPanel('settings',e.currentTarget)}><Settings2 size={17}/></button></div>
+          <div className="desk-actions"><button ref={panelLauncher} type="button" title="Painel do projeto" aria-label="Painel do projeto" aria-expanded={panelOpen} aria-controls="desk-project-panel" onClick={togglePanel}><LayoutDashboard size={16} aria-hidden="true"/><span>Projeto</span></button></div>
         </header>
         <div className={'desk-content'+(panel&&split?' desk-split':'')}>
           <div className="desk-conversation" hidden={!!panel&&!split}>
             {chat?<ProjectConversation key={chat.id} assessment={chat} plans={snapshot.plans?.filter(plan=>!snapshot.workPlanBindings?.some(binding=>binding.executionPlanId===plan.id))} settings={snapshot.settings} action={action} busy={busy} onAdvanced={()=>onAdvanced(chat.id)} onModels={onModels}/>
             :<div className="desk-welcome"><h2>Comece uma conversa</h2><button className="button primary" disabled={starting||busy} onClick={()=>void newChat(project)}><Plus size={16}/>Nova conversa</button></div>}
           </div>
-          {panel&&<aside className="desk-panel" aria-label={panel==='settings'?'Configurações do projeto':'Visão geral do projeto'} onKeyDown={event=>{
+          {panel&&<aside id="desk-project-panel" className="desk-panel" aria-label="Projeto" onKeyDown={event=>{
             if(event.key==='Escape'&&!event.defaultPrevented&&!event.nativeEvent.isComposing&&event.target instanceof Element&&!event.target.closest('[role="dialog"],dialog,select,[aria-expanded="true"]')){event.stopPropagation();closePanel();}
           }}>
-            <div className="desk-panel-head"><strong>{panel==='settings'?'Configurações do projeto':'Visão geral do projeto'}</strong><div><button className="icon-button" title={split?'Ampliar painel':'Mostrar ao lado da conversa'} aria-label={split?'Ampliar painel':'Mostrar ao lado da conversa'} onClick={()=>setSplit(!split)}>{split?<Maximize2 size={16}/>:<PanelRight size={16}/>}</button><button ref={panelClose} className="icon-button" aria-label="Fechar painel" onClick={closePanel}><X size={17}/></button></div></div>
-            <Projects key={project.id+panel} panel={panel} initialProjectId={project.id} projects={snapshot.projects} assessments={snapshot.assessments} action={action} busy={busy} onNewAssessment={()=>void newChat(project)} onOpenAssessment={openChat} onArchived={()=>{onSelect('');setProjectId('');setPanel(undefined);}} insights={<ProjectInsights snapshot={snapshot} projectId={project.id} onFinding={onFinding}/>}/>
+            <div className="desk-panel-head"><div className="desk-panel-tabs" role="tablist" aria-label="Painel do projeto">
+              {(['overview','settings'] as const).map((value,index)=><button key={value} id={'desk-tab-'+value} type="button" role="tab" aria-selected={panel===value} tabIndex={panel===value?0:-1} aria-controls="desk-panel-content" onClick={()=>setPanel(value)} onKeyDown={event=>{
+                const next=event.key==='Home'?0:event.key==='End'?1:['ArrowLeft','ArrowRight'].includes(event.key)?1-index:undefined;
+                if(next===undefined)return;
+                event.preventDefault();const target=next===0?'overview':'settings';setPanel(target);
+                document.getElementById('desk-tab-'+target)?.focus();
+              }}>{value==='overview'?'Visão geral':'Configurações'}</button>)}
+            </div><div><button className="icon-button" title={split?'Ampliar painel':'Mostrar ao lado da conversa'} aria-label={split?'Ampliar painel':'Mostrar ao lado da conversa'} aria-pressed={split} onClick={()=>setSplit(!split)}>{split?<Maximize2 size={16}/>:<PanelRight size={16}/>}</button><button ref={panelClose} className="icon-button" aria-label="Fechar painel" onClick={closePanel}><X size={17}/></button></div></div>
+            <div role="tabpanel" id="desk-panel-content" aria-labelledby={'desk-tab-'+panel}>
+              <Projects key={project.id} panel={panel} initialProjectId={project.id} projects={snapshot.projects} assessments={snapshot.assessments} action={action} busy={busy} onNewAssessment={()=>void newChat(project)} onOpenAssessment={openChat} onArchived={()=>{onSelect('');setProjectId('');setPanel(undefined);}} insights={<ProjectInsights snapshot={snapshot} project={project} selected={chat?.id} onConversation={openChat} onFinding={onFinding}/>}/>
+            </div>
           </aside>}
         </div>
       </>}

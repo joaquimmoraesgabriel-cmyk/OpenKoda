@@ -1,5 +1,15 @@
 # Interações do OpenKoda 0.1.18
 
+## Revisão do compositor na 0.1.19
+
+Em 12/11/2026, a revisão usou as duas novas capturas fornecidas do Codex e uma observação externa da janela aberta. O texto ocupa a primeira área do compositor. O botão **+** e a aprovação ficam à esquerda no rodapé, com o modelo e o envio à direita. Os menus aparecem acima do controle e deixam a conversa visível. No OpenKoda, Enter envia por padrão e Shift + Enter insere uma linha. A preferência explícita por Ctrl + Enter continua disponível.
+
+O servidor MCP local Craft Anything 0.6.0 comparou as capturas fornecidas, registrando seus hashes e a área comum em `ev_d48cbcfdb71c9ca08eacf9aa33a88b50134720d37b604f722762f41ec5795d77`. Essa comparação identifica as imagens de referência. A leitura de acessibilidade ao vivo ficou sem resposta e seu processo foi encerrado. A organização dos menus foi obtida da observação visual. [Evidência da comparação](codex-composer-evidence.json)
+
+O OpenKoda reúne visão geral e configurações em **Projeto**, com abas e opção de manter o chat ao lado. Conversas, execuções, achados e uso de IA usam tabelas com busca, ordenação e paginação. Os filtros de estado e severidade pertencem à tabela de achados. Esses controles operam sobre os registros do projeto.
+
+## Referências da 0.1.18
+
 [Mapa das interfaces de referência](referencias.svg) · [Mapa aplicado ao OpenKoda](openkoda.svg)
 
 Os mapas têm fontes Mermaid e documentos editáveis do OpenFlowKit nesta pasta. As observações abaixo descrevem controles visíveis no Windows e nas capturas de referência fornecidas para o projeto.

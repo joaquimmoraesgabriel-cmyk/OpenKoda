@@ -1,9 +1,11 @@
 # Artifact/installer rehearsal for 0.1.12. NEVER starts an application binary.
 # Release builds ignore OPENKODA_DATA_DIR; schema migration is separate debug evidence.
+# Restore the archived 0.1.11 and 0.1.12 packages, pinned binaries and migration fixture
+# inside the workspace before replaying this historical rehearsal.
 [CmdletBinding()]
 param(
-    [string]$OldReleaseManifest = (Join-Path $PSScriptRoot '../releases/0.1.11-local-20261111/release.json'),
-    [string]$NewReleaseManifest = (Join-Path $PSScriptRoot '../.local/package-windows.json'),
+    [string]$OldReleaseManifest,
+    [string]$NewReleaseManifest,
     [string]$NewSourceBinary,
     [string]$NativeMigrationReceipt,
     [string]$ExpectedNativeSha256,
@@ -176,6 +178,7 @@ if($SelfTest){
 }
 $result=$null
 try{
+    if(-not $OldReleaseManifest -or -not $NewReleaseManifest){throw 'Supply -OldReleaseManifest for archived 0.1.11 and -NewReleaseManifest for archived 0.1.12, or use -SelfTest for synthetic checks.'}
     $old=Read-Release $OldReleaseManifest '' '0.1.11';$new=Read-Release $NewReleaseManifest $NewSourceBinary '0.1.12'
     $migration=Read-Migration $NativeMigrationReceipt $ExpectedNativeSha256 $old
     Assert-NoApp;$before=Shared-State

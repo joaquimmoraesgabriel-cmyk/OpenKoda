@@ -91,8 +91,10 @@ async function installLocalChat(page:Page){
 test('pedir verificação cria uma sugestão delimitada e só executa após autorizar', async ({page})=>{
   await installLocalChat(page);
   const chat=page.getByRole('region',{name:'Conversa do projeto'});
-  await chat.getByLabel('Modo de aprovação').selectOption('always');
-  await chat.getByRole('button',{name:'Pedir verificação'}).click();
+  await chat.getByRole('button',{name:'Modo de aprovação'}).click();
+  await chat.getByRole('menuitemradio',{name:'Sempre solicitar'}).click();
+  await chat.getByRole('button',{name:'Adicionar à mensagem'}).click();
+  await chat.getByRole('menuitemcheckbox',{name:'Pedir verificação'}).click();
   await chat.getByLabel('Mensagem da conversa').fill('Examine sinais estáticos no código.');
   await chat.getByLabel('Enviar mensagem').click();
   await chat.getByRole('button',{name:'Autorizar envio'}).click();

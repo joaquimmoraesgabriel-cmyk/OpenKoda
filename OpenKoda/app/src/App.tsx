@@ -21,6 +21,7 @@ import { Rail } from './components/ProjectRail';
 import { useApplyAppearance } from './appearance';
 import './workspace.css';
 import './project-desk.css';
+import './codex-workspace.css';
 
 export default function App() {
   const [snapshot, setSnapshot] = useState<Snapshot>();

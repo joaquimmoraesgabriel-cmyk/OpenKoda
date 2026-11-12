@@ -1,6 +1,12 @@
 # OpenKoda desktop
 
-**0.1.18 para Windows x64.** [Instalador local](releases/0.1.18-local-20261111/OpenKoda_0.1.18_x64-setup.exe) · [Registro dos testes](IMPLEMENTACAO.md) · [Mapas da interface](docs/interface/README.md)
+**0.1.19 para Windows x64.** [Instalador local](releases/0.1.19-local-20261112/OpenKoda_0.1.19_x64-setup.exe) · [Registro dos testes](IMPLEMENTACAO.md) · [Referências da interface](docs/interface/README.md)
+
+Enter envia a mensagem e Shift + Enter insere uma linha. Quem escolheu Ctrl + Enter em **Configurações → Geral** continua usando essa preferência. O botão **+** abre anexos e pedidos de verificação. Ao lado, o menu de aprovação explica quando uma ação exige confirmação. À direita ficam o seletor de modelo e o envio, que se transforma em cancelamento durante o trabalho.
+
+O botão **Projeto** reúne **Visão geral** e **Configurações**. Na visão geral, escolha Conversas, Execuções, Achados ou Uso de IA. Pesquise os registros, clique no título de uma coluna para ordenar ou use a paginação. Achados também podem ser filtrados por estado e severidade. **Mostrar ao lado da conversa** mantém o chat disponível enquanto você consulta o painel.
+
+Na limpeza de 12/11/2026, os instaladores da 0.1.18 e da 0.1.17 foram mantidos para recuperação. Foram removidos instaladores anteriores e artefatos descartáveis de testes. Os registros históricos abaixo podem apontar para artefatos locais removidos nessa limpeza.
 
 Na tela inicial, escolha **Pasta local**, **Web / API** ou **Rede** e clique em **Criar projeto**. Para uma pasta, indique se a verificação deve abranger todo o código ou apenas um arquivo ou subpasta. Para Web/API, informe a URL. Para rede, indique o IP ou CIDR. Escolha um dos seus modelos ou use a análise nativa. Descreva o que você quer verificar e clique em **Criar projeto**.
 
