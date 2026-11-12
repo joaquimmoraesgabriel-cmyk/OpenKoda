@@ -1,6 +1,6 @@
 # OpenKoda desktop
 
-**0.2.0 — análise de código com Codex Security.** O OpenKoda controla o SDK oficial pela interface desktop: selecionar uma pasta, iniciar, acompanhar as fases, cancelar e consultar o relatório salvo. [Implementação e testes](IMPLEMENTACAO.md) · [Motor e protocolo](security-runtime/README.md) · [Interface](docs/interface/README.md)
+**0.2.0 — análise de código com Codex Security.** O OpenKoda controla o SDK oficial pela interface desktop: selecionar uma pasta, iniciar, acompanhar as fases, cancelar e consultar o relatório salvo. [Instalador local x64](releases/0.2.0-local-20261112/OpenKoda_0.2.0_x64-setup.exe) · [Implementação e testes](IMPLEMENTACAO.md) · [Motor e protocolo](security-runtime/README.md) · [Interface](docs/interface/README.md)
 
 ## Usar
 
@@ -10,6 +10,8 @@
 4. Acompanhe as fases e abra **Cobertura da análise** e **Relatório do Codex Security**. O cancelamento fica disponível durante a execução. Reabrir o aplicativo recupera o registro, sem iniciar outra análise.
 
 O motor instalado aceita a conexão OpenAI e a configuração OpenRouter. O limite de custo exige um modelo com preços reconhecidos pelo SDK instalado; alguns IDs, especialmente os do OpenRouter, podem ser recusados. A varredura real desta versão usou OpenAI com `gpt-6-luna`. Não se deve interpretar o catálogo de modelos como garantia de compatibilidade com o scanner. Uma chamada em andamento pode ultrapassar o limite estimado.
+
+O relatório mostra a estimativa de custo do SDK; o orçamento local a registra separadamente das chamadas de conversa. O histórico de tokens das conversas não detalha as chamadas internas do scanner. Tokens e valores não informados pelo motor permanecem desconhecidos.
 
 A conversa mantém os provedores, modelos e componentes já cadastrados. Enter envia, Shift + Enter insere uma linha e a preferência Ctrl + Enter continua disponível em **Geral**. O botão **+** adiciona anexos. O seletor de modelo e o cancelamento ficam no compositor. A atividade da análise mostra fases públicas do SDK.
 

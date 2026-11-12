@@ -1,0 +1,248 @@
+{
+  "sourceCommit": "8f0da5e457b7ac40e8f92c602e9bb1a1b123c8c2",
+  "serverRun": "https://github.com/joaquimmoraesgabriel-cmyk/OpenKoda/actions/runs/43242760051",
+  "clientRun": "https://github.com/joaquimmoraesgabriel-cmyk/OpenKoda/actions/runs/43242759641",
+  "note": "Cada runner compilou ou recebeu o pacote ligado a esta revisão. São instaladores próprios do CI; o pacote local tem recibo de extração separado.",
+  "installed": {
+    "windows-2022": {
+      "passed": true,
+      "stage": "completed",
+      "starts": [
+        {
+          "iteration": 1,
+          "view": "Permissões",
+          "projects": 0,
+          "assessments": 0,
+          "timeoutSeconds": 97,
+          "modelRequired": true,
+          "settingsReopened": false,
+          "transport": "Windows UI Automation"
+        },
+        {
+          "iteration": 2,
+          "view": "Permissões",
+          "projects": 0,
+          "assessments": 0,
+          "timeoutSeconds": 97,
+          "modelRequired": true,
+          "settingsReopened": true,
+          "transport": "Windows UI Automation"
+        }
+      ],
+      "version": "0.2.0",
+      "installerSha256": "5966580a4b0b94f240cbec3c30ecf5bfae627d2a276533641b9362c0f39d5cbc",
+      "payloadSha256": "332552f7fb2d4fa2e643aaa7c9c96a8b8d1df3bf9019c00ba60350dc32bd0395",
+      "sourceSha256": "8a0914dcfc23468b092f8353ce62e02c13ae659ea39e49f7a578ac73e5f9da82",
+      "differingBytes": 3,
+      "securityRuntime": {
+        "schema": "openkoda.security-runtime-tree.v1",
+        "files": 11878,
+        "bytes": 768156387,
+        "sha256": "eb5c5a334741c1bca37d5249e275c9f6dfeac16aa726007efd0ce932c8895df4"
+      },
+      "sdkDiagnostic": {
+        "type": "check",
+        "available": true,
+        "sdkVersion": "0.10.0",
+        "nodeVersion": "24.22.2",
+        "pythonVersion": "3.13.17",
+        "gitVersion": "2.56.0.windows.4",
+        "codexVersion": "0.167.1",
+        "missing": []
+      },
+      "sdkPrerequisiteGitMissing": false,
+      "projectReopened": false,
+      "settingsReopened": true,
+      "uninstalled": true,
+      "databasePreserved": true,
+      "generatedAt": "2026-11-12T15:13:34.3092008Z"
+    },
+    "windows-2025": {
+      "passed": true,
+      "stage": "completed",
+      "starts": [
+        {
+          "iteration": 1,
+          "view": "Permissões",
+          "projects": 0,
+          "assessments": 0,
+          "timeoutSeconds": 97,
+          "modelRequired": true,
+          "settingsReopened": false,
+          "transport": "Windows UI Automation"
+        },
+        {
+          "iteration": 2,
+          "view": "Permissões",
+          "projects": 0,
+          "assessments": 0,
+          "timeoutSeconds": 97,
+          "modelRequired": true,
+          "settingsReopened": true,
+          "transport": "Windows UI Automation"
+        }
+      ],
+      "version": "0.2.0",
+      "installerSha256": "39faa2019de16ef6cbf2e61d22ddadae118576748b17a3b424cf29a1ff78ad1a",
+      "payloadSha256": "4cb94a73d7ade69c933c262a2323496b51f3fc8e244ac2722368f66a8737739a",
+      "sourceSha256": "7a7925fb3cd6bfd22ce063b36debdb6ae54ac528cdbd988298b2f743ba260340",
+      "differingBytes": 3,
+      "securityRuntime": {
+        "schema": "openkoda.security-runtime-tree.v1",
+        "files": 11878,
+        "bytes": 768156387,
+        "sha256": "eb5c5a334741c1bca37d5249e275c9f6dfeac16aa726007efd0ce932c8895df4"
+      },
+      "sdkDiagnostic": {
+        "type": "check",
+        "available": true,
+        "sdkVersion": "0.10.0",
+        "nodeVersion": "24.22.2",
+        "pythonVersion": "3.13.17",
+        "gitVersion": "2.56.0.windows.4",
+        "codexVersion": "0.167.1",
+        "missing": []
+      },
+      "sdkPrerequisiteGitMissing": false,
+      "projectReopened": false,
+      "settingsReopened": true,
+      "uninstalled": true,
+      "databasePreserved": true,
+      "generatedAt": "2026-11-12T15:11:17.7987007Z"
+    },
+    "windows-11-arm": {
+      "passed": true,
+      "stage": "completed",
+      "starts": [
+        {
+          "iteration": 1,
+          "view": "Permissões",
+          "projects": 0,
+          "assessments": 0,
+          "timeoutSeconds": 97,
+          "modelRequired": true,
+          "settingsReopened": false,
+          "transport": "Windows UI Automation"
+        },
+        {
+          "iteration": 2,
+          "view": "Permissões",
+          "projects": 0,
+          "assessments": 0,
+          "timeoutSeconds": 97,
+          "modelRequired": true,
+          "settingsReopened": true,
+          "transport": "Windows UI Automation"
+        }
+      ],
+      "version": "0.2.0",
+      "installerSha256": "24e02277bcd461e1d85ca637e85236c3c90cfdabf1b30010db82e31cb41b095d",
+      "payloadSha256": "a8aaed874569dbf8ed6c4fa17bcb8bdb267dbc06fb9f803e218340cce9ea320c",
+      "sourceSha256": "7ae8027653c2c1c22796627b6a06bc4bb2b660542427904e55811391a3014ac2",
+      "differingBytes": 3,
+      "securityRuntime": {
+        "schema": "openkoda.security-runtime-tree.v1",
+        "files": 11878,
+        "bytes": 768156387,
+        "sha256": "eb5c5a334741c1bca37d5249e275c9f6dfeac16aa726007efd0ce932c8895df4"
+      },
+      "sdkDiagnostic": {
+        "type": "check",
+        "available": true,
+        "sdkVersion": "0.10.0",
+        "nodeVersion": "24.22.2",
+        "pythonVersion": "3.13.17",
+        "gitVersion": "2.56.0.windows.4",
+        "codexVersion": "0.167.1",
+        "missing": []
+      },
+      "sdkPrerequisiteGitMissing": false,
+      "projectReopened": false,
+      "settingsReopened": true,
+      "uninstalled": true,
+      "databasePreserved": true,
+      "generatedAt": "2026-11-12T15:16:49.2629087Z"
+    }
+  },
+  "client": {
+    "passed": true,
+    "stage": "completed",
+    "sourceCommit": "8f0da5e457b7ac40e8f92c602e9bb1a1b123c8c2",
+    "workflowRun": "43242759641",
+    "imageVersion": "20261101.203.1",
+    "webView2Observation": "pre-existing-runtime",
+    "windows": {
+      "caption": "Microsoft Windows 11 Enterprise",
+      "version": "10.0.26200",
+      "build": "26200",
+      "productType": 1,
+      "architecture": "Arm64"
+    },
+    "manifestSha256": "0fc8480c9da9f5bbdda31b9b36cfc9429d76e3ec18a388321d004661768147c2",
+    "version": "0.2.0",
+    "installerSha256": "24e02277bcd461e1d85ca637e85236c3c90cfdabf1b30010db82e31cb41b095d",
+    "sourceExeSha256": "7ae8027653c2c1c22796627b6a06bc4bb2b660542427904e55811391a3014ac2",
+    "installerPeMachine": "0x014C",
+    "appPeMachine": "0x8664",
+    "webView2Before": {
+      "observedAt": "2026-11-12T15:15:32.6129218Z",
+      "present": true,
+      "registrations": [
+        {
+          "hive": "LocalMachine",
+          "view": "Registry32",
+          "version": "156.0.4314.58",
+          "present": true
+        },
+        {
+          "hive": "LocalMachine",
+          "view": "Registry64",
+          "version": null,
+          "present": false
+        },
+        {
+          "hive": "CurrentUser",
+          "view": "Registry32",
+          "version": null,
+          "present": false
+        },
+        {
+          "hive": "CurrentUser",
+          "view": "Registry64",
+          "version": null,
+          "present": false
+        }
+      ]
+    },
+    "webView2After": {
+      "observedAt": "2026-11-12T15:16:49.267504Z",
+      "present": true,
+      "registrations": [
+        {
+          "hive": "LocalMachine",
+          "view": "Registry32",
+          "version": "156.0.4314.58",
+          "present": true
+        },
+        {
+          "hive": "LocalMachine",
+          "view": "Registry64",
+          "version": null,
+          "present": false
+        },
+        {
+          "hive": "CurrentUser",
+          "view": "Registry32",
+          "version": null,
+          "present": false
+        },
+        {
+          "hive": "CurrentUser",
+          "view": "Registry64",
+          "version": null,
+          "present": false
+        }
+      ]
+    }
+  }
+}

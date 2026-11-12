@@ -1,0 +1,191 @@
+{
+  "schema": "openkoda.nsis-static-inspection.v1",
+  "version": "0.2.0",
+  "mode": "ExtractOnly",
+  "passed": true,
+  "sourceCommit": "8f0da5e457b7ac40e8f92c602e9bb1a1b123c8c2",
+  "installerExecuted": false,
+  "installedReleaseExecuted": false,
+  "personalProfileOpened": false,
+  "paidScan": false,
+  "newRelease": {
+    "version": "0.2.0",
+    "installer": "D:\\OpenKoda\\OpenKoda\\app\\src-tauri\\target\\release\\bundle\\nsis\\OpenKoda_0.2.0_x64-setup.exe",
+    "installerSha256": "955e6a9f7648fa48418ea9f03b1d31bc5268bda1579be69cf6ea992f80063190",
+    "bytes": 181598357
+  },
+  "extractor": {
+    "version": "26.06",
+    "files": {
+      "7z.exe": "dc0493429fe28136fcb177a0e77c9875cbb3b0bff5f2f8eeba4df302e98cef76",
+      "7z.dll": "500db9eb17f3c21b729ba41dd02ecfe1823da05028c7e4ba129084cc74cc364e"
+    }
+  },
+  "skippedUnknownSizeEntry": "uninstall.exe",
+  "entries": {
+    "count": 11910,
+    "runtime": 11894,
+    "bytes": 800224172,
+    "listingSha256": "41141fa2ad63848e454d5bb5e74602a16e8f524194493301cf16f3f6fcf2f301",
+    "safe": true
+  },
+  "stage": "completed",
+  "reusedValidatedExtraction": true,
+  "bundledResources": {
+    "avisos/AVISOS.txt": "6a04d6e60ccff562536820c15f0d8d1e68c727c22b982289bd5f3c2150186c33",
+    "avisos/Prestige-UI-LICENSE.txt": "88967c2d0545da7ed89a4d33d58f3850f35beddcb6514c173170d228189519f9",
+    "avisos/Cindy-LICENSE.txt": "3ddf9be5c28fe27dad143a5dc76eea25222ad1dd68934a047064e56ed2fa40c5",
+    "avisos/Cindy-NOTICE.txt": "0f70b76e1fa169a6f680e80cee098774262f1b4c1eed8967d207cce7e85eb29d",
+    "avisos/COPYRIGHT-library.html": "5647be074c8edf7339fd863055923a8fc80bc5610a8d4661ec3b767b9d392c27",
+    "avisos/fontes-MPL.zip": "fc9f8ffb6b16d2f01a4cd295f983276ea4f71f4009bbd6d98305bbbce9f03b85",
+    "recuperacao/windows_release_recovery.py": "6ed8d57fc6397b1a3c45ef920a862fa1d6297d275689125757277d4a1f23703f",
+    "recuperacao/RECUPERACAO-WINDOWS.md": "7f8700f7e605253e7d49619f2254934ac6b153fab275ba7907a81ddc13ba1766"
+  },
+  "newPayload": {
+    "verification": {
+      "verified": true,
+      "differingBytes": 3,
+      "sha256": "1f3e6cb156cc636e886342e55f342884905c3335be3ab75a2bf41868b9d045a5",
+      "sourceSha256": "4c4e045aa98c3602d48a4cb54fadde4d87614e38b9addcec23bb087106eab13f"
+    }
+  },
+  "embeddedFrontend": [
+    {
+      "file": "index.html",
+      "viteSha256": "c8a03c068ddcaea19c2cd16298a3f3b79c8e24f4453bc79c3366e2377178f0e3",
+      "embeddedUncompressedSha256": "c3c094c867c7991a5ba0133464423b37cf0e45c07c11e85996e712750bb1eba3",
+      "compressedSha256": "63b28223e7774009dcbba59a9221a1e06315b5fb5c7e48d5b583f5f8fad81214",
+      "compressedBytes": 237,
+      "exeOffset": 22300195,
+      "comparison": "Tauri HTML serialization (doctype case, empty crossorigin, inter-tag whitespace)"
+    },
+    {
+      "file": "assets\\groq-CR3fFsPZ.png",
+      "viteSha256": "cbc980164383f914a3ed9b6e11124ae8350232245720bfa115f34890aaaebaa3",
+      "embeddedUncompressedSha256": "cbc980164383f914a3ed9b6e11124ae8350232245720bfa115f34890aaaebaa3",
+      "compressedSha256": "2db5e0653cfae64c68934398603a023eea26cef9f4ce68aeba0f32da67052ee3",
+      "compressedBytes": 6882,
+      "exeOffset": 22491952,
+      "comparison": "byte-identical"
+    },
+    {
+      "file": "assets\\index-BSwo0Uqk.js",
+      "viteSha256": "0a260e80e6a9dfebdc4f7c47f3f554819a55b886006c765c14207f4042dec76b",
+      "embeddedUncompressedSha256": "0a260e80e6a9dfebdc4f7c47f3f554819a55b886006c765c14207f4042dec76b",
+      "compressedSha256": "825b71bb5f03d4e9e50d592f05205524dc6dd88bc87d5d03c9740ef9b0fbd11b",
+      "compressedBytes": 170229,
+      "exeOffset": 22300457,
+      "comparison": "byte-identical"
+    },
+    {
+      "file": "assets\\index-KcR1XbAG.css",
+      "viteSha256": "af00ae43b20d07e5cf0f0620ac9ecd702dc3ab40d00fb39ec4411ecc44f79579",
+      "embeddedUncompressedSha256": "af00ae43b20d07e5cf0f0620ac9ecd702dc3ab40d00fb39ec4411ecc44f79579",
+      "compressedSha256": "dfe4e8254548c501037cc3d6b710c3572e018a41a22ffb41c2c33d09da148e75",
+      "compressedBytes": 21215,
+      "exeOffset": 22470712,
+      "comparison": "byte-identical"
+    },
+    {
+      "file": "assets\\openrouter-DUxd9XH8.png",
+      "viteSha256": "e6ce76bf956ac68569a7b1456fe0310fb9cc22bc1bc0fd8defd5daae099480b8",
+      "embeddedUncompressedSha256": "e6ce76bf956ac68569a7b1456fe0310fb9cc22bc1bc0fd8defd5daae099480b8",
+      "compressedSha256": "32575569945c1bb1f2206134129619c8a964a7259390dc1a85a384e6d041a4c9",
+      "compressedBytes": 16129,
+      "exeOffset": 22498865,
+      "comparison": "byte-identical"
+    },
+    {
+      "file": "assets\\source-CI-TRgjy.svg",
+      "viteSha256": "30762965171bc6e2266b24b77ad29d267566af0ca9a619f91607a1ce415486cc",
+      "embeddedUncompressedSha256": "30762965171bc6e2266b24b77ad29d267566af0ca9a619f91607a1ce415486cc",
+      "compressedSha256": "c160b0f07d6570ec8c6c37326770a94a5996676ce2dbe18cba33814de40099c9",
+      "compressedBytes": 205,
+      "exeOffset": 22515021,
+      "comparison": "byte-identical"
+    }
+  ],
+  "icon": {
+    "sourceIcoSha256": "8166a92f19522e559abbff315982efaaf29d7caa7873ac017de36e7a11e9ccad",
+    "group": 32512,
+    "frames": [
+      {
+        "icoPlanes": 0,
+        "resourcePlanes": 1,
+        "icoBits": 32,
+        "resourceBits": 32,
+        "pixels": 16,
+        "id": 1,
+        "bytes": 546,
+        "sha256": "74ec1c2045e74bbe2b9304d9883fdaf74815ec2dcfb38e13831ccf42ee06431c"
+      },
+      {
+        "icoPlanes": 0,
+        "resourcePlanes": 1,
+        "icoBits": 32,
+        "resourceBits": 32,
+        "pixels": 24,
+        "id": 2,
+        "bytes": 816,
+        "sha256": "546467a415f649e4b67c75690387819b818f522ec9267ee4b7ff9e260174e21d"
+      },
+      {
+        "icoPlanes": 0,
+        "resourcePlanes": 1,
+        "icoBits": 32,
+        "resourceBits": 32,
+        "pixels": 32,
+        "id": 3,
+        "bytes": 1072,
+        "sha256": "12cb9ff8a3a1b6acd356ca468234f051d616fa24056fb3d9bf380f5d70e61be3"
+      },
+      {
+        "icoPlanes": 0,
+        "resourcePlanes": 1,
+        "icoBits": 32,
+        "resourceBits": 32,
+        "pixels": 48,
+        "id": 4,
+        "bytes": 1639,
+        "sha256": "6b7773fa87a3021f2d08fe127534a9933fdff9a6a24f37ae1cc35a806be598db"
+      },
+      {
+        "icoPlanes": 0,
+        "resourcePlanes": 1,
+        "icoBits": 32,
+        "resourceBits": 32,
+        "pixels": 64,
+        "id": 5,
+        "bytes": 2108,
+        "sha256": "cfdec1d9b4e43d5fa4761a8c91f9c1eb97dd5ba8c1678412b277940a29b56951"
+      },
+      {
+        "icoPlanes": 0,
+        "resourcePlanes": 1,
+        "icoBits": 32,
+        "resourceBits": 32,
+        "pixels": 256,
+        "id": 6,
+        "bytes": 4564,
+        "sha256": "eb216b7bccb59e696f0011750492943fdcaac90704f36905f1bde3c5b3891fcf"
+      }
+    ]
+  },
+  "securityRuntime": {
+    "schema": "openkoda.security-runtime-tree.v1",
+    "files": 11894,
+    "bytes": 768303674,
+    "sha256": "2b0c8c0d64ff069bc0cc29ee670b68eb295bf54faae3521dc523117d90e6fe79"
+  },
+  "runtimeDiagnostic": {
+    "type": "check",
+    "available": true,
+    "sdkVersion": "0.10.0",
+    "nodeVersion": "24.19.0",
+    "pythonVersion": "3.14.7",
+    "gitVersion": "2.55.0.windows.5",
+    "codexVersion": "0.167.1",
+    "missing": []
+  },
+  "updatedAt": "2026-11-12T15:05:48.452Z"
+}

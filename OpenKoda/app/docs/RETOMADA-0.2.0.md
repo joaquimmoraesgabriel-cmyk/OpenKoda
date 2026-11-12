@@ -27,6 +27,8 @@ A suíte de referência 0.1.19 está no commit `01c1960`. Seus testes de TCP, HT
 
 Os ensaios offline do helper usam credencial sintética. Os ensaios de interface simulam o transporte nativo. A abertura desktop e a chamada real do SDK são verificações separadas. Os recibos finais de build, testes e instalador são registrados em IMPLEMENTACAO.md.
 
+O instalador local tem 181.598.357 bytes, SHA-256 `955e6a9f7648fa48418ea9f03b1d31bc5268bda1579be69cf6ea992f80063190`, sem assinatura digital. Sua extração preservou o runtime de 11.894 arquivos e o diagnóstico confirmou todos os componentes. Os pacotes próprios do CI da mesma revisão passaram por instalação, duas aberturas e desinstalação nos Windows Server 2022/2025 e Windows 11 Arm64 com o aplicativo x64. O ensaio instalado verifica o formulário sem modelo e a persistência das configurações; não executa varredura paga nem se apresenta como ensaio de criação de projeto. [Inspeção local](security/0.2.0/package-verification.json) · [Instalações Windows](security/0.2.0/windows-validation.json)
+
 ## Referência visual
 
 A interface mantém os provedores, configurações, perfil e componentes previamente aprovados com referência Cindy. O workspace adota a organização das referências fornecidas do Codex: trilho de ícones, projetos e conversas em lateral própria, conteúdo central, compositor compacto e um único painel Projeto com tabelas interativas.
