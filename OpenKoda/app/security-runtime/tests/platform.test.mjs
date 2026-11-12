@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { dirname } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
+import { tmpdir } from 'node:os';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import childProcess from 'node:child_process';
 import { syncBuiltinESMExports } from 'node:module';
 import { promisify } from 'node:util';
@@ -83,5 +85,65 @@ test('a killed child cannot confirm a version even if execFile resolves exit zer
     assert.equal(result.diagnostic.attempts[0].exitCode,0);
   }finally{
     childProcess.execFile=original;syncBuiltinESMExports();
+  }
+});
+
+test('SDK loading finishes before any version probe starts',async()=>{
+  const folder=await mkdtemp(join(tmpdir(),'openkoda-platform-order-'));
+  try{
+    const sdkSource="globalThis.__sdkOrder.events.push({type:'sdk-evaluate',active:globalThis.__sdkOrder.active});const until=Date.now()+25;while(Date.now()<until){};globalThis.__sdkOrder.loaded=true;export class CodexSecurity{}";
+    await writeFile(join(folder,'loader.mjs'),`
+export async function resolve(specifier,context,nextResolve){
+  if(specifier==='@openai/codex-security'&&context.parentURL?.includes('sdk-load-order-fixture'))return {url:'openkoda-order-fixture:sdk',shortCircuit:true};
+  return nextResolve(specifier,context);
+}
+export async function load(url,context,nextLoad){
+  if(url==='openkoda-order-fixture:sdk')return {format:'module',source:${JSON.stringify(sdkSource)},shortCircuit:true};
+  return nextLoad(url,context);
+}`);
+    const platform=new URL('../platform.mjs?sdk-load-order-fixture',import.meta.url).href;
+    await writeFile(join(folder,'fixture.mjs'),`
+import childProcess from 'node:child_process';
+import fs from 'node:fs/promises';
+import {register,syncBuiltinESMExports} from 'node:module';
+import {promisify} from 'node:util';
+globalThis.__sdkOrder={active:0,loaded:false,events:[]};
+const originalRead=fs.readFile;
+fs.readFile=async(path,...args)=>{
+  if(String(path).replaceAll('\\\\','/').endsWith('/@openai/codex-security/package.json')){
+    await new Promise(done=>setTimeout(done,50));return JSON.stringify({name:'@openai/codex-security',version:'0.10.0'});
+  }
+  return originalRead(path,...args);
+};
+fs.access=async()=>{};fs.realpath=async path=>String(path);fs.lstat=async()=>({isFile:()=>true});fs.readdir=async()=>[];
+const synthetic=()=>{throw new Error('Unexpected callback adapter');};
+synthetic[promisify.custom]=(exe)=>{
+  const state=globalThis.__sdkOrder;state.active++;state.events.push({type:'probe-start',sdkLoaded:state.loaded});
+  const stdout=exe.includes('python')?'3.14.7\\n':/git(?:\\.exe)?$/.test(exe)?'git version 2.55.0\\n':'codex-cli 0.167.1\\n';
+  const pending=new Promise(done=>{
+    const finish=()=>{if(!state.loaded){setTimeout(finish,5);return;}state.active--;done({stdout,stderr:''});};
+    setTimeout(finish,5);
+  });
+  pending.child={killed:false,exitCode:0,signalCode:null};return pending;
+};
+childProcess.execFile=synthetic;syncBuiltinESMExports();register(new URL('./loader.mjs',import.meta.url));
+const {inspectPlatform}=await import(${JSON.stringify(platform)});
+const {check}=await inspectPlatform();
+const events=globalThis.__sdkOrder.events;
+console.log(JSON.stringify({available:check.available,sdkEvaluatedWithActiveProbes:events.find(event=>event.type==='sdk-evaluate')?.active,probesStartedBeforeSdk:events.filter(event=>event.type==='probe-start'&&!event.sdkLoaded).length,probes:events.filter(event=>event.type==='probe-start').length}));
+`);
+    const {stdout}=await promisify(childProcess.execFile)(process.execPath,[join(folder,'fixture.mjs')],{
+      windowsHide:true,timeout:5000,maxBuffer:8192,
+      env:{SystemRoot:process.env.SystemRoot??'C:\\Windows',TEMP:tmpdir(),TMP:tmpdir()},
+    });
+    const result=JSON.parse(stdout);
+    assert.equal(result.available,true);
+    assert.equal(result.probes,3);
+    assert.equal(result.sdkEvaluatedWithActiveProbes,0,'SDK evaluation must not overlap live version probes');
+    assert.equal(result.probesStartedBeforeSdk,0,'version probes must wait for SDK loading');
+  }finally{
+    assert.equal(dirname(folder),resolve(tmpdir()));
+    assert.ok(basename(folder).startsWith('openkoda-platform-order-'));
+    await rm(folder,{recursive:true,force:true});
   }
 });

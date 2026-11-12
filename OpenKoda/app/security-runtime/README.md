@@ -11,7 +11,7 @@ No Windows x64, a distribuição inclui `bin/node.exe`, `python/python.exe` e o 
 .\bin\node.exe --test tests/*.test.mjs
 ```
 
-O primeiro comando informa as versões disponíveis e métricas seguras das consultas: categoria de falha, duração, bytes de saída e estado do processo. Não devolve caminhos, argumentos ou saída bruta. Um processo encerrado não é aceito como consulta de versão válida, mesmo se a biblioteca resolver a chamada com código zero. Os testes exercitam o protocolo, as projeções dos resultados e o preflight oficial offline com credencial sintética. O teste Windows de preflight cria uma pasta de saída temporária exclusiva sob o perfil e a remove após conferir sua identidade.
+A importação do SDK termina antes de armar os temporizadores das consultas de versão. Um controle offline reproduziu perda de stdout pelo timer do Node quando o event loop fica bloqueado, mesmo com saída zero e child.killed=false; a separação elimina a sobreposição conhecida sem ampliar os dez segundos nem repetir a consulta. O controle não atribui sozinho a causa de todos os atrasos observados. O primeiro comando informa as versões disponíveis e métricas seguras das consultas: categoria de falha, duração, bytes de saída e estado do processo. Não devolve caminhos, argumentos ou saída bruta. Um processo encerrado não é aceito como consulta de versão válida, mesmo se a biblioteca resolver a chamada com código zero. Os testes exercitam o protocolo, as projeções dos resultados e o preflight oficial offline com credencial sintética. O teste Windows de preflight cria uma pasta de saída temporária exclusiva sob o perfil e a remove após conferir sua identidade.
 
 ## Protocolo nativo
 

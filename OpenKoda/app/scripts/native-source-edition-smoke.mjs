@@ -118,7 +118,7 @@ try{
   await panel.getByLabel('Avaliação B',{exact:true}).selectOption(next.id);
   await panel.getByRole('button',{name:'Comparar registros'}).click();
   const comparison=panel.getByRole('region',{name:'Resultado da comparação'});
-  await expect(comparison.getByRole('region',{name:'Varreduras do Codex Security'})).toContainText('Mesmos valores exibidos');
+  await expect(comparison.getByRole('region',{name:'Análises do OpenKoda'})).toContainText('Mesmos valores exibidos');
   await expect(comparison.getByText('0',{exact:true})).toHaveCount(2);
   await expect(comparison).not.toContainText('Kali');
   await panel.getByRole('tab',{name:'Configurações',exact:true}).click();

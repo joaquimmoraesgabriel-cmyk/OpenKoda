@@ -88,14 +88,17 @@ export async function inspectPlatform() {
   const triple=(process.arch==='arm64'?'aarch64':'x86_64')+(windows?'-pc-windows-msvc':process.platform==='darwin'?'-apple-darwin':'-unknown-linux-musl');
   const vendor=join(root,'node_modules','@openai',`codex-${process.platform}-${process.arch}`,'vendor',triple,'bin',windows?'codex.exe':'codex');
   const gitPaths=windows?[join(process.env.ProgramFiles || 'C:\\Program Files','Git','cmd','git.exe')]:['/usr/bin/git','/usr/local/bin/git'];
-  const [sdk,pythonProbe,gitProbe,codexProbe]=await Promise.all([
-    (async()=>{
-      const dir=join(root,'node_modules','@openai','codex-security');
-      const pkg=JSON.parse(await readFile(join(dir,'package.json'),'utf8'));
-      if(pkg.name!=='@openai/codex-security'||pkg.version!==sdkVersion)return false;
-      await access(join(dir,'_bundled_plugin','skills','security-scan','SKILL.md'));
-      return typeof (await import('@openai/codex-security')).CodexSecurity==='function';
-    })().catch(()=>false),
+  // Finish SDK evaluation before arming version-probe timers. Synchronous
+  // module loading can stall pipe reads; execFile may then discard output
+  // on its timeout path even when the child already exited successfully.
+  const sdk=await (async()=>{
+    const dir=join(root,'node_modules','@openai','codex-security');
+    const pkg=JSON.parse(await readFile(join(dir,'package.json'),'utf8'));
+    if(pkg.name!=='@openai/codex-security'||pkg.version!==sdkVersion)return false;
+    await access(join(dir,'_bundled_plugin','skills','security-scan','SKILL.md'));
+    return typeof (await import('@openai/codex-security')).CodexSecurity==='function';
+  })().catch(()=>false);
+  const [pythonProbe,gitProbe,codexProbe]=await Promise.all([
     probeBinaryVersion(await pythonCandidates(),['-I','-B','-c','import sys, importlib, sqlite3; assert sys.version_info >= (3,10); importlib.import_module("tomllib" if sys.version_info >= (3,11) else "tomli"); print(sys.version.split()[0])'],/^(3\.\d+\.\d+)$/),
     probeBinaryVersion(gitPaths,['--version'],/^git version ([\w.\-]+)$/),
     probeBinaryVersion([vendor],['--version'],/^codex(?:-cli)?\s+([\w.\-]+)$/),
