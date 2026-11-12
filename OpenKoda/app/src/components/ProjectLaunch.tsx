@@ -17,6 +17,7 @@ interface Props {
   action: Action;
   busy: boolean;
   initialProject?: Project;
+  initialKind?: Kind;
   onCancel: () => void;
   onCreated: (projectId: string, assessmentId: string) => void;
   onModels?: () => void;
@@ -72,8 +73,8 @@ async function startOperation(action:Action, created:LaunchResult, kind:Kind, po
   return action<Execution>('plan.run',decision);
 }
 
-export default function ProjectLaunch({snapshot, action, busy, initialProject, onCancel, onCreated,onModels}:Props) {
-  const [kind,setKind] = useState<Kind>(initialProject?.kind ?? 'code');
+export default function ProjectLaunch({snapshot, action, busy, initialProject, initialKind='code', onCancel, onCreated,onModels}:Props) {
+  const [kind,setKind] = useState<Kind>(initialProject?.kind ?? initialKind);
   const [root,setRoot] = useState(initialProject?.target ?? '');
   const [narrow,setNarrow] = useState(false);
   const [relative,setRelative] = useState('');

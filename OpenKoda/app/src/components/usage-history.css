@@ -1,15 +1,15 @@
 .usage-history-page { --uh-blue:#487ca4; --uh-copper:#b6714a; --uh-sage:#547d6b; --uh-violet:#917399; --uh-gold:#997938; --uh-rose:#ab6576; display:grid; gap:1rem; min-width:0; }
 .usage-history-page .uh-intro { margin:0 0 .3rem; color:var(--muted); }
-.uh-filters { display:flex; align-items:flex-end; flex-wrap:wrap; gap:.75rem 1rem; }
+.uh-filters { display:flex; align-items:flex-end; flex-wrap:wrap; gap:var(--space-3); padding-bottom:var(--space-4); border-bottom:1px solid var(--line); }
 .uh-filters label { display:grid; gap:.35rem; font-size:.8rem; color:var(--muted); min-width:0; max-width:100%; }
 .uh-filters :is(select,input) { background:var(--surface); border:1px solid var(--control-line); border-radius:.75rem; color:var(--text); min-height:2.35rem; padding:.35rem .75rem; max-width:100%; }
 .uh-filters .button { margin-inline-start:auto; font-size:.8rem; }
 .uh-card,.uh-stats { background:var(--surface); border:1px solid var(--line); border-radius:1rem; margin:0; min-width:0; }
-.uh-card { padding:clamp(.85rem,1.7vw,1.4rem); }
-.uh-stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(8.3rem,100%),1fr)); padding:.75rem .3rem; }
-.uh-stats > div { padding:.4rem .85rem; }
+.uh-card { padding:clamp(1rem,1.7vw,1.5rem); }
+.uh-stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(8.3rem,100%),1fr)); gap:1px; background:var(--line); border:1px solid var(--line); overflow:clip; }
+.uh-stats > div { padding:var(--space-4); background:var(--surface); }
 .uh-stats dt,.uh-stats span,.uh-card-heading span,.uh-muted,.uh-axis { color:var(--muted); font-size:.8rem; }
-.uh-stats dd { margin:.25rem 0 0; font-size:1.45rem; font-weight:650; font-variant-numeric:tabular-nums; }
+.uh-stats dd { margin:.3rem 0 0; font-size:clamp(1.35rem,2vw,1.8rem); letter-spacing:-.04em; line-height:1.15; font-weight:650; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
 .uh-stats small { font-size:.9rem; }
 .uh-card-heading { display:flex; flex-wrap:wrap; align-items:baseline; gap:.4rem 1rem; justify-content:space-between; margin-bottom:1rem; }
 .uh-card-heading h3 { margin:0; font-size:1rem; }
@@ -41,7 +41,8 @@
 .uh-table-wrap { overflow:auto; }
 .uh-table-wrap table { width:100%; border-collapse:collapse; font-size:.8rem; font-variant-numeric:tabular-nums; }
 .uh-table-wrap th,.uh-table-wrap td { padding:.6rem .4rem; text-align:end; }
-.uh-table-wrap th { color:var(--muted); font-weight:500; }
+.uh-table-wrap th { color:var(--muted); font-weight:550; background:var(--subtle); }
+.uh-table-wrap tbody tr:focus-within { background:var(--subtle); }
 .uh-table-wrap td { border-top:1px solid var(--line); }
 .uh-table-wrap :is(td,th):first-child { text-align:start; overflow-wrap:anywhere; }
 .uh-dot { display:inline-block; width:.45rem; height:.45rem; border-radius:50%; margin-inline-end:.4rem; }
@@ -55,10 +56,19 @@
 .billing-group { display:grid; gap:.9rem; min-width:0; }
 .billing-group h3 { margin:0; font-size:1rem; }
 .billing-balance-card,.usage-balance-lines.billing-breakdown { border:1px solid var(--line); border-radius:1rem; background:var(--surface); }
-.billing-balance-card { padding:clamp(1rem,2vw,1.5rem); background:linear-gradient(110deg,var(--subtle),var(--surface)); }
+.billing-balance-card { padding:clamp(1rem,2vw,1.5rem); background:var(--subtle); }
 .billing-breakdown > div { padding:.9rem 1.1rem; }
 .billing-breakdown dt { color:var(--text); font-weight:550; }
 .billing-breakdown dt small { display:block; font-size:.78rem; color:var(--muted); font-weight:400; line-height:1.55; margin-top:.15rem; }
 .billing-breakdown dt i { margin-top:.3rem; }
 .billing-breakdown dd { white-space:nowrap; }
 .billing-history-link { display:inline-flex; align-items:center; gap:.45rem; width:fit-content; }
+@media (hover:hover) {
+  .uh-calendar button:hover { outline:1px solid var(--text); outline-offset:0; }
+  .uh-table-wrap tbody tr:hover { background:var(--subtle); }
+}
+@media (max-width:600px) {
+  .uh-filters { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); align-items:end; }
+  .uh-filters :is(input,select) { width:100%; }
+  .uh-filters .button { margin:0; }
+}

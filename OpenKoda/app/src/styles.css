@@ -5,6 +5,15 @@
   background: var(--subtle);
   color-scheme: light;
   --panel-radius: 24px;
+  --space-1: .25rem;
+  --space-2: .5rem;
+  --space-3: .75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --control-height: 2.375rem;
+  --motion-fast: 120ms;
+  --motion-enter: 160ms;
 }
 :root[data-theme="dark"] {
   color-scheme: dark;

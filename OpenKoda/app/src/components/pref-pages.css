@@ -1,8 +1,8 @@
-.appearance-controls .theme-options { display: flex; flex-wrap: wrap; gap: 12px; margin: .8rem 0 1.6rem; }
-.appearance-controls .theme-option { width: 92px; max-width: 30%; gap: .4rem; }
+.appearance-controls .theme-options { display: flex; flex-wrap: wrap; gap: var(--space-3); margin: .8rem 0 var(--space-5); }
+.appearance-controls .theme-option { width: 6.25rem; max-width: 29%; gap: .4rem; }
 .appearance-controls .theme-sample { aspect-ratio: 92/60; border-radius: .7rem; }
-.pref-group, .general-section { padding: 1.35rem 0; border-top: 1px solid var(--line); }
-.pref-group h3, .pref-heading, .general-section h3 { font-size: 1rem; margin: 0 0 .85rem; }
+.pref-group, .general-section { padding: var(--space-5) 0; border-top: 1px solid var(--line); }
+.pref-group h3, .pref-heading, .general-section h3 { font-size: 1rem; margin: 0 0 var(--space-3); line-height: 1.35; }
 .pref-group .appearance-row { padding: .65rem 0; }
 .pref-section-title, .palette-options, .wallpapers { display: flex; flex-wrap: wrap; align-items: center; gap: .65rem; }
 .pref-section-title { justify-content: space-between; margin-bottom: .8rem; }
@@ -37,10 +37,17 @@
 .pref-font-controls label, .general-section label { font-size: .875rem; font-weight: 570; }
 .pref-font-controls input,.pref-font-controls select { display: block; margin-top: .4rem; }
 .font-preview { margin: .75rem 0 1rem; padding: .75rem 1rem; background: var(--subtle); border-radius: .65rem; overflow-wrap: anywhere; }
-.general-section:first-child { border-top: 0; padding-top: 0; }
-.general-row { display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: .6rem 1rem; }
+.general-section:first-child, .settings-section-title + .general-section { border-top: 0; padding-top: 0; }
+.general-row {
+  display: grid;
+  align-items: center;
+  grid-template-columns: minmax(0, 1fr) minmax(10rem, 42%);
+  gap: var(--space-2) var(--space-4);
+}
 .general-section .general-row + .general-row { margin-top: .8rem; }
-.general-row input, .general-row select { width: min(100%, 17rem); }
+.general-row input, .general-row select { width: 100%; min-height: var(--control-height); border-radius: .65rem; }
+.general-section .key-value { grid-template-columns: minmax(0, 1fr) minmax(10rem, 42%); gap: var(--space-4); }
+.general-section .key-value + .key-value { border-top: 1px solid var(--line); }
 .general-section .inline-actions { margin-top: .65rem; }
 :root .mono,:root code,:root pre { font-family: var(--code-font,monospace); font-size: var(--code-font-size,.75rem); }
 :root[data-list-style="line"] .item-copy > :is(span,small) { display:none; }
@@ -54,5 +61,6 @@
 }
 @media(max-width:600px) {
   .pref-font-controls { grid-template-columns: minmax(0,1fr); }
+  .general-section .key-value, .general-row { grid-template-columns: minmax(0, 1fr); }
   .general-row input,.general-row select { width:100%; }
 }

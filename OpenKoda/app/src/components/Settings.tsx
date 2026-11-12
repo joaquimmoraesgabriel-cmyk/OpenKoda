@@ -128,7 +128,7 @@ export default function Settings({settings, projects, action, busy, dataRequest=
   return <div className="settings-layout">
     <h1 className="settings-page-title">Configurações</h1>
     <aside className="settings-menu">
-      <label className="settings-search"><Search size={15} aria-hidden="true"/><input type="search" aria-label="Pesquisar configurações" placeholder="Pesquisar configurações" value={search} onChange={e=>setSearch(e.target.value)}/></label>
+      <label className="settings-search"><Search size={15} aria-hidden="true"/><input type="search" aria-label="Pesquisar configurações" placeholder="Pesquisar" value={search} onChange={e=>setSearch(e.target.value)}/></label>
       <nav aria-label="Categorias de configuração">
         {matches.length === 0 && <p role="status" className="muted">Nenhuma categoria encontrada.</p>}
         {matches.map(group => <div className="settings-group" key={group.name}>

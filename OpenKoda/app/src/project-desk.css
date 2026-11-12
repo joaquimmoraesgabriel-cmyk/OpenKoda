@@ -47,5 +47,67 @@
 .desk-welcome h1,.desk-welcome h2{margin:0 0 8px;font-size:clamp(1.25rem,2vw,1.8rem);font-weight:600;letter-spacing:-.035em}
 .desk-welcome-mark{width:66px;height:66px;display:grid;place-items:center;background:var(--subtle);border-radius:22px;margin-bottom:4px}
 .tree-mobile-toggle{display:none}
+.project-rail { position:relative; z-index:10; background:var(--surface); border-right:1px solid var(--line); }
+.rail-button { position:relative; transition:background var(--motion-fast),color var(--motion-fast); }
+.rail-button[aria-current]::before { content:""; position:absolute; left:-7px; height:15px; width:3px; border-radius:0 3px 3px 0; background:var(--accent); }
+.rail-hint { position:absolute; z-index:1; pointer-events:none; top:50%; left:calc(100% + 8px); transform:translate(3px,-50%); opacity:0; visibility:hidden; background:var(--text); color:var(--surface); padding:6px 10px; border-radius:7px; white-space:nowrap; font-size:.75rem; font-weight:560; transition:opacity var(--motion-fast),transform var(--motion-fast); }
+.rail-button:is(:hover,:focus-visible) .rail-hint { opacity:1; visibility:visible; transform:translate(0,-50%); transition-delay:220ms; }
+.tree-new { min-height:var(--control-height); border:1px solid var(--line); background:var(--surface); border-radius:10px; }
+.tree-new:hover { border-color:var(--control-line); }
+.project-tree h2 { display:flex; align-items:baseline; justify-content:space-between; margin:var(--space-5) 7px var(--space-2); }
+.project-tree h2 span { font-size:.7rem; font-variant-numeric:tabular-nums; }
+.tree-list { padding:3px; overscroll-behavior:contain; }
+.tree-row,.tree-chat,.tree-add,.tree-new { transition:background var(--motion-fast),color var(--motion-fast),opacity var(--motion-fast); }
+.tree-add:hover,.tree-toggle:hover { background:var(--surface); }
+.tree-chat { border-left:2px solid var(--line); border-radius:0 7px 7px 0; padding-left:var(--space-3); }
+.tree-chat[aria-current=page] { border-left-color:var(--text); }
+.desk-bar { min-height:3.75rem; padding-block:var(--space-2); }
+.desk-location { display:flex; align-items:center; gap:var(--space-3); }
+.desk-location>div { min-width:0; }
+.desk-location h1 { margin:0; font-size:.94rem; line-height:1.4; }
+.desk-location small { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.desk-location-icon { color:var(--muted); }
+.desk-tree-toggle { display:grid; place-items:center; background:none; border:0; color:var(--muted); border-radius:8px; height:2.1rem; width:2.1rem; flex:none; }
+.desk-tree-toggle:hover,.desk-actions button[aria-expanded=true] { color:var(--text); background:var(--selection); }
+.desk-actions button { min-height:2.15rem; }
+.desk-actions button:first-child { border:1px solid var(--line); }
+.desk-panel-head strong { font-size:.89rem; }
+.desk-panel-head .icon-button { border-radius:8px; }
+.tree-dismiss { display:none; }
+.welcome-stage { display:grid; place-items:center; padding:clamp(24px,5vw,72px); flex:1 0 auto; }
+.welcome-content { width:min(100%,29rem); }
+.welcome-brand { display:inline-flex; align-items:center; gap:10px; margin-bottom:clamp(20px,4vh,40px); font-size:1.05rem; letter-spacing:-.05em; font-weight:680; }
+.welcome-content h1 { margin:0; font-size:clamp(1.85rem,4vw,2.75rem); line-height:1.15; letter-spacing:-.055em; font-weight:620; }
+.welcome-content>p { color:var(--muted); margin:var(--space-2) 0 var(--space-5); font-size:.95rem; }
+.welcome-targets { border:1px solid var(--line); border-radius:15px; padding:4px; min-width:0; margin:0; }
+.welcome-targets legend { position:absolute; width:1px; height:1px; padding:0; overflow:hidden; clip-path:inset(50%); }
+.welcome-option { position:relative; display:flex; align-items:center; gap:var(--space-3); border-radius:11px; min-height:3.7rem; padding:var(--space-2) var(--space-3); cursor:pointer; transition:background var(--motion-fast); }
+.welcome-option input { position:absolute; opacity:0; width:1px; height:1px; }
+.welcome-option:has(input:focus-visible) { outline:2px solid var(--accent); outline-offset:-2px; }
+.welcome-option:hover,.welcome-option:has(input:checked) { background:var(--subtle); }
+.welcome-option strong,.welcome-option small { display:block; }
+.welcome-option strong { font-size:.89rem; font-weight:610; }
+.welcome-option small { margin-top:2px; font-size:.76rem; color:var(--muted); }
+.welcome-type { display:grid; place-items:center; width:2.25rem; height:2.25rem; }
+.welcome-radio { margin-left:auto; width:15px; height:15px; border-radius:50%; border:1px solid var(--control-line); }
+.welcome-option:has(input:checked) .welcome-radio { border:5px solid var(--accent); background:var(--surface); }
+.welcome-start { margin-top:var(--space-5); gap:var(--space-4); }
+@media(forced-colors:active) {
+  .welcome-option:has(input:checked) { outline:1px solid Highlight; }
+  .welcome-option:has(input:checked) .welcome-radio { border-color:Highlight; }
+}
+@keyframes workspace-enter { from { opacity:.45; transform:translateY(4px); } to { opacity:1; transform:none; } }
+@media(prefers-reduced-motion:no-preference) {
+  :root:not([data-motion=reduced]) :is(.welcome-content,.launch-page,.desk-panel,.workspace-main>.single-page,.settings-content>section) { animation:workspace-enter var(--motion-enter) ease-out; }
+}
+@media(min-width:761px) {
+  .project-desk.with-tree.tree-collapsed { grid-template-columns:minmax(0,1fr); }
+  .tree-collapsed .project-tree { display:none; }
+}
+@media(max-width:760px) {
+  .desk-location-icon,.desk-tree-toggle { display:none; }
+  .tree-open .tree-dismiss { position:absolute; z-index:7; inset:36px 0 0; width:100%; border:0; display:block; background:#0003; }
+  .rail-button[aria-current]::before { left:-4px; }
+}
 @media(max-width:960px){.desk-split{grid-template-columns:minmax(0,1fr);grid-template-rows:1fr 1fr}.desk-split .desk-panel{border-top:1px solid var(--line)}}
 @media(max-width:760px){.app-shell.project-shell{grid-template-columns:45px minmax(0,1fr)}.project-desk.with-tree{grid-template-columns:minmax(0,1fr);position:relative}.project-tree{display:none}.tree-open .project-tree{display:flex;position:absolute;z-index:8;inset:36px auto 0 0;width:min(260px,85%);box-shadow:4px 5px 24px #0002}.tree-add{opacity:1}.tree-mobile-toggle{display:inline-flex;align-self:flex-start;padding:4px 10px;min-height:34px}.desk-actions button span{display:none}.rail-button{width:33px}.desk-panel .target-row{display:flex;flex-wrap:wrap}}

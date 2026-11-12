@@ -20,3 +20,12 @@ Os mapas têm fontes Mermaid e documentos editáveis do OpenFlowKit nesta pasta.
 Na janela da Cindy de 1536 × 816 px, a navegação ocupava cerca de 260 px. O compositor tinha cerca de 85 px de altura e o menu de modelo abria acima dele, com cerca de 460 × 510 px. São medidas aproximadas de uma janela. No OpenKoda, o espaço disponível e a escala do usuário determinam o tamanho final. As transições de 120 e 160 ms são escolhas desta versão.
 
 As 18 categorias de Configurações da Cindy foram abertas. A comparação usou o chat já existente, os menus e a navegação. Envio de mensagens, compra, alteração de contas e fluxos autenticados internos das referências ficaram fora da observação ao vivo. No OpenKoda, o progresso apresentado na conversa corresponde aos eventos produzidos pela análise.
+
+## Evidência visual
+
+O servidor MCP Craft Anything 0.6.0 comparou a área comum das capturas com tolerância de 16 por canal. No Codex, ao rolar Uso e faturamento, a primeira coluna de pixels alterados ficou em x=709. A navegação à esquerda permaneceu idêntica dentro dessa tolerância. Na Cindy, preencher a chave de API alterou 0,66% da área comum, no retângulo que abrange o campo e o botão Próximo. Isso orientou a manutenção dos controles em posição estável quando o estado muda.
+
+| Referência | Capturas de 11/11/2026 | Identificador da observação |
+| --- | --- | --- |
+| Codex | 14:43:01 e 14:43:17 | `ev_bbd1029eb23e0ebac7767380d7483737b007554e2f6145e674c8435b428af598` |
+| Cindy | 17:20:09 e 17:20:24 | `ev_cb4e10f6b49065a56c5eff8124526d87eff1b7a64953148bf49d43fc831085c4` |

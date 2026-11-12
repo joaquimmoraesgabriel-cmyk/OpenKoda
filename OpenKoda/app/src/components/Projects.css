@@ -58,7 +58,7 @@
   color: var(--muted);
   font-size: .875rem;
 }
-.project-detail > .tabs { margin: 1.25rem 0; background: var(--surface); }
+.project-detail > .tabs { margin: var(--space-4) 0 var(--space-5); background: var(--surface); }
 .project-detail { container-type: inline-size; }
 .project-overview {
   display: grid;
@@ -85,6 +85,34 @@
 .project-detail .target-row > div { min-width: min(12rem, 100%); }
 .project-detail .detail-heading h1 { overflow-wrap: anywhere; }
 .project-detail .form-page { max-width: 54rem; }
+.desk-panel .project-detail > .detail-heading { margin-bottom: var(--space-3); }
+.desk-panel .project-detail > .detail-heading h1 { font-size: clamp(1.35rem, 5cqi, 1.8rem); }
+.desk-panel .project-detail > .tabs {
+  width: 100%;
+  border-radius: 0;
+  border-bottom: 1px solid var(--line);
+  padding: 0 0 .5rem;
+  background: transparent;
+}
+.desk-panel .project-detail > .tabs button { min-height: 2.1rem; padding: .4rem .7rem; font-size: .8125rem; border-radius: .55rem; }
+.desk-panel .project-overview { gap: var(--space-5); }
+.desk-panel .project-overview > .content-section {
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  margin: 0;
+}
+.desk-panel .project-overview > .content-section + .content-section { border-top: 1px solid var(--line); padding-top: var(--space-5); }
+.desk-panel .project-overview h2 { font-size: 1rem; margin: 0 0 .75rem; }
+.desk-panel .project-overview .target-row { border: 1px solid var(--line); background: var(--subtle); gap: .65rem; padding: .875rem; border-radius: .75rem; }
+.desk-panel .target-copy-action { margin-block-start: var(--space-2); }
+@container (max-width: 32rem) {
+  .project-detail > :is(.content-section, .disclosure) { border-radius: .8rem; }
+  .project-detail .target-row > div { min-width: 0; }
+  .project-detail .history-row { flex-wrap: wrap; gap: .5rem; }
+  .project-detail .key-value { grid-template-columns: minmax(0, 1fr); gap: .25rem; }
+}
 .project-form-sheet .form-group { margin: 0; max-width: none; }
 .project-form-sheet .field { grid-template-columns: minmax(7rem, 26%) minmax(0,1fr); margin-bottom: 1.25rem; }
 .project-form-sheet .notice { background: var(--subtle); border-radius: .85rem; }

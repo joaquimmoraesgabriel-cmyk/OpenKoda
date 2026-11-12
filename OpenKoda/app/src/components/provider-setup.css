@@ -11,16 +11,21 @@
 .provider-default-model strong { color: var(--text); overflow-wrap: anywhere; }
 .provider-enabled-list { padding: 0; margin: .9rem 0 0; list-style: none; max-height: 12rem; overflow: auto; }
 .provider-enabled-list li { border-top: 1px solid var(--line); padding: .55rem 0; font-size: .84rem; overflow-wrap: anywhere; }
-.provider-setup-dialog { width: min(38rem, calc(100vw - 1.5rem)); max-height: min(84dvh, 42rem); }
+.provider-setup-dialog {
+  width: min(38rem, calc(100vw - 1.5rem));
+  max-height: min(84dvh, 42rem);
+  box-shadow: 0 12px 48px rgb(0 0 0 / .18);
+}
 .provider-setup-dialog .provider-dialog-content { display: flex; flex-direction: column; max-height: inherit; padding: 0; }
-.provider-setup-dialog .provider-setup-heading { margin: 0; padding: .85rem 1.15rem; gap: .75rem; }
+.provider-setup-dialog .provider-setup-heading { margin: 0; padding: var(--space-4) var(--space-5) var(--space-2); gap: var(--space-3); }
 .provider-setup-heading h3 { font-size: 1.12rem; }
 .provider-setup-heading h3:focus { outline: 0; }
 .provider-setup-heading .button { min-height: 2rem; width: 2rem; padding: .25rem; }
-.provider-steps { display: flex; gap: .85rem; flex-wrap: wrap; padding: 0 1.15rem .65rem; margin: 0; list-style: none; }
+.provider-steps { display: flex; gap: var(--space-3); flex-wrap: wrap; padding: 0 var(--space-5) var(--space-3); margin: 0; list-style: none; }
 .provider-steps li { display: flex; align-items: center; gap: .22rem; font-size: .75rem; color: var(--muted); }
 .provider-steps li[aria-current="step"] { font-weight: 650; color: var(--text); }
-.provider-setup-body { overflow: auto; min-height: 0; scrollbar-width: thin; border-block: 1px solid var(--line); padding: 1.15rem; }
+.provider-steps li + li::before { content: ""; display: block; width: .7rem; height: 1px; margin-inline-end: .25rem; background: var(--control-line); }
+.provider-setup-body { overflow: auto; min-height: 0; overscroll-behavior: contain; scrollbar-width: thin; border-block: 1px solid var(--line); padding: var(--space-4) var(--space-5); }
 .provider-setup-body form { display: grid; gap: .6rem; }
 .provider-setup-body form label { font-weight: 600; font-size: .9rem; }
 .provider-setup-body .provider-options button { width: 100%; }
@@ -30,6 +35,8 @@
 .provider-key-input { display: flex; align-items: center; padding-inline-end: .3rem; border-radius: .7rem; border: 1px solid var(--line); background: var(--subtle); }
 .provider-key-input input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--text); padding: .75rem; border-radius: inherit; }
 .provider-key-input .button { min-height: 1.9rem; height: 1.9rem; border: 0; padding: .35rem; }
+.provider-key-input:focus-within { outline: 2px solid var(--accent); outline-offset: 1px; }
+.provider-key-input input:focus-visible { outline: none; }
 .provider-model-heading { justify-content: space-between; }
 .provider-setup-body .provider-search { margin: .6rem 0; }
 .provider-checklist { border: 1px solid var(--line); border-radius: .65rem; max-height: min(33vh, 17rem); overflow-y: auto; scrollbar-width: thin; }
@@ -43,10 +50,18 @@
 .provider-default-choice > span, .provider-default-choice > label { font-size: .85rem; font-weight: 600; }
 .provider-default-choice .field { display: grid; grid-template-columns: minmax(0,1fr); gap: .3rem; }
 .provider-default-choice select { max-width: 100%; }
-.provider-setup-footer { padding: .8rem 1.1rem; justify-content: flex-end; }
+.provider-setup-footer { padding: var(--space-3) var(--space-5); background: var(--subtle); justify-content: flex-end; }
 .provider-setup-footer > div { margin-inline-start: auto; justify-content: flex-end; }
 .provider-setup-error { margin-block-start: .8rem; }
 @media (max-width: 480px) {
   .provider-setup-footer { padding: .7rem; gap: .4rem; }
   .provider-setup-footer .button { padding-inline: .65rem; font-size: .8rem; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .provider-setup-dialog[open] { animation: provider-dialog-in var(--motion-enter) ease-out; }
+  .provider-row, .provider-checklist label { transition: background-color var(--motion-fast) ease; }
+}
+@keyframes provider-dialog-in {
+  from { opacity: .5; transform: translateY(.35rem); }
+  to { opacity: 1; transform: translateY(0); }
 }
