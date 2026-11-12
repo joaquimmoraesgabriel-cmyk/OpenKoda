@@ -35,18 +35,21 @@ pub(crate) fn new_conversation(store: &Store, payload: Value) -> Result<Value,St
     let aid=targets::derived_id("openkoda.project-conversation.v1",&[&input.project_id,&input.idempotency_key]);
     let digest=scope::hash(&input);
     let title=core::text(&input.title,"Título",160,true)?;
-    let objective="Revisar este projeto em conversa.";
     store.mutate(|s|{
         if scope::replay(s,NEW_CHAT,&aid,&input.idempotency_key,&digest)?.is_some() {
             return Ok(json!(scope::assessment(s,&aid)?));
         }
         let project=s.projects.iter().find(|p|p.id==input.project_id&&!p.archived).ok_or("Projeto indisponível.")?;
+        let preferences=crate::project_options::current(project);preferences.validate()?;
+        let objective=preferences.objective("Revisar este projeto em conversa.")?;
+        let title=if preferences.advanced_enabled&&!preferences.title.trim().is_empty(){preferences.title.trim().to_string()}else{title};
         let source=match &input.source_assessment_id {
             Some(id)=>Some(s.assessments.iter().find(|a|a.id==*id&&a.project_id==project.id)
                 .ok_or("A conversa de origem não pertence a este projeto.")?),
             None=>s.assessments.iter().filter(|a|a.project_id==project.id).max_by_key(|a|&a.updated_at),
         };
         let original=if let Some(a)=source {
+            if project.analysis_options.is_some()&&a.scope_id.is_some(){scope::check_new_local_input(s,&a.id)?;}
             match scope::binding(s,a)? {
                 Some(binding) if binding.revocation.is_some()=>return Err(scope::err("scope_revoked")),
                 Some(binding)=>match scope::current(s,binding)? {
@@ -57,7 +60,7 @@ pub(crate) fn new_conversation(store: &Store, payload: Value) -> Result<Value,St
             }
         } else {None};
         let ai=source.and_then(|a|a.ai_selection.clone());
-        let window=original.map(|r|r.body.window.clone()).unwrap_or(ScopeWindow{starts_at:None,ends_at:None});
+        let window=if project.analysis_options.is_some(){ScopeWindow{starts_at:None,ends_at:preferences.deadline()}}else{original.map(|r|r.body.window.clone()).unwrap_or(ScopeWindow{starts_at:None,ends_at:None})};
         let result=if let Some(set)=original.and_then(|r|r.body.target_set.as_ref()) {
             let mut selection=targets::selection_from_set(set);
             selection.common_methods.clear();
@@ -65,7 +68,7 @@ pub(crate) fn new_conversation(store: &Store, payload: Value) -> Result<Value,St
                 entry.methods=chat_methods(&entry.methods);
                 if entry.methods.is_empty(){return Err("A entrada selecionada exige uma nova revisão de escopo.".into());}
             }
-            let body=scope::combined_body(project,&aid,objective,&window,&selection)?;
+            let body=scope::combined_body(project,&aid,&objective,&window,&selection)?;
             scope::insert_combined(s,&aid,&input.project_id,&title,body,None,ai)?
         }else{
             if source.is_some_and(|a|a.kind!=project.kind||!same_target(&project.kind,&a.target,&project.target)){
@@ -75,7 +78,7 @@ pub(crate) fn new_conversation(store: &Store, payload: Value) -> Result<Value,St
             let creation=scope::CreationScope{methods,window,project_digest:scope::project_digest(project),
                 catalog_version:scope::CATALOG_VERSION.into(),acknowledge_scope:true};
             let mut a=Assessment{id:aid.clone(),project_id:project.id.clone(),title,kind:project.kind.clone(),target:project.target.clone(),
-                objective:objective.into(),status:"draft".into(),created_at:model::now(),updated_at:model::now(),events:vec![],
+                objective:objective.clone(),status:"draft".into(),created_at:model::now(),updated_at:model::now(),events:vec![],
                 evidence:vec![],coverage:vec![],summary:String::new(),ai_selection:ai,scope_id:None};
             scope::initialize(s,&mut a,Some(&creation))?;
             s.assessments.push(a);
@@ -104,6 +107,8 @@ struct Launch {
     ports: Vec<u16>,
     use_ripgrep: bool,
     minutes: Option<u16>,
+    analysis_options: Option<crate::project_options::AnalysisOptions>,
+    github_import_id: Option<String>,
 }
 
 fn same_target(kind: &str, left: &str, right: &str) -> bool {
@@ -154,6 +159,10 @@ pub(crate) fn create(store: &Store, payload: Value) -> Result<Value, String> {
     let title = core::text(&input.title, "Título", 160, true)?;
     let objective = core::text(&input.objective, "Descrição", 4000, true)?;
     let root = core::validate_target(&input.kind, &input.root)?;
+    if let Some(options)=&input.analysis_options{options.validate()?;}
+    let github_source=match &input.github_import_id{
+        Some(id)=>{if input.kind!="code"{return Err("A importação GitHub exige um projeto de código.".into());}Some(crate::github_repository::source(&store.root,id,&root)?)},None=>None,
+    };
     let local = matches!(input.kind.as_str(), "code" | "files");
     if !local && (input.relative_target.is_some() || input.use_ripgrep) {
         return Err("A seleção de arquivos exige análise local.".into());
@@ -190,12 +199,17 @@ pub(crate) fn create(store: &Store, payload: Value) -> Result<Value, String> {
                 if state.projects.len() >= 10000 { return Err("Limite de projetos atingido.".into()); }
                 state.projects.push(Project {
                     id:model::id(), name,kind:input.kind.clone(),target:root,description:objective.clone(),
-                    created_at:model::now(),archived:false,additional_targets:vec![],target_receipts:vec![],
+                    created_at:model::now(),archived:false,additional_targets:vec![],target_receipts:vec![],analysis_options:input.analysis_options.clone(),github_source:github_source.clone(),
                 });
                 state.projects.len()-1
             }
         };
         let project = &mut state.projects[index];
+        if let Some(options)=&input.analysis_options{project.analysis_options=Some(options.clone());}
+        if let Some(source)=&github_source{
+            if project.github_source.as_ref().is_some_and(|old|old.import_id!=source.import_id){return Err("O projeto já está ligado a outra importação GitHub.".into());}
+            project.github_source=Some(source.clone());
+        }
         let pid = project.id.clone();
         let window = ScopeWindow {starts_at:None, ends_at: input.minutes.map(|n| (chrono::Utc::now()+chrono::Duration::minutes(i64::from(n))).to_rfc3339())};
         let result = if let Some(relative) = input.relative_target.as_deref() {
@@ -308,6 +322,20 @@ mod tests {
         assert!(!selected[0].methods.iter().any(|m|m.starts_with("kali.")||m=="source.capture.v1"));
         assert!(s.plans.is_empty()&&s.executions.is_empty()&&s.data_bindings.is_empty());
         assert!(chat["evidence"].as_array().unwrap().is_empty());
+    }
+
+    #[test]
+    fn options_changes_are_prospective_and_preserve_frozen_scope_and_digest() {
+        let tmp=tempfile::tempdir().unwrap();let store=Store::open(tmp.path().join("db")).unwrap();
+        let created=create(&store,input("code",tmp.path().to_str().unwrap())).unwrap();let aid=created["assessmentId"].as_str().unwrap();
+        store.mutate(|state|scope::freeze_review(state,aid,"test:first-review")).unwrap();
+        let before=store.snapshot().unwrap();let old_digest=scope::project_digest(&before.projects[0]);let old_scope=scope::current_ref(&before,aid).unwrap();
+        let options=crate::project_options::AnalysisOptions{advanced_enabled:true,additional_context_enabled:true,context:["Authentication".into(),"Uploads".into(),String::new()],max_cost_usd:Some(1.0),minutes:Some(10),title:"Focused review".into()};
+        crate::project_options::save(&store,json!({"projectId":created["projectId"],"options":options})).unwrap();
+        let after=store.snapshot().unwrap();assert_eq!(old_digest,scope::project_digest(&after.projects[0]));assert_eq!(old_scope,scope::current_ref(&after,aid).unwrap());assert_eq!(before.assessments[0].objective,after.assessments[0].objective);
+        let next=new_conversation(&store,json!({"projectId":created["projectId"],"sourceAssessmentId":aid,"title":"Conversa 2","idempotencyKey":model::id()})).unwrap();
+        assert_eq!(next["title"],"Focused review");assert!(next["objective"].as_str().unwrap().contains("Authentication"));
+        let state=store.snapshot().unwrap();assert_eq!(state.assessments.len(),2);assert!(state.executions.is_empty()&&state.plans.is_empty());
     }
 
     #[test]

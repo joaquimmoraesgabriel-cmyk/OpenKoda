@@ -21,12 +21,14 @@ import SecurityScanPanel, { useSecurityScan } from './SecurityScan';
 import { scanActive, scanStateLabel } from '../security-scan';
 import './project-conversation.css';
 
+type LiveStatus={requestId:string|null;stopping:boolean;messageId?:string|null;dataReview?:{id:string;digest:string}|null};
 type Turn=Awaited<ReturnType<typeof prepareChat>>&{budget?:BudgetReview;selection:AiSelection;line:string;opening:boolean;draft:ChatDraft;image?:string;signal:AbortSignal};
 type Props={sourceOnly?:boolean;assessment:Assessment;settings:Settings;plans?:ExecutionPlan[];action:Action;busy:boolean;onAdvanced?:()=>void;onModels?:()=>void};
 export default function ProjectConversation(props:Props){return <Conversation key={props.assessment.id} {...props}/>;}
 
 function Conversation({sourceOnly=false,assessment,plans,action,busy,onAdvanced,onModels}:Props){
   const [messages,setMessages]=useState<ChatMessage[]>([]);
+  const [acceptedMessage,setAcceptedMessage]=useState<string>();
   const {text:draft,attachment,proposing:requestedProposal}=useChatDraft(assessment.id);
   const proposing=!sourceOnly&&requestedProposal;
   const [mode,setMode]=useState<ApprovalMode>(()=>{
@@ -34,7 +36,7 @@ function Conversation({sourceOnly=false,assessment,plans,action,busy,onAdvanced,
   });
   const [approval,setApproval]=useState<Turn>(),[phase,setPhase]=useState(''),[pendingLine,setPendingLine]=useState(''),[error,setError]=useState(''),[loadingFile,setLoadingFile]=useState(false);
   const [offer,setOffer]=useState<{proposal:OperationProposal;scopeRef:ScopeRef}>();
-  const [remote,setRemote]=useState<{requestId:string|null;stopping:boolean}>({requestId:null,stopping:false}),[stopping,setStopping]=useState(false);
+  const [remote,setRemote]=useState<LiveStatus>({requestId:null,stopping:false}),[stopping,setStopping]=useState(false);
   const mount=useRef(true),job=useRef<AbortController|undefined>(undefined),file=useRef<HTMLInputElement>(null),stamp=useRef(0);
   const scroll=useRef<HTMLDivElement>(null),transcript=useRef<HTMLDivElement>(null),stick=useRef(true),input=useRef<HTMLTextAreaElement>(null);
   const [awayFromEnd,setAwayFromEnd]=useState(false);
@@ -88,7 +90,43 @@ function Conversation({sourceOnly=false,assessment,plans,action,busy,onAdvanced,
         throw new Error('O modelo não retornou uma verificação válida para o escopo desta conversa.');
       }
       if(mount.current)setOffer({proposal:result,scopeRef:turn.scopeRef});
-    }else await action('ai.ask',payload);
+    }else {
+      // The request promise resolves only after the provider answers. Clear the
+      // submitted snapshot when the native host confirms this exact admitted
+      // review and its durable user message, including after navigating away.
+      let settled=false,accepted=false;
+      const acceptMessage=(messageId:string)=>{
+        if(settled||accepted)return;
+        accepted=true;
+        if(!turn.opening)finishDraft(assessment.id,turn.draft);
+        if(mount.current)setAcceptedMessage(messageId);
+      };
+      const acknowledge=async()=>{
+        try{
+          const state=await request<LiveStatus>('ai.chat.status',{assessmentId:assessment.id});
+          const review=turn.payload.dataReview;
+          if(settled||accepted||!state.requestId||typeof state.messageId!=='string'||
+            !review||state.dataReview?.id!==review.id||state.dataReview?.digest!==review.digest)return;
+          acceptMessage(state.messageId);
+        }catch{/* A missing acknowledgement never clears unsent input. */}
+      };
+      const answer=action('ai.ask',payload);
+      void acknowledge();
+      const timer=window.setInterval(()=>void acknowledge(),400);
+      try{await answer;}catch(error){
+        // A fast provider refusal can finish between status polls. The exact
+        // review and durable user-message link also confirm that admission.
+        if(!accepted)try{
+          const history=await request<{messages:ChatMessage[];requests?:{dataReviewRef?:{id:string;digest:string};chatMessageIds?:unknown}[]}>('ai.history',{assessmentId:assessment.id});
+          const review=turn.payload.dataReview;
+          const receipt=history.requests?.find(receipt=>receipt.dataReviewRef?.id===review.id&&receipt.dataReviewRef?.digest===review.digest);
+          const ids=Array.isArray(receipt?.chatMessageIds)?receipt.chatMessageIds:[];
+          const message=history.messages?.find(message=>message.role==='user'&&ids.includes(message.id));
+          if(message)acceptMessage(message.id);
+        }catch{/* Keep unsent input when the host cannot confirm acceptance. */}
+        throw error;
+      }finally{settled=true;window.clearInterval(timer);}
+    }
     if(!turn.opening)finishDraft(assessment.id,turn.draft);
     if(mount.current)await refresh();
   }
@@ -100,7 +138,7 @@ function Conversation({sourceOnly=false,assessment,plans,action,busy,onAdvanced,
     const picked=opening?undefined:attachment;
     const submittedDraft=readDraft(assessment.id);
     const message=picked?.text!==undefined?line+'\n\nArquivo selecionado ('+picked.name+'):\n'+picked.text:line;
-    setError('');setPendingLine(line);setPhase('Preparando o contexto…');
+    setError('');setAcceptedMessage(undefined);setPendingLine(line);setPhase('Preparando o contexto…');
     try{
       if(new TextEncoder().encode(message).byteLength>8000)throw new Error('A mensagem e o texto anexado podem ter até 8.000 bytes. Envie um trecho menor.');
       const prepared=await prepareChat(assessment,sel,message,{image:picked?.image,file:!!picked,signal:controller.signal,propose:proposing&&!opening});
@@ -176,7 +214,7 @@ function Conversation({sourceOnly=false,assessment,plans,action,busy,onAdvanced,
       onScroll={e=>{const el=e.currentTarget;if(!el.clientHeight)return;stick.current=el.scrollHeight-el.clientHeight-el.scrollTop<=64;setAwayFromEnd(!stick.current);}}
       onClickCapture={e=>{if(e.target instanceof Element && e.target.closest('summary'))stick.current=false;}}>
       <div className="project-chat-transcript" ref={transcript}><header className="chat-heading">
-        <div><h2>{assessment.title}</h2><span className="chat-state" title={scanner.scan?'Estado da análise do Codex Security':'Estado da avaliação'} data-state={scanner.scan?.status??assessment.status}>{scanner.scan?scanStateLabel[scanner.scan.status]:statusLabels[assessment.status]}</span></div>
+        <div><h2>{assessment.title}</h2><span className="chat-state" title={scanner.scan?'Estado da análise do OpenKoda':'Estado da avaliação'} data-state={scanner.scan?.status??assessment.status}>{scanner.scan?scanStateLabel[scanner.scan.status]:statusLabels[assessment.status]}</span></div>
         <p title={assessment.target}><TargetIcon size={14}/><span>{assessment.target}</span></p>
       </header>
       <ConversationTimeline events={assessment.events} messages={messages}/>
@@ -186,7 +224,7 @@ function Conversation({sourceOnly=false,assessment,plans,action,busy,onAdvanced,
       {!sourceOnly&&<ProjectKaliTools assessment={assessment} action={action} busy={busy||running||!!approval}/>}
       {!sourceOnly&&(plans??[]).filter(plan=>plan.assessmentId===assessment.id&&['proposed','approved'].includes(plan.status)&&Date.parse(plan.expiresAt)>Date.now()).map(plan=>
         <ChatPlanApproval key={plan.id} plan={plan} mode={mode} disabled={busy||!!phase||!!remote.requestId||!!approval} action={action}/>)}
-      {pendingLine&&<article className="project-chat-turn user"><header><strong>Você</strong></header><p>{pendingLine}</p></article>}
+      {pendingLine&&!messages.some(message=>message.id===acceptedMessage)&&<article className="project-chat-turn user"><header><strong>Você</strong></header><p>{pendingLine}</p></article>}
       {workLabel&&<p className="chat-progress" role="status"><LoaderCircle size={16}/>{workLabel}</p>}
       {approval&&<section className="chat-approval"><ShieldCheck size={20}/><h3>Autorizar envio para {providers[approval.selection.provider].name}?</h3><p>{approval.selection.model} · {approval.context.bytes.toLocaleString('pt-BR')} bytes preparados{approval.budget?' · reserva de '+usd(approval.budget.reservedUsd):''}.</p>{approval.image&&<img alt="Imagem selecionada para envio" src={'data:image/jpeg;base64,'+approval.image}/>}
         <details><summary>Ver conteúdo do envio</summary>{approval.context.packetPreview.prompts.map(p=><pre key={p.index}>{p.instructions}{'\n'}{p.prompt.replace(/"reviewedJpeg":"[A-Za-z0-9+/=]+"/g,'"imagem":"Prévia acima"')}</pre>)}</details>

@@ -4,10 +4,11 @@ import { emptySnapshot } from '../src/preview';
 test('a edição de código abre a pasta local e exige modelo sem oferecer os antigos motores',async({page})=>{
   await page.goto('/?area=tecnica');
   await expect(page.getByRole('heading',{name:'Seu primeiro projeto'})).toBeVisible();
-  await expect(page.getByRole('radio')).toHaveCount(1);
+  await expect(page.getByRole('radio')).toHaveCount(2);
   const source=page.getByRole('radio',{name:/Pasta local/});
   await source.focus();await page.keyboard.press('ArrowRight');
-  await expect(source).toBeChecked();
+  await expect(page.getByRole('radio',{name:/GitHub/})).toBeChecked();
+  await source.check();
   const create=page.getByRole('button',{name:'Criar projeto',exact:true});
   await create.click();
   await page.getByLabel('Pasta do projeto',{exact:true}).fill('D:/teste/local');

@@ -89,7 +89,7 @@ export default function ProjectDesk({sourceOnly=false,snapshot,busy,action,selec
     <div className="desk-main" ref={main} tabIndex={-1}>
       {showTree&&<button ref={mobileMenu} type="button" className="tree-mobile-toggle" aria-controls="project-tree" aria-expanded={tree} onClick={()=>setTree(!tree)}><PanelLeft size={16}/>Projetos</button>}
       {error&&<p className="app-alert" role="alert">{error}</p>}
-      {launch?<ProjectLaunch sourceOnly={sourceOnly} snapshot={snapshot} action={action} busy={busy} initialKind={startKind} onModels={onModels} onCancel={()=>setLaunch(false)} onCreated={(id,assessment)=>{setProjectId(id);openChat(assessment);}}/>
+      {launch?<ProjectLaunch sourceOnly={sourceOnly} snapshot={snapshot} action={action} busy={busy} initialKind={startKind==='github'?'code':startKind} initialSource={startKind==='github'?'github':'local'} onModels={onModels} onCancel={()=>setLaunch(false)} onCreated={(id,assessment)=>{setProjectId(id);openChat(assessment);}}/>
       :!project?<ProjectWelcome sourceOnly={sourceOnly} onStart={newProject}/>
       :<>
         <header className="desk-bar"><div className="desk-location">

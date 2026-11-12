@@ -15,7 +15,7 @@ if ($LASTEXITCODE -ne 0 -or $py.Count -ne 3 -or [version]$py[1] -lt [version]'3.
 $pyRoot = $py[0]
 
 # Keep development dependencies, tests, local output and user files out of the bundle.
-foreach ($name in @('package.json','package-lock.json','cli.mjs','worker.mjs','scan.mjs','platform.mjs','README.md')) {
+foreach ($name in @('package.json','package-lock.json','cli.mjs','worker.mjs','scan.mjs','platform.mjs','public-activity.mjs','README.md')) {
     $inputFile = Get-Item -LiteralPath (Join-Path $source $name)
     if ($inputFile.PSIsContainer -or $inputFile.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Recurso fonte do motor inválido.' }
     Copy-Item -LiteralPath $inputFile.FullName -Destination $stage

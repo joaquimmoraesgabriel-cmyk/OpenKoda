@@ -229,6 +229,11 @@ pub fn snapshot_view(store:&Store,s:&Snapshot,redactor:&dyn DataRedactor)->Resul
     let mut value=serde_json::to_value(s).map_err(|_|error("data_projection_failed"))?;
     for key in ["dataPolicies","dataPolicyRevisions","dataBindings","dataClassifications","credentialReferences","dataUseReceipts","providerSlots","providerModels","dataMutationReceipts","dataSubjectGenerations"]{value.as_object_mut().unwrap().remove(key);}
     let mut value=project_value(value,redactor);
+    // Only the validated project preference DTO can retain its three context
+    // fields. Generic evidence/source contexts remain omitted by project_value.
+    for (project,original) in value["projects"].as_array_mut().ok_or_else(||error("data_projection_failed"))?.iter_mut().zip(&s.projects){
+        if let Some(options)=&original.analysis_options{project["analysisOptions"]=crate::project_options::view(options,redactor);}
+    }
     for a in value["assessments"].as_array_mut().ok_or_else(||error("data_projection_failed"))?{let aid=a["id"].as_str().ok_or_else(||error("data_projection_failed"))?.to_owned();let original=s.assessments.iter().find(|a|a.id==aid).unwrap();a["evidence"]=json!(original.evidence.iter().map(|e|evidence_view(store,s,&aid,&e.id,redactor)).collect::<Result<Vec<_>,_>>()?);}
     value["schema"]=json!("openkoda.snapshot-view.v1");value["projection"]=projection_info(redactor,true,vec!["assessments[].evidence[].content"]);Ok(value)
 }

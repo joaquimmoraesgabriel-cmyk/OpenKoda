@@ -410,8 +410,36 @@ mod tests {
     }
     #[test]
     fn global_write_failure_prevents_http_and_profile_history_failure_does_not_forget_charge(){
-        let f=Fixture::new(vec![]);f.enable();let input=f.ask_input();let quote=f.preview("ask",input.clone()).unwrap();f.ai.budget.lock().unwrap().execute_batch("CREATE TRIGGER deny_charge BEFORE INSERT ON budget_charges BEGIN SELECT RAISE(ABORT,'fixture disk error'); END;").unwrap();assert!(f.ask(input,Some(&quote)).is_err());assert_eq!(f.fake.calls.load(Ordering::SeqCst),0);assert_eq!(f.request_count(),0);
-        let f=Fixture::new(vec![answer("preserve consumption",10,20)]);f.enable();let input=f.ask_input();let quote=f.preview("ask",input.clone()).unwrap();f.ai.db.lock().unwrap().execute_batch("CREATE TRIGGER deny_message BEFORE INSERT ON messages BEGIN SELECT RAISE(ABORT,'fixture disk error'); END;").unwrap();assert!(f.ask(input,Some(&quote)).is_err());assert_eq!(f.status()["installation"]["pricedUsageUsd"],"0.000050");assert_eq!(f.ai.db.lock().unwrap().query_row("SELECT status FROM requests",[],|r|r.get::<_,String>(0)).unwrap(),"pending");assert_eq!(f.fake.calls.load(Ordering::SeqCst),1);
+        let f=Fixture::new(vec![]);f.enable();let input=f.ask_input();let quote=f.preview("ask",input.clone()).unwrap();
+        f.ai.budget.lock().unwrap().execute_batch("CREATE TRIGGER deny_charge BEFORE INSERT ON budget_charges BEGIN SELECT RAISE(ABORT,'fixture disk error'); END;").unwrap();
+        assert!(f.ask(input,Some(&quote)).is_err());assert_eq!(f.fake.calls.load(Ordering::SeqCst),0);assert_eq!(f.request_count(),0);
+
+        // User-message durability is an admission prerequisite. A local failure
+        // before HTTP cannot consume credit or create an accepted chat turn.
+        let f=Fixture::new(vec![answer("must not dispatch",10,20)]);f.enable();let input=f.ask_input();let quote=f.preview("ask",input.clone()).unwrap();
+        f.ai.db.lock().unwrap().execute_batch("CREATE TRIGGER deny_user_message BEFORE INSERT ON messages WHEN NEW.role='user' BEGIN SELECT RAISE(ABORT,'fixture disk error'); END;").unwrap();
+        assert!(f.ask(input,Some(&quote)).is_err());assert_eq!(f.fake.calls.load(Ordering::SeqCst),0);
+        let history=f.ai.handle("ai.history",json!({"assessmentId":f.assessment}),&f.store).unwrap();
+        assert!(history["messages"].as_array().unwrap().is_empty());
+        assert_eq!(f.status()["installation"]["pricedUsageUsd"],"0.000000");
+        assert_eq!(f.status()["installation"]["heldUsd"],"0.000000");
+        assert_eq!(f.status()["unknownChargesTotal"],0);
+        assert_eq!(f.status()["recentCharges"][0]["state"],"not_dispatched");
+        assert_eq!(history["requests"][0]["status"],"failed");
+
+        // The response already happened when the assistant history write fails.
+        // Its measured consumption must survive even though the profile cannot
+        // commit the terminal request/history transaction.
+        let f=Fixture::new(vec![answer("preserve consumption",10,20)]);f.enable();let input=f.ask_input();let quote=f.preview("ask",input.clone()).unwrap();
+        f.ai.db.lock().unwrap().execute_batch("CREATE TRIGGER deny_assistant_message BEFORE INSERT ON messages WHEN NEW.role='assistant' BEGIN SELECT RAISE(ABORT,'fixture disk error'); END;").unwrap();
+        assert!(f.ask(input,Some(&quote)).is_err());
+        assert_eq!(f.status()["installation"]["pricedUsageUsd"],"0.000050");
+        assert_eq!(f.status()["installation"]["heldUsd"],"0.000000");
+        assert_eq!(f.ai.db.lock().unwrap().query_row("SELECT status FROM requests",[],|r|r.get::<_,String>(0)).unwrap(),"pending");
+        assert_eq!(f.fake.calls.load(Ordering::SeqCst),1);
+        let history=f.ai.handle("ai.history",json!({"assessmentId":f.assessment}),&f.store).unwrap();
+        let messages=history["messages"].as_array().unwrap();assert_eq!(messages.len(),1);assert_eq!(messages[0]["role"],"user");
+        assert_eq!(history["requests"][0]["chatMessageIds"][0],messages[0]["id"]);
     }
     #[test]
     fn disabled_legacy_behavior_and_rate_revisions_never_reset_epoch_or_reprice_usage(){

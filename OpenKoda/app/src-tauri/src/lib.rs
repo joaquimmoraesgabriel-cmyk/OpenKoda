@@ -9,6 +9,8 @@ pub mod network;
 pub mod source_scan;
 pub mod source_context;
 pub mod security_scan;
+pub mod github_repository;
+pub mod project_options;
 mod source_edition;
 pub mod mcp;
 pub mod recovery;
@@ -48,7 +50,7 @@ use std::sync::Arc;
 use tauri::Manager;
 use core::{Request, Store};
 
-struct Services { close_gate: Arc<close_guard::CloseGate>, security:security_scan::Service, ai: ai::AiService, environment: Arc<environment::EnvironmentManager>, executor: executor::Executor, recovery:recovery::RecoveryService, kali:kali_bridge::KaliBridge, remediation:remediation::RemediationService, activation:activation::ActivationService, retention:retention::RetentionService, project_purge:project_purge::ProjectPurgeService, data_policy:Arc<data_policy::DataPolicyService>, workflow:workflow::WorkflowService, supervisor:work_supervisor::WorkSupervisor, work_wakeup:work_runtime::WakeGate, environment_gate: std::sync::RwLock<()> }
+struct Services { close_gate: Arc<close_guard::CloseGate>, security:security_scan::Service, github:github_repository::Service, ai: ai::AiService, environment: Arc<environment::EnvironmentManager>, executor: executor::Executor, recovery:recovery::RecoveryService, kali:kali_bridge::KaliBridge, remediation:remediation::RemediationService, activation:activation::ActivationService, retention:retention::RetentionService, project_purge:project_purge::ProjectPurgeService, data_policy:Arc<data_policy::DataPolicyService>, workflow:workflow::WorkflowService, supervisor:work_supervisor::WorkSupervisor, work_wakeup:work_runtime::WakeGate, environment_gate: std::sync::RwLock<()> }
 
 // Check under the operation lease, so a purge cannot begin between this test
 // and another mutation. Read-only views remain available for human inspection.
@@ -105,6 +107,26 @@ async fn request(
         }
         let public_action=request.action.clone();
         let result=(||{
+        if request.action=="github.repository.import"{
+            let (tx,rx)=std::sync::mpsc::sync_channel(1);let services=services.clone();
+            std::thread::Builder::new().name("github-repository-import".into()).spawn(move||{
+                let outcome=(||{
+                    let _lease=services.environment_gate.try_read().map_err(|_|"Aguarde a manutenção do perfil antes de importar.")?;
+                    ensure_purge_access(&services,"github.repository.import")?;allow_new_work(&services)?;
+                    let _running=services.close_gate.admit(Some(close_guard::Activity::queue(None)))?;
+                    services.github.start_worker(request.payload,&tx)
+                })();if let Err(error)=outcome{let _=tx.send(Err(error));}
+            }).map_err(|_|"Não foi possível iniciar a importação.")?;
+            return rx.recv().map_err(|_|"A importação não confirmou seu início.")?;
+        }
+        if request.action=="github.repository.get"{return services.github.get(request.payload);}
+        if request.action=="github.repository.cancel"{return services.github.cancel(request.payload);}
+        if request.action=="project.options.get"{return project_options::get(&store,request.payload);}
+        if request.action=="project.options.save"{
+            let _lease=services.environment_gate.try_read().map_err(|_|"Aguarde a manutenção do perfil.")?;
+            ensure_purge_access(&services,"project.options.save")?;allow_new_work(&services)?;
+            return project_options::save(&store,request.payload);
+        }
         if request.action=="security.scan.start"{
             let (tx,rx)=std::sync::mpsc::sync_channel(1);
             let services=services.clone();let store=store.clone();
@@ -425,6 +447,7 @@ pub fn run() {
             let services=Services{
                 close_gate: Arc::default(),
                 security:security_scan::Service::new(&app.path().resource_dir()?),
+                github:github_repository::Service::new(store.root.clone(),&app.path().resource_dir()?),
                 ai:ai::AiService::new_with_budget_root(store.root.clone(),storage.base.clone()).map_err(std::io::Error::other)?.with_data_policy(data_policy.clone()).with_arbiter(supervisor.shared_arbiter()),
                 environment:environment.clone(),
                 executor:executor::Executor::default().with_arbiter(supervisor.shared_arbiter()),

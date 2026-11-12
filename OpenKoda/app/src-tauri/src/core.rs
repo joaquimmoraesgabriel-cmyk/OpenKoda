@@ -261,7 +261,7 @@ impl Store {
         let description = text(&input.description, "Descrição", 4000, false)?;
         self.mutate(|s| {
             if s.projects.len() >= 10000 { return Err("Limite de projetos atingido.".into()); }
-            let project = Project { id: id(), name, kind: input.kind, target, description, created_at: now(), archived: false, additional_targets:vec![], target_receipts:vec![] };
+            let project = Project { id: id(), name, kind: input.kind, target, description, created_at: now(), archived: false, additional_targets:vec![], target_receipts:vec![], analysis_options:None, github_source:None };
             s.projects.push(project.clone());
             encode(project)
         })
@@ -560,6 +560,11 @@ pub fn validate_snapshot(s:&Snapshot)->Result<(),String>{
         if !ids.insert(&p.id){return Err("Projeto duplicado no armazenamento.".into());}
         text(&p.name,"Nome",120,true)?;
         text(&p.description,"Descrição",4000,false)?;
+        if let Some(options)=&p.analysis_options{options.validate()?;}
+        if let Some(source)=&p.github_source{
+            valid_id(&source.import_id)?;
+            if crate::github_repository::normalize_url(&source.url)?.0!=source.url||source.revision.len()!=40||!source.revision.bytes().all(|b|b.is_ascii_hexdigit())||p.kind!="code"{return Err("Origem GitHub inválida no projeto.".into());}
+        }
         validate_target(&p.kind,&p.target)?;
         timestamp(&p.created_at)?;
         crate::scope_targets::validate_catalog(p)?;

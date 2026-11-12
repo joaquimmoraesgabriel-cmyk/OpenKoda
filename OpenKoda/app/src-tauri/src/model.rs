@@ -15,6 +15,10 @@ pub struct Project {
     pub additional_targets: Vec<crate::scope_targets::ProjectTarget>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub target_receipts: Vec<crate::scope_targets::CatalogReceipt>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub analysis_options: Option<crate::project_options::AnalysisOptions>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub github_source: Option<crate::github_repository::Source>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

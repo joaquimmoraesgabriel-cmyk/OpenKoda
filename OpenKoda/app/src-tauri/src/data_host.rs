@@ -189,6 +189,9 @@ fn archive_view(action: &str, raw: Value, redactor: &dyn DataRedactor) -> Value 
 }
 
 pub(crate) fn project_response(action:&str,value:Value,store:&Store,redactor:&dyn DataRedactor)->Result<Value,String>{
+    if matches!(action,"project.options.get"|"project.options.save"){
+        return crate::project_options::response(value,redactor);
+    }
     if action=="snapshot"{
         let has_key=value["settings"]["hasApiKey"].clone();
         let (state,bindings)=store.work_read(|db,state|Ok((state.clone(),crate::work_store::plan_bindings_view(db)?)))?;
@@ -234,6 +237,42 @@ mod tests{
     impl DataRedactor for FixtureRedactor{
         fn mode(&self)->RedactionMode{RedactionMode::NoCredentialConfigured}
         fn redact(&self,text:&str)->RedactedText{let value=crate::ai::redact(text,None);RedactedText{changed:value!=text,secret_material:value.contains("[REDACTED"),text:value}}
+    }
+    #[test]
+    fn project_options_keep_the_typed_context_shape_at_every_native_boundary(){
+        struct OptionsRedactor(RedactionMode);
+        impl DataRedactor for OptionsRedactor{
+            fn mode(&self)->RedactionMode{self.0}
+            fn redact(&self,text:&str)->RedactedText{
+                let projected=text.replace("OPTIONS-SECRET-CANARY","[REDACTED]");
+                RedactedText{changed:projected!=text,secret_material:projected!=text,text:projected}
+            }
+        }
+        let dir=tempfile::tempdir().unwrap();let store=Store::open(dir.path().join("profile")).unwrap();
+        let project=store.handle(core::Request{action:"project.create".into(),payload:json!({"name":"Options fixture","kind":"code","target":dir.path().to_str().unwrap()})}).unwrap();
+        let options=crate::project_options::AnalysisOptions{advanced_enabled:true,additional_context_enabled:true,context:["Focus on auth".into(),"OPTIONS-SECRET-CANARY".into(),"é".repeat(1200)],max_cost_usd:Some(2.0),minutes:Some(30),title:"Review".into()};
+        let saved=crate::project_options::save(&store,json!({"projectId":project["id"],"options":options})).unwrap();
+        let canonical=serde_json::to_value(store.snapshot().unwrap()).unwrap();
+        for mode in [RedactionMode::Ready,RedactionMode::NoCredentialConfigured,RedactionMode::MetadataOnly]{
+            let redactor=OptionsRedactor(mode);
+            for action in ["project.options.get","project.options.save"]{
+                let raw=if action.ends_with("get"){crate::project_options::get(&store,json!({"projectId":project["id"]})).unwrap()}else{saved.clone()};
+                let response=project_response(action,raw,&store,&redactor).unwrap();
+                let projected:crate::project_options::AnalysisOptions=serde_json::from_value(response["options"].clone()).expect("the frontend requires the complete typed options shape");
+                assert_eq!(projected.context.len(),3);assert_eq!(projected.max_cost_usd,Some(2.0));
+                assert!(!response.to_string().contains("OPTIONS-SECRET-CANARY"));
+                if mode!=RedactionMode::MetadataOnly{assert_eq!(projected.context[0],options.context[0]);assert_eq!(projected.context[2],options.context[2]);}
+                else{assert!(!response.to_string().contains("Focus on auth"));}
+            }
+            let response=project_response("snapshot",json!({"settings":{"hasApiKey":false}}),&store,&redactor).unwrap();
+            let projected:crate::project_options::AnalysisOptions=serde_json::from_value(response["projects"][0]["analysisOptions"].clone()).expect("snapshot uses the same options contract");
+            assert!(!response.to_string().contains("OPTIONS-SECRET-CANARY"));
+            if mode!=RedactionMode::MetadataOnly{assert_eq!(projected.context[2],options.context[2]);}
+            else{assert!(!response.to_string().contains("Focus on auth"));}
+        }
+        assert_eq!(serde_json::to_value(store.snapshot().unwrap()).unwrap(),canonical);
+        assert!(canonical.to_string().contains("OPTIONS-SECRET-CANARY"),"projection must preserve canonical inputs");
+        assert!(project_value(json!({"context":"RAW-CONTEXT-SENTINEL"}),&OptionsRedactor(RedactionMode::Ready)).get("context").is_none(),"ordinary raw contexts remain excluded");
     }
     fn store_with_evidence()->(tempfile::TempDir,Store,String,String){
         let root=tempfile::tempdir().unwrap();let store=Store::open(root.path().into()).unwrap();

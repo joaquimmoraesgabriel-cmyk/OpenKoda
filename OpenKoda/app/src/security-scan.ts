@@ -4,6 +4,8 @@ import type { Assessment } from './types';
 import { prepareScanMetadata } from './project-chat';
 
 export const defaultScanLimit = 5;
+// Product copy only. Original reports and engine receipts remain unchanged on disk.
+export const analysisDisplayText=(text:string)=>text.replace(/Codex Security/gi,'OpenKoda');
 const states = ['starting','running','cancelling','completed','failed','cancelled','interrupted'] as const;
 export type ScanState = typeof states[number];
 export const scanStateLabel:Record<ScanState,string> = {
@@ -67,17 +69,21 @@ export function readScan(response:unknown, assessmentId:string):SecurityScan|nul
   return s as unknown as SecurityScan;
 }
 
-type StartScan = {projectId:string;assessmentId:string;selection:AiSelection;idempotencyKey:string;prompt:string;maxCostUsd:number;target?:string;acknowledgeSensitive?:boolean};
-export async function startSecurityScan({projectId,assessmentId,selection,idempotencyKey,prompt,maxCostUsd,target,acknowledgeSensitive}:StartScan) {
+type StartScan = {projectId:string;assessmentId:string;selection:AiSelection;idempotencyKey:string;prompt:string;maxCostUsd:number;target?:string;acknowledgeSensitive?:boolean;signal?:AbortSignal};
+export async function startSecurityScan({projectId,assessmentId,selection,idempotencyKey,prompt,maxCostUsd,target,acknowledgeSensitive,signal}:StartScan) {
+  function requireActive(){if(signal?.aborted)throw new Error('Criação cancelada antes da análise. O projeto criado foi preservado.');}
   async function currentStatus(){
+    requireActive();
     const status=await request<SecurityStatus>('security.status',{assessmentId});
+    requireActive();
     if (status?.available!==true || status.hasApiKey!==true || status.provider!==selection.provider || status.model!==selection.model) {
-      throw new Error(status?.reason || 'O Codex Security está indisponível com o modelo selecionado. Confira o motor e a credencial nas configurações.');
+      throw new Error(status?.reason || 'A análise está indisponível com o modelo selecionado. Confira o motor e a credencial nas configurações.');
     }
     return status;
   }
   let status=await currentStatus();
   if(await prepareScanMetadata(projectId,assessmentId,selection))status=await currentStatus();
+  requireActive();
   if(status.requiresSensitiveConfirmation&&!acknowledgeSensitive)throw new SensitiveScanConfirmation();
   const response = await request('security.scan.start',{assessmentId,idempotencyKey,prompt:prompt.trim(),maxCostUsd,...(target?{target}:{}),
     ...(status.requiresSensitiveConfirmation?{acknowledgeSensitive:true}:{})});

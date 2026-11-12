@@ -384,7 +384,7 @@ impl AiService {
                 let mut q=db.prepare("SELECT id,model,status,created,input_tokens,output_tokens,details,endpoint FROM requests WHERE assessment=?1 ORDER BY rowid DESC LIMIT 100").map_err(failure)?;
                 let requests=q.query_map([&input.assessment_id],|r|{
                     let details:String=r.get(6)?;let body:Value=serde_json::from_str(&details).unwrap_or(Value::Null);
-                    Ok(json!({"id":r.get::<_,String>(0)?,"endpoint":r.get::<_,String>(7)?,"model":r.get::<_,String>(1)?,"status":r.get::<_,String>(2)?,"createdAt":r.get::<_,String>(3)?,"inputTokens":r.get::<_,Option<i64>>(4)?,"outputTokens":r.get::<_,Option<i64>>(5)?,"unknownAcknowledged":request_unknown_acknowledged(&details),"resolution":body.get("resolution"),"operationProposal":body.get("operationProposal"),"budget":body.get("budget"),"scopeRef":body.get("scopeRef"),"contextTargetRefs":body.get("contextTargetRefs"),"dataReviewRef":body.get("dataReviewRef"),"dataUseReceiptRef":body.get("dataUseReceiptRef"),"dataPolicyRef":body.get("dataPolicyRef"),"dataBinding":body.get("dataBinding"),"providerCredentialRef":body.get("providerCredentialRef"),"dataReceiptStatus":if body.get("dataUseReceiptRef").is_some(){"recorded"}else{"legacy_no_data_policy_receipt"}}))
+                    Ok(json!({"id":r.get::<_,String>(0)?,"endpoint":r.get::<_,String>(7)?,"model":r.get::<_,String>(1)?,"status":r.get::<_,String>(2)?,"createdAt":r.get::<_,String>(3)?,"inputTokens":r.get::<_,Option<i64>>(4)?,"outputTokens":r.get::<_,Option<i64>>(5)?,"unknownAcknowledged":request_unknown_acknowledged(&details),"resolution":body.get("resolution"),"operationProposal":body.get("operationProposal"),"budget":body.get("budget"),"scopeRef":body.get("scopeRef"),"contextTargetRefs":body.get("contextTargetRefs"),"dataReviewRef":body.get("dataReviewRef"),"dataUseReceiptRef":body.get("dataUseReceiptRef"),"dataPolicyRef":body.get("dataPolicyRef"),"dataBinding":body.get("dataBinding"),"providerCredentialRef":body.get("providerCredentialRef"),"chatMessageIds":body.get("chatMessageIds"),"dataReceiptStatus":if body.get("dataUseReceiptRef").is_some(){"recorded"}else{"legacy_no_data_policy_receipt"}}))
                 }).map_err(failure)?.collect::<Result<Vec<_>,_>>().map_err(failure)?;
                 Ok(json!({"messages":messages,"requests":requests,"limit":100,"historySentToProvider":false}))
             }
@@ -616,13 +616,14 @@ impl AiService {
         }else{persist(None)?;None};
         // Last local checkpoint. Once HTTP starts, revocation cannot prove that
         // the provider stopped or refunded a request; its receipt is retained.
+        let mut admitted_message_id=None;
         let mut dispatch=||->Result<(),String>{
             work.bind(self,&id,initial_details.get("investigationId").and_then(Value::as_str))?;
             if let (Some((store,reference,targets)),Some(data),Some(receipt))=(authority,data.as_ref(),receipt.as_ref()){
                 let identity=self.identity_for(store,Some(assessment))?;
                 if !identity.available||identity.revision!=revision||data.spec.credential.as_ref().is_none_or(|c|c.slot_id!=identity.slot_id){return Err("credential_reference_changed: conexão mudou antes do envio.".into());}
-                self.data_policy.before_dispatch(store,receipt,data.spec,Some(crate::data_policy::OperationalScope{assessment_id:assessment,method:AI_METHOD,expected:reference,targets}),||{work.before_dispatch(store)?;self.budget.dispatched(&id)})
-            }else{self.budget.dispatched(&id)}
+                self.data_policy.before_dispatch(store,receipt,data.spec,Some(crate::data_policy::OperationalScope{assessment_id:assessment,method:AI_METHOD,expected:reference,targets}),||{work.before_dispatch(store)?;admitted_message_id=self.record_chat_question(&id,assessment,history_message)?;self.budget.dispatched(&id)})
+            }else{admitted_message_id=self.record_chat_question(&id,assessment,history_message)?;self.budget.dispatched(&id)}
         };
         if let Err(error)=dispatch(){
             let _=self.budget.not_sent(&id);
@@ -631,7 +632,10 @@ impl AiService {
             return Err(error);
         }
         let raw_result=if matches!(operation,"ask"|"operation_proposal"){
-            self.chat.start(assessment,&id).and_then(|live|self.provider.chat_response(provider,model,key,prompt,instructions,max_output_tokens,&live.token))
+            self.chat.start(assessment,&id,data.as_ref().map(|data|data.review)).and_then(|live|{
+                live.admit(admitted_message_id.clone())?;
+                self.provider.chat_response(provider,model,key,prompt,instructions,max_output_tokens,&live.token)
+            })
         }else{self.provider.response(provider,model,key,prompt,instructions,max_output_tokens)};
         let result=self.commit_response(&id,assessment,key,history_message,raw_result);
         if let (Some((store,_,_)),Some(receipt))=(authority,receipt.as_ref()){
@@ -640,6 +644,21 @@ impl AiService {
             self.data_policy.finish(store,receipt,outcome,vec![])?;
         }
         result.map(|mut result|{result["requestId"]=json!(id);if let Some(receipt)=receipt{result["dataUseReceiptRef"]=json!(receipt);}result})
+    }
+
+    // The accepted user turn survives provider errors, process interruption and
+    // closing the window. Its request identity also prevents an accidental replay.
+    fn record_chat_question(&self,id:&str,assessment:&str,question:Option<&str>)->Result<Option<String>,String>{
+        let Some(question)=question else{return Ok(None)};
+        let message_id=scope_targets::derived_id("openkoda.chat.message.v1",&[id,"user"]);
+        let mut db=self.db.lock().map_err(failure)?;
+        let tx=db.transaction().map_err(failure)?;
+        tx.execute("INSERT OR IGNORE INTO messages VALUES(?1,?2,'user',?3,?4)",params![message_id,assessment,question,model::now()]).map_err(failure)?;
+        let (stored_assessment,text):(String,String)=tx.query_row("SELECT assessment,text FROM messages WHERE id=?1",[&message_id],|r|Ok((r.get(0)?,r.get(1)?))).map_err(failure)?;
+        if stored_assessment!=assessment||text!=question{return Err("A identidade da mensagem mudou.".into());}
+        let updated=tx.execute("UPDATE requests SET details=json_set(details,'$.chatMessageIds',json(?2)) WHERE id=?1",params![id,json!([message_id]).to_string()]).map_err(failure)?;
+        if updated!=1{return Err("Solicitação da conversa indisponível.".into());}
+        tx.commit().map_err(failure)?;Ok(Some(message_id))
     }
 
     fn commit_response(&self,id:&str,assessment:&str,key:&str,history_message:Option<&str>,raw_result:Result<Value,String>)->Result<Value,String> {
@@ -661,15 +680,17 @@ impl AiService {
         let tx=db.transaction().map_err(failure)?;
         let original:String=tx.query_row("SELECT details FROM requests WHERE id=?1",[id],|row|row.get(0)).map_err(failure)?;
         let original:Value=serde_json::from_str(&original).map_err(failure)?;
-        for field in ["investigationId","perspective","maxOutputTokens","operationProposal","budget","scopeRef","contextTargetRefs","dataPolicyRef","dataReviewRef","dataUseReceiptRef","dataBinding","providerCredentialRef"]{if let Some(value)=original.get(field){details[field]=value.clone();}}
+        for field in ["investigationId","perspective","maxOutputTokens","operationProposal","budget","scopeRef","contextTargetRefs","dataPolicyRef","dataReviewRef","dataUseReceiptRef","dataBinding","providerCredentialRef","chatMessageIds"]{if let Some(value)=original.get(field){details[field]=value.clone();}}
         if let Ok(Some(budget))=&accounting{details["budget"]=budget.clone();}
         tx.execute("UPDATE requests SET status=?1,input_tokens=?2,output_tokens=?3,details=?4 WHERE id=?5",params![status,input,output,details.to_string(),id]).map_err(failure)?;
         if let (Some(question),Ok(answer))=(history_message,&result) {
             let answer=answer["text"].as_str().ok_or("Resposta sem texto.")?;
             let mut message_ids=Vec::new();
             for (role,text) in [("user",question),("assistant",answer)] {
-                let message_id=model::id();
-                tx.execute("INSERT INTO messages VALUES(?1,?2,?3,?4,?5)",params![message_id,assessment,role,text,model::now()]).map_err(failure)?;
+                let message_id=scope_targets::derived_id("openkoda.chat.message.v1",&[id,role]);
+                tx.execute("INSERT OR IGNORE INTO messages VALUES(?1,?2,?3,?4,?5)",params![message_id,assessment,role,text,model::now()]).map_err(failure)?;
+                let stored:(String,String,String)=tx.query_row("SELECT assessment,role,text FROM messages WHERE id=?1",[&message_id],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?))).map_err(failure)?;
+                if stored!=(assessment.into(),role.into(),text.into()){return Err("O conteúdo da mensagem mudou.".into());}
                 message_ids.push(message_id);
             }
             tx.execute("UPDATE requests SET details=json_set(details,'$.chatMessageIds',json(?2)) WHERE id=?1",params![id,json!(message_ids).to_string()]).map_err(failure)?;

@@ -1,6 +1,7 @@
 import { dirname, delimiter } from 'node:path';
 import { inspectPlatform } from './platform.mjs';
 import { validateRequest, preparePaths, sdkConfig, costSummary, resultSummary, failureSummary } from './scan.mjs';
+import {publicSessionUpdate,publicToolUpdate,progressMessage} from './public-activity.mjs';
 
 const controller=new AbortController();
 let started=false;
@@ -37,18 +38,29 @@ async function execute(input){
     client=new CodexSecurity(sdkConfig(input,python.path));
     let lastPhase='';
     let lastProgress=0;
+    const recent=new Map();let lastTool=0;
+    function activity(event){
+      if(!event)return;
+      const now=Date.now(),key=event.stage+'\0'+event.message;
+      if(recent.has(key)&&now-recent.get(key)<60000)return;
+      if(event.stage==='tool'&&now-lastTool<3000)return;
+      if(event.stage==='tool')lastTool=now;
+      if(recent.size>128)recent.clear();recent.set(key,now);send(event);
+    }
     const result=await client.run(paths.repository,{
       target:input.target,mode:'standard',auth:'api-key',scanPrompt:input.prompt || undefined,
       maxCostUsd:input.maxCostUsd,maxTimeMinutes:15,outputDir:paths.artifacts,
       skipFindingMatching:true,signal:controller.signal,
       onLifecycle:event=>{if(event.mock===true)controller.abort(); else if(typeof event.scanId==='string' && event.scanId.length<=192)scanId=event.scanId;},
       onCost:event=>{latestCost=costSummary(event);},
+      onSessionEvent:event=>activity(publicSessionUpdate(event,input.apiKey)),
+      onActivity:event=>activity(publicToolUpdate(event,input.apiKey)),
       onProgress:event=>{
         if(!Object.hasOwn(phases,event.phase))return;
         const now=Date.now();
         if(lastPhase===event.phase && now-lastProgress<15000)return;
         lastPhase=event.phase;lastProgress=now;
-        send({type:'progress',stage:event.phase,message:phases[event.phase]});
+        send({type:'progress',stage:event.phase,message:progressMessage(event,phases[event.phase])});
       },
     });
     controller.signal.throwIfAborted();

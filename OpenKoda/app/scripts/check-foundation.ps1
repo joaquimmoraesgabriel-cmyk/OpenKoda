@@ -19,7 +19,7 @@ try {
     Invoke-Gate 'Nucleo: testes Rust' { cargo test --manifest-path src-tauri/Cargo.toml @cargoOptions }
     if (-not $SkipBrowser) { Invoke-Gate 'Navegacao: Playwright Edge' { npm.cmd run test:e2e } }
     Invoke-Gate 'SDK oficial: disponibilidade local' { & '.\security-runtime\bin\node.exe' 'security-runtime/cli.mjs' --check }
-    Invoke-Gate 'SDK oficial: protocolo e preflight offline' { & '.\security-runtime\bin\node.exe' --test 'security-runtime/tests/runtime.test.mjs' }
+    Invoke-Gate 'SDK oficial: protocolo e preflight offline' { & '.\security-runtime\bin\node.exe' --test 'security-runtime/tests/*.test.mjs' }
     if (-not $SkipNative) {
         Invoke-Gate 'Desktop: build com interface incorporada' { cargo build --manifest-path src-tauri/Cargo.toml --features custom-protocol @cargoOptions }
         $metadataOptions = @('--format-version','1','--no-deps','--locked','--manifest-path','src-tauri/Cargo.toml')

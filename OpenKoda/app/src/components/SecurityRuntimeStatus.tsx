@@ -23,14 +23,14 @@ export default function SecurityRuntimeStatus() {
   }, [revision]);
   return <section className="content-section" aria-label="Motor de análise">
     <h3>Motor de análise</h3>
-    <p>O Codex Security executa as análises de código. Os resultados e o histórico ficam associados ao projeto.</p>
+    <p>Confira os componentes usados pelo OpenKoda para analisar seu código. Os resultados e o histórico ficam associados ao projeto.</p>
     {!native ? <p>Consulte os componentes no aplicativo desktop.</p>
       : error ? <p role="alert">{error}</p>
       : !status ? <p role="status">Verificando os componentes…</p>
       : <>
         <KeyValue label="Estado">{status.runtime.available ? 'Pronto para executar' : 'Requer configuração'}</KeyValue>
-        <KeyValue label="Codex Security">{status.runtime.sdkVersion ?? 'Indisponível'}</KeyValue>
-        <KeyValue label="Codex">{status.runtime.codexVersion ?? 'Indisponível'}</KeyValue>
+        <KeyValue label="Motor de análise">{status.runtime.sdkVersion ?? 'Indisponível'}</KeyValue>
+        <KeyValue label="Executor">{status.runtime.codexVersion ?? 'Indisponível'}</KeyValue>
         <KeyValue label="Node.js">{status.runtime.nodeVersion ?? 'Indisponível'}</KeyValue>
         <KeyValue label="Python">{status.runtime.pythonVersion ?? 'Indisponível'}</KeyValue>
         <KeyValue label="Git">{status.runtime.gitVersion ?? 'Instale o Git para Windows'}</KeyValue>

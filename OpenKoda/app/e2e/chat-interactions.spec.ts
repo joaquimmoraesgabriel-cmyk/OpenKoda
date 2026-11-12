@@ -8,6 +8,11 @@ type Bridge = {
   turns: Turn[];
   calls: { action: string; payload: Record<string, unknown> }[];
   running: boolean;
+  activeReview?: {id:string;digest:string};
+  acceptedMessage?: string;
+  rejectBeforeSend?: boolean;
+  pretendOtherReview?: boolean;
+  failImmediatelyAfterSend?: boolean;
 };
 declare global { interface Window { __conversationTest: Bridge } }
 
@@ -39,14 +44,21 @@ async function installChat(page: Page, turns: Turn[] = [], running = false) {
       if (action === 'ai.context') return { digest: 'packet-a', bytes: 120, context: { assessmentId: payload.assessmentId } };
       if (action === 'ai.budget.status') return { enabled: false, degraded: false };
       if (action === 'ai.ask') {
+        if(bridge.rejectBeforeSend)throw new Error('O escopo foi revogado antes do envio.');
         bridge.running = true;
-        await new Promise(resolve => window.addEventListener('fixture:reply', resolve, { once: true }));
-        bridge.running = false;
+        bridge.activeReview = bridge.pretendOtherReview?{id:'other-window-review',digest:'unrelated-digest'}:payload.dataReview as {id:string;digest:string};
+        bridge.acceptedMessage = 'message-' + bridge.calls.filter(c=>c.action==='ai.ask').length;
+        bridge.turns.push({id:bridge.acceptedMessage,role:'user',text:String(payload.message),createdAt:'2026-11-12T12:00:00Z'});
+        if(bridge.failImmediatelyAfterSend){bridge.running=false;throw new Error('O provedor recusou a solicitação após receber o envio (429).');}
+        try{await new Promise((resolve,reject)=>{
+          window.addEventListener('fixture:reply', resolve, { once: true });
+          window.addEventListener('fixture:uncertain',()=>reject(new Error('Resposta interrompida. O resultado remoto é incerto.')), { once: true });
+        });}finally{bridge.running = false;}
         return {};
       }
       if (action === 'environment.status') return { tools: [], status: 'unavailable', message: 'Teste' };
-      if (action === 'ai.history') return { messages: payload.assessmentId === 'A' ? bridge.turns : [] };
-      if (action === 'ai.chat.status') return { requestId: bridge.running && payload.assessmentId === 'A' ? 'turn-A' : null, stopping: false };
+      if (action === 'ai.history') return { messages: payload.assessmentId === 'A' ? bridge.turns : [], requests:payload.assessmentId==='A'&&bridge.acceptedMessage?[{id:'turn-A',dataReviewRef:bridge.activeReview,chatMessageIds:[bridge.acceptedMessage]}]:[] };
+      if (action === 'ai.chat.status') return { requestId: bridge.running && payload.assessmentId === 'A' ? 'turn-A' : null, stopping: false, messageId:bridge.running?bridge.acceptedMessage:null,dataReview:bridge.running?bridge.activeReview:null };
       if (action === 'ai.chat.stop') bridge.running = false;
       if (action === 'ai.status') return {
         provider: payload.provider, hasApiKey: ['openai', 'openrouter'].includes(String(payload.provider)),
@@ -101,6 +113,86 @@ test('uma resposta recebida em outra conversa limpa apenas o turno enviado', asy
   await projects.getByRole('button', { name: 'Conversa A', exact: true }).click();
   await expect(input).toBeEmpty();
   expect(await page.evaluate(() => window.__conversationTest.calls.filter(c => c.action === 'ai.ask').length)).toBe(1);
+});
+
+test('o envio confirmado limpa o compositor antes de o provedor responder', async ({ page }) => {
+  await installChat(page);
+  const input = page.getByRole('textbox', { name: 'Mensagem da conversa' });
+  await input.fill('Revisar a autorização do projeto');
+  await page.getByRole('button', { name: 'Enviar mensagem' }).click();
+  await expect.poll(() => page.evaluate(() => window.__conversationTest.running)).toBe(true);
+  await expect(page.getByRole('region', { name: 'Histórico da conversa' })).toContainText('Revisar a autorização do projeto');
+  await expect(input).toBeEmpty();
+  expect(await page.evaluate(() => window.__conversationTest.running)).toBe(true);
+  await expect(page.getByRole('region',{name:'Histórico da conversa'}).getByText('Revisar a autorização do projeto',{exact:true})).toHaveCount(1);
+  await input.fill('Próxima pergunta em preparação');
+  await page.evaluate(() => window.dispatchEvent(new Event('fixture:reply')));
+  await expect.poll(() => page.evaluate(() => window.__conversationTest.running)).toBe(false);
+  await expect(input).toHaveValue('Próxima pergunta em preparação');
+});
+
+test('a confirmação de outra revisão não apaga o rascunho e o aceite preserva a próxima edição', async ({ page }) => {
+  await installChat(page);
+  await page.evaluate(()=>{window.__conversationTest.pretendOtherReview=true;});
+  const input=page.getByRole('textbox',{name:'Mensagem da conversa'});
+  await input.fill('Revisar o arquivo selecionado');
+  await page.getByRole('button',{name:'Adicionar à mensagem'}).click();
+  const [chooser]=await Promise.all([page.waitForEvent('filechooser'),page.getByRole('menuitem',{name:'Anexar foto ou arquivo'}).click()]);
+  await chooser.setFiles({name:'amostra.txt',mimeType:'text/plain',buffer:Buffer.from('Texto sintético sem credenciais')});
+  await page.getByRole('button',{name:'Enviar mensagem'}).click();
+  await page.getByRole('button',{name:'Autorizar envio'}).click();
+  await expect.poll(()=>page.evaluate(()=>window.__conversationTest.running)).toBe(true);
+  // The regular renderer refresh confirms that the unrelated active request was observed.
+  await expect.poll(()=>page.evaluate(()=>window.__conversationTest.calls.filter(c=>c.action==='ai.chat.status').length)).toBeGreaterThan(3);
+  await expect(input).toHaveValue('Revisar o arquivo selecionado');
+  await expect(page.getByRole('button',{name:'Remover anexo'})).toBeVisible();
+  await input.fill('Nova pergunta digitada enquanto aguardo');
+  await page.evaluate(()=>{const bridge=window.__conversationTest;bridge.activeReview=bridge.calls.find(c=>c.action==='ai.ask')!.payload.dataReview as {id:string;digest:string};});
+  await expect(page.getByRole('button',{name:'Remover anexo'})).toHaveCount(0);
+  await expect(input).toHaveValue('Nova pergunta digitada enquanto aguardo');
+  await page.evaluate(()=>window.dispatchEvent(new Event('fixture:reply')));
+  await expect.poll(()=>page.evaluate(()=>window.__conversationTest.running)).toBe(false);
+  await expect(input).toHaveValue('Nova pergunta digitada enquanto aguardo');
+  expect(await page.evaluate(()=>window.__conversationTest.calls.filter(c=>c.action==='ai.ask').length)).toBe(1);
+});
+
+test('uma recusa antes do despacho mantém o texto e não cria turno enviado', async ({ page }) => {
+  await installChat(page);
+  await page.evaluate(()=>{window.__conversationTest.rejectBeforeSend=true;});
+  const input=page.getByRole('textbox',{name:'Mensagem da conversa'});
+  await input.fill('Conferir o projeto após rever o escopo');
+  await input.press('Enter');
+  await expect(page.getByRole('region',{name:'Conversa do projeto'}).getByRole('alert')).toContainText('revogado antes do envio');
+  await expect(input).toHaveValue('Conferir o projeto após rever o escopo');
+  expect(await page.evaluate(()=>window.__conversationTest.turns)).toEqual([]);
+});
+
+test('falha incerta conserva o turno aceito e não recoloca a mensagem na fila de envio', async ({ page }) => {
+  await installChat(page);
+  const input=page.getByRole('textbox',{name:'Mensagem da conversa'});
+  await input.fill('Pergunta com resposta remota incerta');
+  await input.press('Enter');
+  await expect(input).toBeEmpty();
+  await page.evaluate(()=>window.dispatchEvent(new Event('fixture:uncertain')));
+  await expect(page.getByRole('region',{name:'Conversa do projeto'}).getByRole('alert')).toContainText('resultado remoto é incerto');
+  const projects=page.getByRole('complementary',{name:'Projetos e conversas'});
+  await projects.getByRole('button',{name:'Conversa B',exact:true}).click();
+  await projects.getByRole('button',{name:'Conversa A',exact:true}).click();
+  await expect(input).toBeEmpty();
+  await expect(page.getByRole('region',{name:'Histórico da conversa'}).getByText('Pergunta com resposta remota incerta',{exact:true})).toHaveCount(1);
+  expect(await page.evaluate(()=>window.__conversationTest.calls.filter(c=>c.action==='ai.ask').length)).toBe(1);
+});
+
+test('uma recusa 429 imediata após o aceite recupera a confirmação do histórico', async ({ page }) => {
+  await installChat(page);
+  await page.evaluate(()=>{window.__conversationTest.failImmediatelyAfterSend=true;});
+  const input=page.getByRole('textbox',{name:'Mensagem da conversa'});
+  await input.fill('Pergunta admitida antes da recusa rápida');
+  await input.press('Enter');
+  await expect(page.getByRole('region',{name:'Conversa do projeto'}).getByRole('alert')).toContainText('(429)');
+  await expect(input).toBeEmpty();
+  await expect(page.getByRole('region',{name:'Histórico da conversa'}).getByText('Pergunta admitida antes da recusa rápida',{exact:true})).toHaveCount(1);
+  expect(await page.evaluate(()=>window.__conversationTest.calls.filter(c=>c.action==='ai.ask').length)).toBe(1);
 });
 
 test('o teclado envia uma vez, respeita o IME e conserva o rascunho recusado', async ({ page }) => {

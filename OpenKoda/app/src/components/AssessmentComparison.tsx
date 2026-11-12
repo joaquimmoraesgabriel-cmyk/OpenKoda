@@ -25,7 +25,7 @@ function describe(snapshot:Snapshot, assessment:Assessment, runs:Run[], sourceOn
     return [
       targetRow,
       {label:'Objetivo da avaliação',values:snapshot.projection.mode === 'metadata_only' ? null : [assessment.objective]},
-      {label:'Varreduras do Codex Security',values:snapshot.projection.mode === 'metadata_only' ? null : [String(scans.length)]},
+      {label:'Análises do OpenKoda',values:snapshot.projection.mode === 'metadata_only' ? null : [String(scans.length)]},
       {label:'Situação da última varredura',values:latest ? [scanStateLabel[latest.status]] : null},
       {label:'Achados informados na última varredura',values:latest?.status === 'completed' && latest.findingsTotal !== undefined ? [String(latest.findingsTotal)] : null},
     ];

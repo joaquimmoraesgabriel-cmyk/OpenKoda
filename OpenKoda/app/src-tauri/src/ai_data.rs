@@ -48,15 +48,15 @@ impl AiService {
 #[cfg(all(test,windows))]
 mod tests {
     use super::*;
-    use std::sync::atomic::{AtomicUsize,Ordering};
+    use std::sync::atomic::{AtomicUsize,AtomicBool,Ordering};
     const KEY:&str="synthetic-data-policy-key-not-real-555";
-    struct Fake{calls:AtomicUsize,prompts:Mutex<Vec<String>>}
-    impl Provider for Fake{fn response(&self,_:ProviderId,_:&str,key:&str,prompt:&str,_:&str,_:u32)->Result<Value,String>{assert_eq!(key,KEY);self.calls.fetch_add(1,Ordering::SeqCst);self.prompts.lock().unwrap().push(prompt.into());Ok(json!({"id":"synthetic-data-response","status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":"Synthetic bounded response"}]}],"usage":{"input_tokens":3,"output_tokens":4}}))}}
+    struct Fake{calls:AtomicUsize,prompts:Mutex<Vec<String>>,fail:AtomicBool}
+    impl Provider for Fake{fn response(&self,_:ProviderId,_:&str,key:&str,prompt:&str,_:&str,_:u32)->Result<Value,String>{assert_eq!(key,KEY);self.calls.fetch_add(1,Ordering::SeqCst);self.prompts.lock().unwrap().push(prompt.into());if self.fail.load(Ordering::SeqCst){return Err("Resposta interrompida. O resultado remoto é incerto.".into());}Ok(json!({"id":"synthetic-data-response","status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":"Synthetic bounded response"}]}],"usage":{"input_tokens":3,"output_tokens":4}}))}}
     struct Fixture{_dir:tempfile::TempDir,store:Store,ai:AiService,fake:Arc<Fake>,aid:String}
     impl Fixture{
         fn new()->Self{
             let dir=tempfile::tempdir().unwrap();let store=Store::open(dir.path().into()).unwrap();
-            let fake=Arc::new(Fake{calls:AtomicUsize::new(0),prompts:Mutex::new(vec![])});let ai=AiService::with_provider(dir.path().into(),fake.clone()).unwrap();
+            let fake=Arc::new(Fake{calls:AtomicUsize::new(0),prompts:Mutex::new(vec![]),fail:AtomicBool::new(false)});let ai=AiService::with_provider(dir.path().into(),fake.clone()).unwrap();
             ai.handle("ai.key.save",json!({"key":KEY}),&store).unwrap();ai.save_settings(json!({"model":"fixture-model"}),&store).unwrap();
             let p=store.handle(crate::core::Request{action:"project.create".into(),payload:json!({"name":"Data fixture","kind":"web","target":"https://example.invalid/fixture"})}).unwrap();
             let a=store.handle(crate::core::Request{action:"assessment.create".into(),payload:json!({"projectId":p["id"],"title":"Data review","kind":"web","target":p["target"],"objective":"Review synthetic package only","scope":crate::scope::test_creation(&store,p["id"].as_str().unwrap(),&[AI_METHOD])})}).unwrap();
@@ -66,6 +66,26 @@ mod tests {
         fn input(&self)->Value{self.ai.test_data_input(&self.store,"ask",self.raw_input())}
         fn requests(&self)->i64{self.ai.db.lock().unwrap().query_row("SELECT count(*) FROM requests",[],|r|r.get(0)).unwrap()}
     }
+    #[test]
+    fn admitted_user_turn_survives_provider_failure_reopen_and_replay_without_duplicate(){
+        let f=Fixture::new();let mut ask=f.input();ask["allowRemote"]=json!(true);
+        f.fake.fail.store(true,Ordering::SeqCst);
+        assert!(f.ai.handle("ai.ask",ask.clone(),&f.store).is_err());
+        assert_eq!(f.fake.calls.load(Ordering::SeqCst),1);
+        let history=f.ai.handle("ai.history",json!({"assessmentId":f.aid,"evidenceIds":[]}),&f.store).unwrap();
+        assert_eq!(history["messages"].as_array().unwrap().len(),1);
+        assert_eq!(history["messages"][0]["role"],"user");
+        assert_eq!(history["messages"][0]["text"],ask["message"]);
+        assert_eq!(history["requests"][0]["status"],"unknown");
+        assert_eq!(history["requests"][0]["chatMessageIds"][0],history["messages"][0]["id"]);
+        assert!(f.ai.handle("ai.ask",ask,&f.store).is_err());
+        assert_eq!(f.fake.calls.load(Ordering::SeqCst),1);
+        let reopened=AiService::with_provider(f._dir.path().into(),f.fake.clone()).unwrap();
+        let after=reopened.handle("ai.history",json!({"assessmentId":f.aid,"evidenceIds":[]}),&f.store).unwrap();
+        assert_eq!(after["messages"],history["messages"]);
+        assert_eq!(after["requests"].as_array().unwrap().len(),1);
+    }
+
     #[test]
     fn chat_history_requires_matching_receipts_and_reopening_never_resends(){
         let f=Fixture::new();

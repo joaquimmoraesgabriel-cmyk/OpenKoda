@@ -4,7 +4,7 @@ import { emptySnapshot } from '../src/preview';
 import { test,expect } from './fixtures';
 import { installScopeFixture } from './scope-fixture';
 
-type Scenario = 'available'|'unavailable'|'lost-receipt'|'foreign-record'|'existing-policy'|'revoked-policy'|'sensitive';
+type Scenario = 'available'|'unavailable'|'lost-receipt'|'foreign-record'|'existing-policy'|'revoked-policy'|'sensitive'|'github-download-fails'|'github-cancel'|'github-cancel-ready'|'github-retry-cancelled'|'github-retry-failed'|'github-retry-interrupted'|'github-import-reply-lost';
 async function newProject(page:Page,scenario:Scenario='available'){
   const state=emptySnapshot();
   const existingPolicy=scenario==='existing-policy'||scenario==='revoked-policy';
@@ -15,6 +15,12 @@ async function newProject(page:Page,scenario:Scenario='available'){
     const calls:Call[]=[];
     let scan:SecurityScan|null=null;
     let denied=false;
+    let importCancelled=false;
+    let importKey='';
+    let importAttempts=0;
+    let importReplyLost=false;
+    let finishConcurrentDownload:(()=>void)|undefined;
+    let options={advancedEnabled:false,additionalContextEnabled:false,context:['','',''],maxCostUsd:null as number|null,minutes:null as number|null,title:''};
     const provider=state.settings.provider==='openai'?'openai':'openrouter';
     let scope:ReturnType<typeof window.__scopeFixture>;
     const at='2026-11-12T12:00:00Z';
@@ -37,6 +43,9 @@ async function newProject(page:Page,scenario:Scenario='available'){
         description:'Revisar o fluxo de entrada.',recommendation:'Revisar evidência.',evidenceIds:['resultado-sdk'],createdAt:scan.updatedAt}];
       publish();
     });
+    window.addEventListener('fixture:public-message',()=>{
+      if(scan){scan.stage='message';scan.events.push({at,stage:'message',message:'Conferi os pontos de entrada. Agora vou verificar os controles de acesso.'});publish();}
+    });
     Object.assign(window,{isTauri:true,__dataMode:scenario.endsWith('-policy')?'reviewed':'unreviewed',__securityCalls:calls,__TAURI_INTERNALS__:{invoke:async(_command:string,args:{request?:Call})=>{
       if(!args?.request)return {};
       const {action,payload}=args.request;calls.push({action,payload});
@@ -46,11 +55,26 @@ async function newProject(page:Page,scenario:Scenario='available'){
       if(action==='ai.history')return {messages:[]};
       if(action==='ai.chat.status')return {requestId:null,stopping:false};
       if(action==='ai.budget.history')return {rows:[]};
+      if(action==='project.options.get')return {options:structuredClone(options)};
+      if(action==='project.options.save'){options=payload.options as typeof options;return {options:structuredClone(options)};}
+      if(action==='github.repository.import'){
+        const replayed=importKey===payload.idempotencyKey;
+        if(!replayed){importKey=String(payload.idempotencyKey);importAttempts++;importCancelled=false;}
+        if(scenario==='github-import-reply-lost'&&!importReplyLost){importReplyLost=true;throw new Error('Resposta do download perdida.');}
+        return {id:'import-'+importAttempts,status:'downloading',name:'remote-fixture',url:String(payload.url),message:'Baixando o repositório.',replayed};
+      }
+      if(action==='github.repository.get'){
+        if(scenario==='github-cancel-ready'&&!importCancelled)await new Promise<void>(resolve=>{finishConcurrentDownload=resolve;});
+        const retryStatus=importAttempts===1&&scenario.startsWith('github-retry-')?scenario.slice('github-retry-'.length):null;
+        return {id:String(payload.id),status:scenario==='github-cancel-ready'?'ready':importCancelled?'cancelled':retryStatus==='failed'?'failed':retryStatus==='interrupted'?'interrupted':scenario==='github-download-fails'?'failed':scenario==='github-cancel'||retryStatus==='cancelled'?'downloading':'ready',path:'D:/Managed/import-'+importAttempts,name:'remote-fixture',url:'https://github.com/fixture/remote-fixture',revision:'a'.repeat(40),message:scenario==='github-download-fails'?'O repositório é privado ou não está disponível.':'Baixando o repositório.',replayed:true};
+      }
+      if(action==='github.repository.cancel'){importCancelled=true;finishConcurrentDownload?.();return {id:String(payload.id),status:scenario==='github-cancel-ready'?'ready':'cancelled',path:'D:/Managed/import-'+importAttempts,revision:'a'.repeat(40),name:'remote-fixture',url:'https://github.com/fixture/remote-fixture',message:'Download cancelado.',replayed:false};}
       if(action==='project.launch'){
         const replayed=!!state.projects.length;
         if(!replayed){
           const root=String(payload.root);
-          state.projects=[{id:'p',kind:'code',name:'Fixture',target:root,description:'',createdAt:at}];
+          options=payload.analysisOptions as typeof options;
+          state.projects=[{id:'p',kind:'code',name:String(payload.name),target:root,description:'',createdAt:at}];
           state.assessments=[{id:'a',projectId:'p',kind:'code',target:root+(payload.relativeTarget?'/'+payload.relativeTarget:''),title:'Análise inicial',objective:String(payload.objective),
             aiSelection:{provider,model:'fixture/modelo-seguro'},createdAt:at,updatedAt:at,status:'draft',events:[],coverage:[],evidence:[],summary:''}];
         }
@@ -96,13 +120,16 @@ const stage=(page:Page,value:string)=>page.evaluate(detail=>window.dispatchEvent
 
 test('a criação executa somente o motor selecionado e apresenta progresso, relatório e cobertura recebidos',async({page})=>{
   const create=await newProject(page);
+  await expect(page.getByLabel('Limite da análise em USD')).toHaveCount(0);
+  await page.getByRole('switch',{name:'Opções avançadas',exact:true}).check();
+  await page.getByRole('checkbox',{name:'Personalizar limite de custo'}).check();
   await expect(page.getByLabel('Limite da análise em USD')).toHaveValue('5');
   await page.getByLabel('Limite da análise em USD').fill('2.50');
   await page.getByLabel('Alvo',{exact:true}).selectOption('subset');
   await page.getByLabel('Caminho dentro do projeto').fill('src');
   await page.getByLabel('Descrição',{exact:true}).fill('Revisar entradas.');
   await create.click();
-  const panel=page.getByRole('region',{name:'Análise do Codex Security'});
+  const panel=page.getByRole('region',{name:'Análise de segurança'});
   await expect(panel.getByRole('status')).toHaveText('Iniciando');
   const [start]=await calls(page,'security.scan.start');
   expect(start.payload).toEqual({assessmentId:'a',idempotencyKey:expect.stringMatching(/^[0-9a-f-]{36}$/),prompt:'Revisar entradas.',target:'src',maxCostUsd:2.5});
@@ -115,7 +142,7 @@ test('a criação executa somente o motor selecionado e apresenta progresso, rel
   await expect(panel.getByText('src/input.ts:3',{exact:true})).toBeVisible();
   await panel.getByText('Cobertura da análise',{exact:true}).click();
   await expect(panel.getByText('src/generated',{exact:true})).toBeVisible();
-  await panel.getByText('Relatório do Codex Security',{exact:true}).click();
+  await panel.getByText('Relatório da análise',{exact:true}).click();
   await expect(panel.getByRole('heading',{name:'Relatório sintético'})).toBeVisible();
   await expect(panel.getByText('O relatório armazenado é parcial.')).toBeVisible();
   await page.getByRole('textbox',{name:'Mensagem da conversa'}).fill('Explique a localização.');
@@ -125,15 +152,15 @@ test('a criação executa somente o motor selecionado e apresenta progresso, rel
   await page.getByRole('button',{name:'Painel do projeto'}).click();
   const overview=page.getByRole('complementary',{name:'Projeto',exact:true});
   await overview.getByRole('button',{name:'Execuções 1'}).click();
-  await expect(overview.getByRole('table',{name:'Execuções'}).getByRole('row',{name:/Codex Security Análise inicial Concluída/})).toBeVisible();
+  await expect(overview.getByRole('table',{name:'Execuções'}).getByRole('row',{name:/Análise do OpenKoda Análise inicial Concluída/})).toBeVisible();
   await overview.getByRole('button',{name:'Achados 1'}).click();
   await expect(overview.getByRole('table',{name:'Achados registrados'})).toContainText('Candidato');
-  await expect(overview.getByRole('table',{name:'Resultados do Codex Security'})).toContainText('Análise inicial');
+  await expect(overview.getByRole('table',{name:'Resultados da análise'})).toContainText('Análise inicial');
 });
 
 test('o cancelamento aguarda confirmação do host e preserva a mensagem em edição',async({page})=>{
   await (await newProject(page)).click();
-  const panel=page.getByRole('region',{name:'Análise do Codex Security'});
+  const panel=page.getByRole('region',{name:'Análise de segurança'});
   const draft=page.getByRole('textbox',{name:'Mensagem da conversa'});
   await draft.fill('Guardar a pergunta.');
   await panel.getByRole('button',{name:'Cancelar análise de segurança'}).click();
@@ -159,7 +186,7 @@ test('a repetição após perda de recibo conserva a chave idempotente do scan',
   await create.click();
   await expect(page.getByRole('alert').filter({hasText:'Recibo perdido após admissão.'})).toBeVisible();
   await create.click();
-  await expect(page.getByRole('region',{name:'Análise do Codex Security'})).toBeVisible();
+  await expect(page.getByRole('region',{name:'Análise de segurança'})).toBeVisible();
   const sent=await calls(page,'security.scan.start');
   expect(sent).toHaveLength(2);
   expect(sent[1].payload).toEqual(sent[0].payload);
@@ -167,7 +194,6 @@ test('a repetição após perda de recibo conserva a chave idempotente do scan',
 
 test('um registro cuja avaliação diverge fecha a leitura e impede outra análise',async({page})=>{
   await (await newProject(page,'foreign-record')).click();
-  await page.getByText('Analisar com Codex Security',{exact:true}).click();
   await expect(page.getByRole('alert').filter({hasText:'registro válido desta análise'})).toBeVisible();
   await expect(page.getByRole('button',{name:'Iniciar análise de segurança'})).toBeDisabled();
   await expect(page.getByText('SENTINELA ESTRANGEIRA')).toHaveCount(0);
@@ -176,7 +202,7 @@ test('um registro cuja avaliação diverge fecha a leitura e impede outra análi
 
 test('uma política de conversa existente é vinculada à nova avaliação antes do scan',async({page})=>{
   await (await newProject(page,'existing-policy')).click();
-  await expect(page.getByRole('region',{name:'Análise do Codex Security'})).toBeVisible();
+  await expect(page.getByRole('region',{name:'Análise de segurança'})).toBeVisible();
   const names=await page.evaluate(()=>(window as unknown as {__dataCalls:{action:string}[]}).__dataCalls.map(x=>x.action));
   expect(names.indexOf('data.binding.commit')).toBeGreaterThan(names.indexOf('data.binding.prepare'));
   expect(names.indexOf('security.scan.start')).toBeGreaterThan(names.indexOf('data.binding.commit'));
@@ -193,6 +219,8 @@ test('uma política revogada permanece inativa e impede o início do scan',async
 
 test('fonte sensível exige consentimento específico para o modelo e teto revisados',async({page})=>{
   const create=await newProject(page,'sensitive');
+  await page.getByRole('switch',{name:'Opções avançadas',exact:true}).check();
+  await page.getByRole('checkbox',{name:'Personalizar limite de custo'}).check();
   await create.click();
   const consent=page.getByRole('checkbox',{name:/Autorizo enviar a fonte sensível/});
   await expect(consent).not.toBeChecked();
@@ -204,8 +232,128 @@ test('fonte sensível exige consentimento específico para o modelo e teto revis
   await expect(consent).not.toBeChecked();
   await consent.check();
   await create.click();
-  await expect(page.getByRole('region',{name:'Análise do Codex Security'})).toBeVisible();
+  await expect(page.getByRole('region',{name:'Análise de segurança'})).toBeVisible();
   const sent=await calls(page,'security.scan.start');
   expect(sent).toHaveLength(1);
   expect(sent[0].payload).toMatchObject({maxCostUsd:3,acknowledgeSensitive:true});
+});
+
+test('o limite padrão não ocupa o formulário nem o chat e as atualizações públicas vêm do motor',async({page})=>{
+  const create=await newProject(page);
+  await expect(page.getByLabel('Limite da análise em USD')).toHaveCount(0);
+  await create.click();
+  expect((await calls(page,'security.scan.start'))[0].payload.maxCostUsd).toBe(5);
+  const panel=page.getByRole('region',{name:'Análise de segurança'});
+  await expect(panel.getByRole('spinbutton')).toHaveCount(0);
+  await page.evaluate(()=>window.dispatchEvent(new Event('fixture:public-message')));
+  await expect(panel.getByRole('log',{name:'Atualizações do OpenKoda'})).toContainText('Conferi os pontos de entrada. Agora vou verificar os controles de acesso.');
+  await expect(panel).not.toContainText('Codex Security');
+});
+
+test('a importação do GitHub termina antes de criar e analisar a cópia local',async({page})=>{
+  const create=await newProject(page);
+  await page.getByRole('button',{name:'GitHub',exact:true}).click();
+  await expect(page.getByLabel('Pasta do projeto',{exact:true})).toHaveCount(0);
+  await page.getByLabel('Link do repositório no GitHub').fill('https://github.com/fixture/remote-fixture');
+  await create.click();
+  await expect(page.getByRole('region',{name:'Análise de segurança'})).toContainText('Iniciando');
+  const [download]=await calls(page,'github.repository.import'),[launch]=await calls(page,'project.launch');
+  expect(download.payload).toMatchObject({url:'https://github.com/fixture/remote-fixture',idempotencyKey:expect.any(String)});
+  expect(launch.payload).toMatchObject({root:'D:/Managed/import-1',name:'remote-fixture',kind:'code',githubImportId:'import-1',idempotencyKey:download.payload.idempotencyKey});
+  expect(await calls(page,'github.repository.import')).toHaveLength(1);
+  expect(await calls(page,'security.scan.start')).toHaveLength(1);
+});
+
+test('download recusado não cria projeto nem inicia análise',async({page})=>{
+  const create=await newProject(page,'github-download-fails');
+  await page.getByRole('button',{name:'GitHub',exact:true}).click();
+  await page.getByLabel('Link do repositório no GitHub').fill('https://github.com/fixture/private');
+  await create.click();
+  await expect(page.getByRole('alert')).toContainText('privado ou não está disponível');
+  expect(await calls(page,'project.launch')).toEqual([]);expect(await calls(page,'security.scan.start')).toEqual([]);
+});
+
+test('cancelar download impede a criação do projeto',async({page})=>{
+  const create=await newProject(page,'github-cancel');
+  await page.getByRole('button',{name:'GitHub',exact:true}).click();
+  await page.getByLabel('Link do repositório no GitHub').fill('https://github.com/fixture/remote-fixture');
+  await create.click();await page.getByRole('button',{name:'Cancelar download'}).click();
+  await expect(page.getByRole('button',{name:'Tentar novo download',exact:true})).toBeEnabled();
+  await expect(create).toBeDisabled();
+  expect(await calls(page,'github.repository.cancel')).toHaveLength(1);
+  expect(await calls(page,'project.launch')).toEqual([]);expect(await calls(page,'security.scan.start')).toEqual([]);
+});
+
+test('cancelar quando o download termina em paralelo impede criar projeto e iniciar análise paga',async({page})=>{
+  const create=await newProject(page,'github-cancel-ready');
+  await page.getByRole('button',{name:'GitHub',exact:true}).click();
+  await page.getByLabel('Link do repositório no GitHub').fill('https://github.com/fixture/remote-fixture');
+  await create.click();
+  await expect.poll(async()=>(await calls(page,'github.repository.get')).length).toBe(1);
+  await page.getByRole('button',{name:'Cancelar download'}).click();
+  await expect(page.getByRole('alert')).toContainText('Criação cancelada');
+  await expect(create).toBeEnabled();
+  expect(await calls(page,'project.launch')).toEqual([]);expect(await calls(page,'security.scan.start')).toEqual([]);
+});
+
+for(const terminal of ['cancelled','failed','interrupted'] as const){
+  test(`um download ${terminal} só ganha outra intenção por repetição explícita`,async({page})=>{
+    const create=await newProject(page,`github-retry-${terminal}`);
+    await page.getByRole('button',{name:'GitHub',exact:true}).click();
+    await page.getByLabel('Link do repositório no GitHub').fill('https://github.com/fixture/remote-fixture');
+    await create.click();
+    if(terminal==='cancelled')await page.getByRole('button',{name:'Cancelar download'}).click();
+    const retry=page.getByRole('button',{name:'Tentar novo download',exact:true});
+    await expect(retry).toBeEnabled();
+    await expect(create).toBeDisabled();
+    expect(await calls(page,'project.launch')).toEqual([]);expect(await calls(page,'security.scan.start')).toEqual([]);
+    await retry.click();
+    await expect(page.getByRole('region',{name:'Análise de segurança'})).toContainText('Iniciando');
+    const imports=await calls(page,'github.repository.import');
+    expect(imports).toHaveLength(2);
+    expect(imports[1].payload.url).toBe(imports[0].payload.url);
+    expect(imports[1].payload.idempotencyKey).not.toBe(imports[0].payload.idempotencyKey);
+    expect((await calls(page,'project.launch'))[0].payload).toMatchObject({githubImportId:'import-2',root:'D:/Managed/import-2'});
+    expect(await calls(page,'project.launch')).toHaveLength(1);expect(await calls(page,'security.scan.start')).toHaveLength(1);
+  });
+}
+
+test('resposta perdida do download preserva a intenção e não oferece reinício desconhecido',async({page})=>{
+  const create=await newProject(page,'github-import-reply-lost');
+  await page.getByRole('button',{name:'GitHub',exact:true}).click();
+  await page.getByLabel('Link do repositório no GitHub').fill('https://github.com/fixture/remote-fixture');
+  await create.click();
+  await expect(page.getByRole('alert')).toContainText('Resposta do download perdida.');
+  await expect(page.getByRole('button',{name:'Tentar novo download',exact:true})).toHaveCount(0);
+  await create.click();
+  await expect(page.getByRole('region',{name:'Análise de segurança'})).toContainText('Iniciando');
+  const imports=await calls(page,'github.repository.import');
+  expect(imports).toHaveLength(2);expect(imports[1].payload).toEqual(imports[0].payload);
+  expect((await calls(page,'project.launch'))[0].payload.githubImportId).toBe('import-1');
+  expect(await calls(page,'project.launch')).toHaveLength(1);expect(await calls(page,'security.scan.start')).toHaveLength(1);
+});
+
+test('o projeto preserva contexto e opções avançadas editadas depois da criação',async({page})=>{
+  await (await newProject(page)).click();await stage(page,'completed');
+  await page.getByRole('button',{name:'Painel do projeto'}).click();
+  const panel=page.getByRole('complementary',{name:'Projeto',exact:true});
+  await panel.getByRole('tab',{name:'Configurações',exact:true}).click();
+  const options=panel.getByRole('region',{name:'Opções de análise do projeto'});
+  await options.getByRole('switch',{name:'Contexto adicional',exact:true}).check();
+  await options.getByLabel('Vetores de ataque',{exact:true}).fill('Contorno da autenticação');
+  await options.getByRole('switch',{name:'Opções avançadas',exact:true}).check();
+  await expect(options.getByLabel('Limite da análise em USD')).toHaveCount(0);
+  await options.getByRole('checkbox',{name:'Personalizar limite de custo'}).check();
+  await options.getByLabel('Limite da análise em USD').fill('1.75');
+  await options.getByLabel('Título das próximas conversas').fill('Revisão de autorização');
+  await options.getByLabel('Limite para iniciar operações (minutos)').fill('90');
+  await options.getByRole('button',{name:'Salvar opções de análise'}).click();
+  await expect(options.getByRole('status')).toHaveText('Opções salvas para as próximas análises e conversas.');
+  const [save]=await calls(page,'project.options.save');
+  expect(save.payload).toEqual({projectId:'p',options:{advancedEnabled:true,additionalContextEnabled:true,context:['Contorno da autenticação','',''],title:'Revisão de autorização',minutes:90,maxCostUsd:1.75}});
+  await panel.getByRole('tab',{name:'Visão geral',exact:true}).click();
+  await panel.getByRole('tab',{name:'Configurações',exact:true}).click();
+  await expect(options.getByLabel('Limite da análise em USD')).toHaveValue('1.75');
+  await expect(options.getByLabel('Vetores de ataque',{exact:true})).toHaveValue('Contorno da autenticação');
+  expect(await calls(page,'security.scan.start')).toHaveLength(1);
 });

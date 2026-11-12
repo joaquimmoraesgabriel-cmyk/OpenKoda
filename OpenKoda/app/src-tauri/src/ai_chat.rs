@@ -4,14 +4,15 @@ use super::*;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{sync_channel, RecvTimeoutError};
 
+struct ActiveChat { assessment:String, request:String, review:Option<crate::data_policy::DataReviewRef>, accepted:bool, message_id:Option<String>, token:Arc<AtomicBool> }
 #[derive(Default)]
-pub(super) struct ChatControl(Mutex<Option<(String,String,Arc<AtomicBool>)>>);
+pub(super) struct ChatControl(Mutex<Option<ActiveChat>>);
 impl ChatControl {
-    pub fn start(&self, assessment:&str, request:&str)->Result<LiveChat<'_>,String> {
+    pub fn start(&self, assessment:&str, request:&str, review:Option<&crate::data_policy::DataReviewRef>)->Result<LiveChat<'_>,String> {
         let token=Arc::new(AtomicBool::new(false));
         let mut state=self.0.lock().map_err(failure)?;
         if state.is_some() {return Err("Já existe uma conversa em execução.".into());}
-        *state=Some((assessment.into(),request.into(),token.clone()));
+        *state=Some(ActiveChat{assessment:assessment.into(),request:request.into(),review:review.cloned(),accepted:false,message_id:None,token:token.clone()});
         Ok(LiveChat{control:self,token})
     }
     pub fn inspect(&self, payload:Value, stop:bool)->Result<Value,String> {
@@ -21,16 +22,23 @@ impl ChatControl {
         let input:Input=decode(payload)?;
         crate::core::valid_id(&input.assessment_id)?;
         let state=self.0.lock().map_err(failure)?;
-        let current=state.as_ref().filter(|(a,_,_)|a==&input.assessment_id);
+        let current=state.as_ref().filter(|live|live.assessment==input.assessment_id&&live.accepted);
         if stop{
-            let (_,request,token)=current.ok_or("A resposta já terminou.")?;
-            if Some(request)!=input.request_id.as_ref(){return Err("A solicitação ativa mudou.".into());}
-            token.store(true,Ordering::Release);
+            let live=current.ok_or("A resposta já terminou.")?;
+            if Some(&live.request)!=input.request_id.as_ref(){return Err("A solicitação ativa mudou.".into());}
+            live.token.store(true,Ordering::Release);
         }
-        Ok(json!({"requestId":current.map(|(_,r,_)|r),"stopping":current.is_some_and(|(_,_,token)|token.load(Ordering::Acquire))}))
+        Ok(json!({"requestId":current.map(|live|&live.request),"stopping":current.is_some_and(|live|live.token.load(Ordering::Acquire)),
+            "messageId":current.and_then(|live|live.message_id.as_ref()),"dataReview":current.and_then(|live|live.review.as_ref()).map(|review|json!({"id":review.id,"digest":review.digest}))}))
     }
 }
 pub(super) struct LiveChat<'a>{control:&'a ChatControl,pub token:Arc<AtomicBool>}
+impl LiveChat<'_>{pub fn admit(&self,message_id:Option<String>)->Result<(),String>{
+    let mut state=self.control.0.lock().map_err(failure)?;
+    let live=state.as_mut().ok_or("Conversa indisponível.")?;
+    live.message_id=message_id;live.accepted=true;
+    Ok(())
+}}
 impl Drop for LiveChat<'_>{fn drop(&mut self){if let Ok(mut state)=self.control.0.lock(){state.take();}}}
 
 pub(super) fn http_chat(provider:ProviderId,model:&str,key:&str,prompt:&str,instructions:&str,maximum:u32,stop:&AtomicBool)->Result<Value,String>{
@@ -94,6 +102,22 @@ mod tests {
     use std::{io::Read, net::TcpListener, thread, time::Instant};
 
     #[test]
+    fn admission_status_identifies_the_exact_review_and_durable_message_only_after_commit(){
+        let control=ChatControl::default();let aid=model::id();let rid=model::id();let mid=model::id();
+        let review=crate::data_policy::DataReviewRef{id:model::id(),digest:"reviewed-packet-digest".into(),expires_at:model::now()};
+        let live=control.start(&aid,&rid,Some(&review)).unwrap();
+        assert!(control.inspect(json!({"assessmentId":aid}),false).unwrap()["requestId"].is_null());
+        live.admit(Some(mid.clone())).unwrap();
+        let status=control.inspect(json!({"assessmentId":aid}),false).unwrap();
+        assert_eq!(status["requestId"],rid);assert_eq!(status["messageId"],mid);
+        assert_eq!(status["dataReview"],json!({"id":review.id,"digest":review.digest}));
+        let other=control.inspect(json!({"assessmentId":model::id()}),false).unwrap();
+        assert!(other["requestId"].is_null());assert!(other["dataReview"].is_null());
+        drop(live);
+        assert!(control.inspect(json!({"assessmentId":aid}),false).unwrap()["dataReview"].is_null());
+    }
+
+    #[test]
     fn cancellation_checks_the_request_and_closes_a_pending_http_connection() {
         let listener=TcpListener::bind("127.0.0.1:0").unwrap();
         let addr=listener.local_addr().unwrap();
@@ -110,7 +134,8 @@ mod tests {
         let control=ChatControl::default();
         let aid=model::id();
         let id=model::id();
-        let live=control.start(&aid,&id).unwrap();
+        let live=control.start(&aid,&id,None).unwrap();
+        live.admit(None).unwrap();
         let stopping=live.token.clone();
         let request=reqwest::Client::builder().no_proxy().build().unwrap().get(format!("http://{addr}/fixture"));
         let caller=thread::spawn(move||interruptible_response(request,ProviderId::OpenAI,&stopping));

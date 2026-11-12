@@ -126,7 +126,7 @@ export default function ProjectInsights({ snapshot, project, selected, onConvers
       const scan=latest.get(chat.id);
       const state=scan?scanStateLabel[scan.status]:statusLabels[chat.status];
       return {id:chat.id,cells:[conversationCell(chat.id),
-        {text:state,content:scan?<span title="Estado da análise do Codex Security">{state}</span>:<Status value={chat.status}/>},
+        {text:state,content:scan?<span title="Estado da análise do OpenKoda">{state}</span>:<Status value={chat.status}/>},
         {text:shortDate(chat.updatedAt),order:Date.parse(chat.updatedAt)}]};
     });
     table = <RecordTable key={view} title="Conversas" columns={['Conversa', 'Estado', 'Atualizada em']} rows={rows} initialSort={{ column: 2, descending: true }} empty="Nenhuma conversa neste projeto."/>;
@@ -136,7 +136,7 @@ export default function ProjectInsights({ snapshot, project, selected, onConvers
       { text: statusLabels[run.status as keyof typeof statusLabels] ?? run.status },
       { text: shortDate(run.startedAt), order: Date.parse(run.startedAt) },
     ] }));
-    rows.push(...scans.map(scan=>({id:'security-'+scan.id,cells:[{text:'Codex Security'},conversationCell(scan.assessmentId),
+    rows.push(...scans.map(scan=>({id:'security-'+scan.id,cells:[{text:'Análise do OpenKoda'},conversationCell(scan.assessmentId),
       {text:scanStateLabel[scan.status]},{text:shortDate(scan.createdAt),order:Date.parse(scan.createdAt)}]})));
     table = <RecordTable key={view} title="Execuções" columns={['Operação', 'Conversa', 'Estado', 'Iniciada em']} rows={rows} initialSort={{ column: 3, descending: true }} empty="Nenhuma execução registrada neste projeto."/>;
   } else if (view === 'findings') {
@@ -146,7 +146,7 @@ export default function ProjectInsights({ snapshot, project, selected, onConvers
       { text: findingLabels[finding.status] }, conversationCell(finding.assessmentId),
     ] }));
     table = <><RecordTable key={view} title={withResults.length?'Achados registrados':'Achados'} columns={['Achado', 'Severidade', 'Estado', 'Conversa']} rows={rows} initialSort={{ column: 1, descending: true }} findings empty="Nenhum achado registrado neste projeto."/>
-      {withResults.length>0&&<RecordTable title="Resultados do Codex Security" columns={['Conversa','Achados relatados','Análise']}
+      {withResults.length>0&&<RecordTable title="Resultados da análise" columns={['Conversa','Achados relatados','Análise']}
         rows={withResults.map(scan=>({id:scan.id,cells:[conversationCell(scan.assessmentId),{text:number.format(scan.findingsTotal!),order:scan.findingsTotal},{text:scanStateLabel[scan.status]}]}))}
         initialSort={{column:1,descending:true}} empty="Nenhum resultado do motor neste projeto."/>}</>;
   } else if (error) {

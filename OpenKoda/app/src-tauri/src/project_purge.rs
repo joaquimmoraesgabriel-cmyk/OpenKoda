@@ -98,7 +98,7 @@ fn normalize_sql(sql:&str)->String {sql.chars().filter(|c|!c.is_ascii_whitespace
 fn schema(db:&Connection,expected:&[(&str,&str)])->Result<String,String>{
     let version:i64=db.query_row("PRAGMA user_version",[],|r|r.get(0)).map_err(failure)?;
     let expected_version=if expected.iter().any(|(name,_)|*name=="app_state"){core::STORE_VERSION}else{0};
-    let multi_provider=version==1&&expected.iter().any(|(name,_)|*name=="vault");
+    let multi_provider=matches!(version,1|2)&&expected.iter().any(|(name,_)|*name=="vault");
     if version!=expected_version&&!multi_provider{return Err("Versão de banco não reconhecida para expurgo; dados preservados.".into());}
     let integrity:String=db.query_row("PRAGMA quick_check",[],|r|r.get(0)).map_err(failure)?;
     if integrity!="ok"{return Err("Banco inconsistente; nenhum registro será expurgado.".into());}
@@ -106,9 +106,11 @@ fn schema(db:&Connection,expected:&[(&str,&str)])->Result<String,String>{
     // DDL. Accepting names by prefix would miss changed UNIQUE constraints.
     let reference=Connection::open_in_memory().map_err(failure)?;
     for (table,ddl) in expected {
-        let ddl=match (*table,multi_provider){
-            ("vault",true)=>crate::ai::VAULT_SCHEMA,
-            ("connection_check",true)=>crate::ai::CHECK_SCHEMA,
+        let ddl=match (*table,multi_provider,version){
+            ("vault",true,1)=>crate::ai::VAULT_SCHEMA,
+            ("connection_check",true,1)=>crate::ai::CHECK_SCHEMA,
+            ("vault",true,2)=>crate::ai::VAULT_SCHEMA_V2,
+            ("connection_check",true,2)=>crate::ai::CHECK_SCHEMA_V2,
             _=>ddl
         };
         reference.execute_batch(ddl).map_err(failure)?;
@@ -661,6 +663,25 @@ mod tests {
         db.execute_batch("CREATE INDEX unreviewed_work_index ON work_jobs(assessment_id)").unwrap();assert!(schema(&db,&expected_schema(Database::Core)).is_err());
         db.execute_batch("DROP INDEX unreviewed_work_index; CREATE TRIGGER unreviewed_work_trigger AFTER DELETE ON work_jobs BEGIN DELETE FROM work_commands; END").unwrap();assert!(schema(&db,&expected_schema(Database::Core)).is_err());
     }
+    #[test]
+    fn assistant_schema_versions_accept_only_exact_trusted_provider_slot_constraints(){
+        let make=|version:i64|{
+            let db=Connection::open_in_memory().unwrap();
+            for(table,ddl)in ASSISTANT_SCHEMA{
+                let ddl=match(table,version){("vault",1)=>crate::ai::VAULT_SCHEMA,("connection_check",1)=>crate::ai::CHECK_SCHEMA,("vault",2)=>crate::ai::VAULT_SCHEMA_V2,("connection_check",2)=>crate::ai::CHECK_SCHEMA_V2,_=>ddl};
+                db.execute_batch(ddl).unwrap();
+            }
+            db.pragma_update(None,"user_version",version).unwrap();db
+        };
+        for(version,slots)in[(0,1),(1,3),(2,7)]{
+            let db=make(version);assert!(schema(&db,&ASSISTANT_SCHEMA).is_ok(),"trusted assistant schema v{version}");
+            for slot in 1..=slots{db.execute("INSERT INTO vault VALUES(?1,?2,'synthetic-revision')",params![slot,b"synthetic-cipher".as_slice()]).unwrap();}
+            assert!(db.execute("INSERT INTO vault VALUES(?1,?2,'synthetic-revision')",params![slots+1,b"synthetic-cipher".as_slice()]).is_err());
+        }
+        for ddl in ["CREATE TABLE unreviewed(id TEXT)","ALTER TABLE messages ADD COLUMN unreviewed TEXT","CREATE INDEX unreviewed_index ON requests(assessment)","CREATE VIEW unreviewed AS SELECT * FROM messages","CREATE TRIGGER unreviewed AFTER DELETE ON messages BEGIN DELETE FROM requests; END","PRAGMA user_version=3","PRAGMA user_version=99","DROP TABLE vault; CREATE TABLE vault (id INTEGER PRIMARY KEY CHECK(id BETWEEN 1 AND 8), cipher BLOB NOT NULL, revision TEXT NOT NULL)","DROP TABLE connection_check; CREATE TABLE connection_check (id INTEGER PRIMARY KEY CHECK(id BETWEEN 1 AND 8), model TEXT NOT NULL, endpoint TEXT NOT NULL, revision TEXT NOT NULL, checked TEXT NOT NULL)"]{
+            let db=make(2);db.execute_batch(ddl).unwrap();assert!(schema(&db,&ASSISTANT_SCHEMA).is_err(),"untrusted schema must stay closed: {ddl}");
+        }
+    }
     fn fixture()->Fixture {
         let directory=tempfile::tempdir().unwrap();let root=directory.path().join("profile");let store=Store::open(root.clone()).unwrap();
         let ai=AiService::new(root.clone()).unwrap();let remediation=RemediationService::new(root.clone()).unwrap();let bridge=KaliBridge::new(root.clone()).unwrap();let executor=Executor::default();
@@ -703,6 +724,17 @@ mod tests {
     fn db(f:&Fixture,kind:Database)->Connection{Connection::open(f.store.root.join(kind.name())).unwrap()}
     fn row_count(f:&Fixture,table:&str)->i64 {let kind=match table{"messages"|"requests"|"investigations"=>Database::Assistant,"remediation_plans"=>Database::Remediation,"bridge_runs"=>Database::Bridge,_=>panic!("fixture table")};db(f,kind).query_row(&format!("SELECT count(*) FROM {table}"),[],|r|r.get(0)).unwrap()}
 
+    #[test]
+    fn reviewed_purge_preserves_all_seven_provider_slots_with_assistant_schema_v2(){
+        let f=fixture();let ai=AiService::new(f.store.root.clone()).unwrap();
+        for provider in ["openrouter","groq","anthropic","gemini","deepseek","xai"]{ai.handle("ai.key.save",json!({"provider":provider,"key":format!("synthetic-purge-provider-{provider}-key")}),&f.store).unwrap();}
+        drop(ai);
+        let database=db(&f,Database::Assistant);assert_eq!(database.query_row("PRAGMA user_version",[],|r|r.get::<_,i64>(0)).unwrap(),2);
+        let vault=||database.prepare("SELECT id,cipher,revision FROM vault ORDER BY id").unwrap().query_map([],|r|Ok((r.get::<_,i64>(0)?,r.get::<_,Vec<u8>>(1)?,r.get::<_,String>(2)?))).unwrap().collect::<Result<Vec<_>,_>>().unwrap();
+        let before=vault();assert_eq!(before.len(),7);let other=inventory(&f,&f.other);
+        let p=plan(&f);assert_eq!(f.purge.handle("projectPurge.apply",confirmation(&p),&f.store).unwrap()["status"],"completed");
+        assert_eq!(vault(),before);assert_eq!(inventory(&f,&f.other),other);assert_eq!(row_count(&f,"messages"),1);assert!(!f.store.snapshot().unwrap().projects.iter().any(|project|project.id==f.project));
+    }
     #[test]
     fn reviewed_purge_removes_complete_selected_graph_preserves_other_graph_and_exclusions() {
         let f=fixture();let originals=f.files.iter().map(|p|fs::read(p).unwrap()).collect::<Vec<_>>();

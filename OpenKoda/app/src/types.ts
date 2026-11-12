@@ -5,7 +5,7 @@ import type { AssessmentScope, ScopeAdmission, ScopeReceipt, ScopeRef, ScopeRevi
 export type Kind = 'code' | 'web' | 'network' | 'files';
 export type View = 'overview' | 'assessments' | 'findings' | 'projects' | 'kali' | 'settings' | 'profile';
 export type AssessmentStatus = 'draft' | 'preparing' | 'planning' | 'awaiting_approval' | 'queued' | 'running' | 'pausing' | 'paused' | 'validating' | 'completed' | 'partial' | 'canceling' | 'canceled' | 'blocked' | 'failed' | 'unknown';
-export interface Project { additionalTargets?:ProjectTarget[]; id: string; name: string; kind: Kind; target: string; description: string; createdAt: string; archived?: boolean }
+export interface Project { analysisOptions?:import('./project-analysis-options').ProjectAnalysisOptions; githubSource?:{url:string;revision:string;importId:string}; additionalTargets?:ProjectTarget[]; id: string; name: string; kind: Kind; target: string; description: string; createdAt: string; archived?: boolean }
 export interface ActivityEvent { id: string; at: string; message: string; kind: string }
 export type Evidence = import('./data-policy').EvidenceView;
 export interface Assessment { aiSelection?:import('./ai-provider').AiSelection|null; scopeId?:string; id: string; projectId: string; title: string; kind: Kind; target: string; objective: string; status: AssessmentStatus; createdAt: string; updatedAt: string; events: ActivityEvent[]; evidence: Evidence[]; coverage: string[]; summary: string }

@@ -31,6 +31,14 @@
   border: 1px solid var(--line);
   background: var(--subtle);
 }
+.launch-page .launch-sources { grid-template-columns:repeat(2,minmax(0,1fr)); }
+.analysis-limit-toggle { display:flex; align-items:center; gap:.6rem; font-size:.86rem; }
+.analysis-limit-toggle input { flex:none; width:17px; height:17px; min-height:0; margin:0; }
+.project-analysis-options fieldset { border:0; padding:0; margin:0; min-width:0; }
+.project-analysis-options .field { grid-template-columns:minmax(0,1fr); }
+.project-analysis-options form { min-width:0; }
+.github-import-progress { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:.75rem; margin-top:1rem; padding-top:1rem; border-top:1px solid var(--line); }
+.github-import-progress p { margin:0; font-size:.86rem; color:var(--muted); }
 .launch-modes button {
   display: flex;
   align-items: center;
