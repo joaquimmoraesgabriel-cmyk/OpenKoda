@@ -24,6 +24,7 @@ try {
     if (-not $SkipNative) {
         Invoke-Gate 'Desktop: build com interface incorporada' { cargo build --manifest-path src-tauri/Cargo.toml --features custom-protocol @cargoOptions }
         $nativeSha256 = (Get-FileHash -LiteralPath 'src-tauri/target/debug/openkoda.exe' -Algorithm SHA256).Hash.ToLowerInvariant()
+        Invoke-Gate 'Desktop: inicio, projeto, conversas e painel lateral' { node scripts/native-project-chat-smoke.mjs --expected-sha256 $nativeSha256 }
         Invoke-Gate 'Desktop: IPC, evidencias, backup e reinicio reais' { node scripts/native-smoke.mjs --expected-sha256 $nativeSha256 }
         Invoke-Gate 'Desktop: politica de dados, leituras e exportacoes revisadas' { node scripts/native-data-policy-smoke.mjs --expected-sha256 $nativeSha256 }
         Invoke-Gate 'Desktop: validacao e reteste HTTP em loopback' { node scripts/native-http-smoke.mjs --expected-sha256 $nativeSha256 }

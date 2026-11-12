@@ -1,10 +1,12 @@
 # OpenKoda desktop
 
-**0.1.17 para Windows x64.** [Instalador local](releases/0.1.17-local-20261111/OpenKoda_0.1.17_x64-setup.exe) · [Registro dos testes](IMPLEMENTACAO.md)
+**0.1.18 para Windows x64.** [Instalador local](releases/0.1.18-local-20261111/OpenKoda_0.1.18_x64-setup.exe) · [Registro dos testes](IMPLEMENTACAO.md) · [Mapas da interface](docs/interface/README.md)
 
-Na tela inicial, clique em **Criar projeto**. Em **Análise local**, escolha a pasta e indique se a verificação deve abranger todo o código ou apenas um arquivo ou subpasta. Em **Web/API**, informe a URL. Em **Rede**, indique o IP ou CIDR. Escolha um dos seus modelos ou use a análise nativa. Descreva o que você quer verificar e clique em **Criar projeto**.
+Na tela inicial, escolha **Pasta local**, **Web / API** ou **Rede** e clique em **Criar projeto**. Para uma pasta, indique se a verificação deve abranger todo o código ou apenas um arquivo ou subpasta. Para Web/API, informe a URL. Para rede, indique o IP ou CIDR. Escolha um dos seus modelos ou use a análise nativa. Descreva o que você quer verificar e clique em **Criar projeto**.
 
 A conversa mostra as etapas executadas, os resultados e as mensagens do modelo. Use o **+** ao lado do projeto para abrir outra conversa. Na barra da mensagem você pode trocar o provedor e o modelo, anexar texto ou uma imagem, escolher quando solicitar aprovação e interromper o trabalho em andamento. Os controles no alto abrem a visão geral ou as configurações do projeto. **Mostrar ao lado da conversa** permite manter os dois abertos.
+
+Abra **Atividade** para revisar as etapas em ordem. Ao ler mensagens anteriores, use a seta para baixo para voltar à mais recente. Você pode alternar entre conversas com uma mensagem em preparação. O texto e o anexo ficam na memória dessa janela, associados à conversa de origem, até o envio ou o fechamento do aplicativo.
 
 A verificação inicial usa regras locais para código, consulta cabeçalhos HTTP para Web/API e testa conexões TCP para rede. Em **Opções avançadas**, você pode escolher a janela de execução e, na análise de rede, as portas. Se o ripgrep estiver instalado no Kali gerenciado, a análise local também oferece a busca em evidências selecionadas. Para acessar os controles técnicos anteriores, abra **Configurações → Geral → Abrir área técnica**.
 
@@ -93,6 +95,8 @@ Na 0.1.5, revise a política do projeto e sua adoção na avaliação antes das 
 A ponte MCP stdio foi exercitada no Kali dedicado real: diagnóstico, hash de evidência selecionada e análise por regras fixas do ripgrep, com versão e hash do binário registrados e confirmação de término do processo. O parser recebe somente os bytes da evidência selecionada, após confirmação local; não recebe caminhos ou comandos livres. Terminal/PTY, ferramentas Kali genéricas, orquestração autônoma da IA e atualização de binários com recuperação continuam sujeitos aos gates registrados em IMPLEMENTACAO.md e na matriz de aceitação. O mapa completo ainda contém capacidades em construção.
 
 ## Verificação por etapa
+
+O primeiro teste da interface nativa abre o Início, cria um projeto de rede em loopback, alterna entre duas conversas e abre a visão geral ao lado do chat. Para repetir só esse percurso com a compilação de depuração da versão atual, execute `node scripts/native-project-chat-smoke.mjs --expected-sha256 <sha256-do-executável>` na pasta do aplicativo. O resultado e as capturas ficam em `.local/native-project-chat-<id>/`.
 
 ```powershell
 pwsh -NoProfile -File scripts/check-foundation.ps1
