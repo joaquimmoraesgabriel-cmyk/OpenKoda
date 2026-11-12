@@ -17,15 +17,70 @@ function checkReview(value:MetadataReview){
 }
 function assertCurrent(signal?:AbortSignal){if(signal?.aborted)throw new Error('Envio cancelado.');}
 
-// Set up only missing settings. Existing policies, classifications and revocations
-// belong to the project and are rechecked by the native core before each HTTP call.
-export async function prepareChat(assessment:Assessment,selection:AiSelection,message:string,options:{image?:string;file?:boolean;signal?:AbortSignal;propose?:boolean}={}){
-  const {id:assessmentId,projectId}=assessment;
+async function conversationScope(assessmentId:string){
   const scope=await request<ScopeStatus>('assessment.scopeStatus',{assessmentId});
   if(!validScopeStatus(scope,assessmentId)||!scopeAllows(scope,'ai.remote-review.v1'))throw new Error('Este escopo não permite enviar mensagens à IA. Consulte o escopo do projeto.');
   const combined=!!scope.revision?.body.targetSet;
   const refs=scope.targetOptions?.filter(o=>targetAllows(o,'ai.remote-review.v1'))??[];
   if(combined && refs.length!==1)throw new Error('Use os controles avançados para escolher as entradas de uma avaliação combinada.');
+  return {scope,combined,refs};
+}
+
+async function bindMetadata(projectId:string,assessmentId:string,selection:AiSelection,policy:DataPolicyStatus,entryId?:string,signal?:AbortSignal){
+  if(!policy.active||!policy.currentRevision)throw new Error('A política de dados deste projeto está inativa.');
+  const state=await request<DataPolicyStatus>('data.policy.status',{assessmentId,projectId});
+  if(!state.binding){
+    const p=policy.currentRevision;
+    const rev=await request<MetadataReview>('data.binding.prepare',{assessmentId,expectedStateDigest:state.stateDigest,policyRef:{projectId,revisionId:p.id,digest:p.digest}});
+    assertCurrent(signal);
+    await request('data.binding.commit',{review:checkReview(rev),idempotencyKey:crypto.randomUUID(),acknowledgeProspectiveAdoption:true});
+  }
+  const subjects=await request<ClassificationSubjects>('data.classification.subjects',{assessmentId});
+  for(const row of subjects.subjects){
+    const subject=row.subject;
+    if(subject.kind==='scope_source'&&entryId!==undefined&&subject.targetRef?.entryId!==entryId)continue;
+    if(subject.kind!=='scope_source'&&!(subject.kind==='assessment_metadata'&&['human_text','execution_summary'].includes(subject.category)))continue;
+    if(row.classification.classificationRef)continue;
+    if(row.classification.secretMaterial)throw new Error('O projeto identificou material secreto na fonte escolhida.');
+    const rev=await request<MetadataReview&{downgrade:boolean;proposal:{secretMaterial:boolean}}>('data.classification.prepare',{subject,expectedSourceFingerprint:row.sourceFingerprint,sensitivity:'internal',reason:'Contexto interno da conversa, selecionado ao solicitar a análise deste projeto.'});
+    if(rev.downgrade||rev.proposal.secretMaterial)throw new Error('A classificação da fonte requer revisão.');
+    assertCurrent(signal);
+    await request('data.classification.commit',{review:checkReview(rev),idempotencyKey:crypto.randomUUID(),acknowledgeClassification:true});
+  }
+  let credentials=await request<CredentialList>('credential.reference.list',{projectId});
+  const related=()=>credentials.references.filter(r=>r.providerSlotRef?.provider===selection.provider);
+  let ref=related().find(r=>!r.revoked);
+  if(!ref){
+    if(related().some(r=>r.revoked))throw new Error('A referência a este provedor foi revogada nas configurações do projeto.');
+    const slot=credentials.providerSlots.find(s=>s.provider===selection.provider&&s.available);
+    if(!slot)throw new Error('Conecte sua chave em IA e modelos.');
+    assertCurrent(signal);
+    await request('credential.reference.create',{projectId,expectedStateDigest:credentials.stateDigest,idempotencyKey:crypto.randomUUID(),kind:'provider_reference',label:providers[selection.provider].name,purpose:'Conversa sobre a análise deste projeto',providerSlotId:slot.id});
+    credentials=await request<CredentialList>('credential.reference.list',{projectId});
+    ref=related().find(r=>!r.revoked);
+  }
+  if(!ref)throw new Error('O provedor não está disponível neste projeto.');
+  assertCurrent(signal);
+  return ref;
+}
+
+// A new project has no policy to adopt. Existing project policies retain their
+// rules when a subsequent conversation adopts the source and provider references.
+export async function prepareScanMetadata(projectId:string,assessmentId:string,selection:AiSelection){
+  const policy=await request<DataPolicyStatus>('data.policy.status',{projectId});
+  if(policy?.schema!=='openkoda.data-policy-status.v1'||policy.projectId!==projectId)throw new Error('Não foi possível conferir a política do projeto.');
+  if(policy.currentRevision===null)return false;
+  if(!policy.active)throw new Error('A política de dados deste projeto está inativa.');
+  const {combined,refs}=await conversationScope(assessmentId);
+  await bindMetadata(projectId,assessmentId,selection,policy,combined?refs[0].entry.entryId:undefined);
+  return true;
+}
+
+// Set up only missing settings. Existing policies, classifications and revocations
+// belong to the project and are rechecked by the native core before each HTTP call.
+export async function prepareChat(assessment:Assessment,selection:AiSelection,message:string,options:{image?:string;file?:boolean;signal?:AbortSignal;propose?:boolean}={}){
+  const {id:assessmentId,projectId}=assessment;
+  const {scope,combined,refs}=await conversationScope(assessmentId);
   const targets=combined?{contextTargetRefs:[refs[0].targetRef]}:{};
   const operation=options.propose?'operation_proposal':'ask';
   const allowedAdapters=operationAdapters(combined?refs[0].entry.kind:assessment.kind)
@@ -44,40 +99,7 @@ export async function prepareChat(assessment:Assessment,selection:AiSelection,me
     await request('data.policy.commit',{review:checkReview(rev),acknowledgePolicy:true,idempotencyKey:crypto.randomUUID()});
     policy=await request<DataPolicyStatus>('data.policy.status',{projectId});
   }
-  if(!policy.active||!policy.currentRevision)throw new Error('A política de dados deste projeto está inativa.');
-  const state=await request<DataPolicyStatus>('data.policy.status',{assessmentId,projectId});
-  if(!state.binding){
-    const p=policy.currentRevision;
-    const rev=await request<MetadataReview>('data.binding.prepare',{assessmentId,expectedStateDigest:state.stateDigest,policyRef:{projectId,revisionId:p.id,digest:p.digest}});
-    assertCurrent(options.signal);
-    await request('data.binding.commit',{review:checkReview(rev),idempotencyKey:crypto.randomUUID(),acknowledgeProspectiveAdoption:true});
-  }
-  const subjects=await request<ClassificationSubjects>('data.classification.subjects',{assessmentId});
-  for(const row of subjects.subjects){
-    const subject=row.subject;
-    if(subject.kind==='scope_source'&&combined&&subject.targetRef?.entryId!==refs[0].entry.entryId)continue;
-    if(subject.kind!=='scope_source'&&!(subject.kind==='assessment_metadata'&&['human_text','execution_summary'].includes(subject.category)))continue;
-    if(row.classification.classificationRef)continue;
-    if(row.classification.secretMaterial)throw new Error('O projeto identificou material secreto na fonte escolhida.');
-    const rev=await request<MetadataReview&{downgrade:boolean;proposal:{secretMaterial:boolean}}>('data.classification.prepare',{subject,expectedSourceFingerprint:row.sourceFingerprint,sensitivity:'internal',reason:'Contexto interno da conversa, selecionado ao solicitar a análise deste projeto.'});
-    if(rev.downgrade||rev.proposal.secretMaterial)throw new Error('A classificação da fonte requer revisão.');
-    assertCurrent(options.signal);
-    await request('data.classification.commit',{review:checkReview(rev),idempotencyKey:crypto.randomUUID(),acknowledgeClassification:true});
-  }
-  let credentials=await request<CredentialList>('credential.reference.list',{projectId});
-  const related=()=>credentials.references.filter(r=>r.providerSlotRef?.provider===selection.provider);
-  let ref=related().find(r=>!r.revoked);
-  if(!ref){
-    if(related().some(r=>r.revoked))throw new Error('A referência a este provedor foi revogada nas configurações do projeto.');
-    const slot=credentials.providerSlots.find(s=>s.provider===selection.provider&&s.available);
-    if(!slot)throw new Error('Conecte sua chave em IA e modelos.');
-    assertCurrent(options.signal);
-    await request('credential.reference.create',{projectId,expectedStateDigest:credentials.stateDigest,idempotencyKey:crypto.randomUUID(),kind:'provider_reference',label:providers[selection.provider].name,purpose:'Conversa sobre a análise deste projeto',providerSlotId:slot.id});
-    credentials=await request<CredentialList>('credential.reference.list',{projectId});
-    ref=related().find(r=>!r.revoked);
-  }
-  if(!ref)throw new Error('O provedor não está disponível neste projeto.');
-  assertCurrent(options.signal);
+  const ref=await bindMetadata(projectId,assessmentId,selection,policy,combined?refs[0].entry.entryId:undefined,options.signal);
   const base={assessmentId,evidenceIds:[],...targets,...proposalOptions,message};
   const context=await request<unknown>('ai.context',{...base,operation,credentialReferenceId:ref.id,messageSensitivity:'internal',packageSensitivity:'internal',
     categories:(options.file||options.image)?chatCategories:chatCategories.filter(c=>c!=='source_excerpt'),

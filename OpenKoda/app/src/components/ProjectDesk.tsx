@@ -10,11 +10,12 @@ import { pruneChatDrafts } from '../chat-draft';
 import ProjectWelcome, { type StartKind } from './ProjectWelcome';
 
 interface Props {
+  sourceOnly?:boolean;
   snapshot:Snapshot; busy:boolean; action:Action; selected:string; onSelect:(id:string)=>void;
   onAdvanced:(id:string)=>void; onModels:()=>void; onFinding:(id:string)=>void;
 }
-export default function ProjectDesk({snapshot,busy,action,selected,onSelect,onAdvanced,onModels,onFinding}:Props) {
-  const live=snapshot.projects.filter(p=>!p.archived);
+export default function ProjectDesk({sourceOnly=false,snapshot,busy,action,selected,onSelect,onAdvanced,onModels,onFinding}:Props) {
+  const live=snapshot.projects.filter(p=>!p.archived && (!sourceOnly || p.kind==='code' || p.kind==='files'));
   const activeIds=new Set(live.map(p=>p.id));
   const [projectId,setProjectId]=useState('');
   const [launch,setLaunch]=useState(false);
@@ -88,8 +89,8 @@ export default function ProjectDesk({snapshot,busy,action,selected,onSelect,onAd
     <div className="desk-main" ref={main} tabIndex={-1}>
       {showTree&&<button ref={mobileMenu} type="button" className="tree-mobile-toggle" aria-controls="project-tree" aria-expanded={tree} onClick={()=>setTree(!tree)}><PanelLeft size={16}/>Projetos</button>}
       {error&&<p className="app-alert" role="alert">{error}</p>}
-      {launch?<ProjectLaunch snapshot={snapshot} action={action} busy={busy} initialKind={startKind} onModels={onModels} onCancel={()=>setLaunch(false)} onCreated={(id,assessment)=>{setProjectId(id);openChat(assessment);}}/>
-      :!project?<ProjectWelcome onStart={newProject}/>
+      {launch?<ProjectLaunch sourceOnly={sourceOnly} snapshot={snapshot} action={action} busy={busy} initialKind={startKind} onModels={onModels} onCancel={()=>setLaunch(false)} onCreated={(id,assessment)=>{setProjectId(id);openChat(assessment);}}/>
+      :!project?<ProjectWelcome sourceOnly={sourceOnly} onStart={newProject}/>
       :<>
         <header className="desk-bar"><div className="desk-location">
           <button className="desk-tree-toggle" aria-controls="project-tree" aria-expanded={!treeCollapsed} aria-label={treeCollapsed?'Mostrar lista de projetos':'Recolher lista de projetos'} title={treeCollapsed?'Mostrar lista de projetos':'Recolher lista de projetos'} onClick={()=>setTreeCollapsed(!treeCollapsed)}><PanelLeft size={17}/></button>
@@ -98,7 +99,7 @@ export default function ProjectDesk({snapshot,busy,action,selected,onSelect,onAd
         </header>
         <div className={'desk-content'+(panel&&split?' desk-split':'')}>
           <div className="desk-conversation" hidden={!!panel&&!split}>
-            {chat?<ProjectConversation key={chat.id} assessment={chat} plans={snapshot.plans?.filter(plan=>!snapshot.workPlanBindings?.some(binding=>binding.executionPlanId===plan.id))} settings={snapshot.settings} action={action} busy={busy} onAdvanced={()=>onAdvanced(chat.id)} onModels={onModels}/>
+            {chat?<ProjectConversation key={chat.id} sourceOnly={sourceOnly} assessment={chat} plans={snapshot.plans?.filter(plan=>!snapshot.workPlanBindings?.some(binding=>binding.executionPlanId===plan.id))} settings={snapshot.settings} action={action} busy={busy} onAdvanced={sourceOnly?undefined:()=>onAdvanced(chat.id)} onModels={onModels}/>
             :<div className="desk-welcome"><h2>Comece uma conversa</h2><button className="button primary" disabled={starting||busy} onClick={()=>void newChat(project)}><Plus size={16}/>Nova conversa</button></div>}
           </div>
           {panel&&<aside id="desk-project-panel" className="desk-panel" aria-label="Projeto" onKeyDown={event=>{
@@ -113,7 +114,7 @@ export default function ProjectDesk({snapshot,busy,action,selected,onSelect,onAd
               }}>{value==='overview'?'Visão geral':'Configurações'}</button>)}
             </div><div><button className="icon-button" title={split?'Ampliar painel':'Mostrar ao lado da conversa'} aria-label={split?'Ampliar painel':'Mostrar ao lado da conversa'} aria-pressed={split} onClick={()=>setSplit(!split)}>{split?<Maximize2 size={16}/>:<PanelRight size={16}/>}</button><button ref={panelClose} className="icon-button" aria-label="Fechar painel" onClick={closePanel}><X size={17}/></button></div></div>
             <div role="tabpanel" id="desk-panel-content" aria-labelledby={'desk-tab-'+panel}>
-              <Projects key={project.id} panel={panel} initialProjectId={project.id} projects={snapshot.projects} assessments={snapshot.assessments} action={action} busy={busy} onNewAssessment={()=>void newChat(project)} onOpenAssessment={openChat} onArchived={()=>{onSelect('');setProjectId('');setPanel(undefined);}} insights={<ProjectInsights snapshot={snapshot} project={project} selected={chat?.id} onConversation={openChat} onFinding={onFinding}/>}/>
+              <Projects sourceOnly={sourceOnly} key={project.id} panel={panel} initialProjectId={project.id} projects={snapshot.projects} assessments={snapshot.assessments} action={action} busy={busy} onNewAssessment={()=>void newChat(project)} onOpenAssessment={openChat} onArchived={()=>{onSelect('');setProjectId('');setPanel(undefined);}} insights={<ProjectInsights snapshot={snapshot} project={project} selected={chat?.id} onConversation={openChat} onFinding={onFinding}/>}/>
             </div>
           </aside>}
         </div>

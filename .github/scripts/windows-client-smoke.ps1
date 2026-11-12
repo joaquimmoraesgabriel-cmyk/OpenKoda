@@ -80,7 +80,7 @@ try {
     if ($receipt.appPeMachine -ne '0x8664') { throw 'The release payload must be an AMD64 executable.' }
     # The NSIS launcher may itself be 32-bit. The guest compares the installed AMD64 payload to the x64 build.
     $local = New-Item -ItemType Directory -Path (Join-Path $appRoot '.local') -Force
-    [ordered]@{ version = $version; profile = 'release'; files = @(@{path = $setup; sha256 = $receipt.installerSha256}) } |
+    [ordered]@{ version = $version; profile = 'release'; securityRuntime = $transfer.securityRuntime; files = @(@{path = $setup; sha256 = $receipt.installerSha256}) } |
         ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $local.FullName 'package-windows.json') -Encoding utf8
 
     $receipt.stage = 'installed-client'
@@ -94,7 +94,8 @@ try {
         else { $receipt.webView2Observation = 'runtime-absent-after-test' }
     }
     $guest = Get-Content -Raw -LiteralPath $guestPath | ConvertFrom-Json
-    if (!$receipt.webView2After.present -or !$guest.passed -or !$guest.projectReopened -or !$guest.uninstalled -or !$guest.databasePreserved -or @($guest.starts).Count -ne 2 -or $guest.sourceSha256 -ne $receipt.sourceExeSha256 -or $guest.installerSha256 -ne $receipt.installerSha256) {
+    $persisted = if ([version]$version -ge [version]'0.2.0') { $guest.settingsReopened } else { $guest.projectReopened }
+    if (!$receipt.webView2After.present -or !$guest.passed -or !$persisted -or !$guest.uninstalled -or !$guest.databasePreserved -or @($guest.starts).Count -ne 2 -or $guest.sourceSha256 -ne $receipt.sourceExeSha256 -or $guest.installerSha256 -ne $receipt.installerSha256) {
         throw 'The Windows client and the guest receipts do not confirm the complete installed release test.'
     }
     $receipt.stage = 'completed'

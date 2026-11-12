@@ -8,6 +8,8 @@ pub mod executor;
 pub mod network;
 pub mod source_scan;
 pub mod source_context;
+pub mod security_scan;
+mod source_edition;
 pub mod mcp;
 pub mod recovery;
 pub mod storage;
@@ -46,7 +48,7 @@ use std::sync::Arc;
 use tauri::Manager;
 use core::{Request, Store};
 
-struct Services { close_gate: Arc<close_guard::CloseGate>, ai: ai::AiService, environment: Arc<environment::EnvironmentManager>, executor: executor::Executor, recovery:recovery::RecoveryService, kali:kali_bridge::KaliBridge, remediation:remediation::RemediationService, activation:activation::ActivationService, retention:retention::RetentionService, project_purge:project_purge::ProjectPurgeService, data_policy:Arc<data_policy::DataPolicyService>, workflow:workflow::WorkflowService, supervisor:work_supervisor::WorkSupervisor, work_wakeup:work_runtime::WakeGate, environment_gate: std::sync::RwLock<()> }
+struct Services { close_gate: Arc<close_guard::CloseGate>, security:security_scan::Service, ai: ai::AiService, environment: Arc<environment::EnvironmentManager>, executor: executor::Executor, recovery:recovery::RecoveryService, kali:kali_bridge::KaliBridge, remediation:remediation::RemediationService, activation:activation::ActivationService, retention:retention::RetentionService, project_purge:project_purge::ProjectPurgeService, data_policy:Arc<data_policy::DataPolicyService>, workflow:workflow::WorkflowService, supervisor:work_supervisor::WorkSupervisor, work_wakeup:work_runtime::WakeGate, environment_gate: std::sync::RwLock<()> }
 
 // Check under the operation lease, so a purge cannot begin between this test
 // and another mutation. Read-only views remain available for human inspection.
@@ -76,6 +78,7 @@ async fn request(
     if window.label() != "main" {
         return Err("Janela não autorizada.".into());
     }
+    source_edition::guard(state.inner(), &request.action, &request.payload)?;
     let admission = services.close_gate.admit(close_guard::Activity::request(&request.action, &request.payload))?;
     if matches!(request.action.as_str(), "window.behavior.get" | "window.behavior.set") {
         return window.state::<window_behavior::WindowBehavior>().handle(&request.action, &request.payload);
@@ -102,6 +105,28 @@ async fn request(
         }
         let public_action=request.action.clone();
         let result=(||{
+        if request.action=="security.scan.start"{
+            let (tx,rx)=std::sync::mpsc::sync_channel(1);
+            let services=services.clone();let store=store.clone();
+            std::thread::Builder::new().name("codex-security-scan".into()).spawn(move||{
+                let outcome=(||{
+                    let _lease=services.environment_gate.try_read().map_err(|_|"Aguarde a manutenção do perfil para iniciar o SDK.")?;
+                    ensure_purge_access(&services,"security.scan.start")?;allow_new_work(&services)?;
+                    let _running=services.close_gate.admit(Some(close_guard::Activity::queue(request.payload["assessmentId"].as_str())))?;
+                    services.security.start_worker(&store,&services.ai,request.payload,&tx)
+                })();
+                if let Err(error)=outcome{let _=tx.send(Err(error));}
+            }).map_err(|_|"Não foi possível iniciar a varredura local.")?;
+            return rx.recv().map_err(|_|"O serviço de varredura foi interrompido.")?;
+        }
+        if request.action.starts_with("security.") {
+            return match request.action.as_str(){
+                "security.status"=>services.security.status(&store,&services.ai,request.payload),
+                "security.scan.get"=>services.security.get(&store,request.payload),
+                "security.scan.cancel"=>services.security.cancel(&store,request.payload),
+                _=>Err("Ação do SDK desconhecida.".into())
+            };
+        }
         if capture_access::supports(&request.action){
             let _lease=services.environment_gate.try_read().map_err(|_|"work_busy: captura indisponível durante manutenção local.")?;
             ensure_purge_access(&services,&request.action)?;
@@ -234,6 +259,7 @@ async fn request(
                     return Err("Reconcilie operações e manutenção antes de revisar uma exclusão.".into());
                 }
             }
+            if source_edition::ENABLED{return services.retention.handle(&request.action,request.payload,&store);}
             let identity=||services.environment.executor_owned_identity();
             let spool=retention::KaliRetention{bridge:&services.kali,store:&store,identity:&identity};
             return services.retention.handle_with_spool(&request.action,request.payload,&store,Some(&spool));
@@ -346,9 +372,10 @@ async fn request(
         if action=="settings.save" { result["hasApiKey"]=serde_json::Value::Bool(services.ai.has_selected_key(&store)); }
         Ok(result)
         })();
-        if work_runtime::should_wake(&public_action,result.is_ok()){work_runtime::wake(services.clone(),store.clone());}
+        if !source_edition::ENABLED&&work_runtime::should_wake(&public_action,result.is_ok()){work_runtime::wake(services.clone(),store.clone());}
         let redactor=services.ai.data_redactor();
         match result{
+            Ok(value) if public_action.starts_with("security.")=>Ok(security_scan::project(value,&redactor)),
             Ok(value)=>data_host::project_response(&public_action,value,&store,&redactor),
             Err(error)=>Err(data_host::project_error(&error,&redactor)),
         }
@@ -397,6 +424,7 @@ pub fn run() {
             let environment=Arc::new(environment::EnvironmentManager::new(storage.base.clone()).map_err(std::io::Error::other)?);
             let services=Services{
                 close_gate: Arc::default(),
+                security:security_scan::Service::new(&app.path().resource_dir()?),
                 ai:ai::AiService::new_with_budget_root(store.root.clone(),storage.base.clone()).map_err(std::io::Error::other)?.with_data_policy(data_policy.clone()).with_arbiter(supervisor.shared_arbiter()),
                 environment:environment.clone(),
                 executor:executor::Executor::default().with_arbiter(supervisor.shared_arbiter()),
@@ -409,6 +437,7 @@ pub fn run() {
                 data_policy,workflow:workflow::WorkflowService::default(),supervisor,work_wakeup:work_runtime::WakeGate::default(),environment_gate:std::sync::RwLock::new(())
             };
             services.supervisor.recover_after_boot(&store).map_err(std::io::Error::other)?;
+            security_scan::Service::recover(&store).map_err(std::io::Error::other)?;
             services.ai.recover_unbound_work(&store).map_err(std::io::Error::other)?;
             services.kali.recover_work_after_boot(&store).map_err(std::io::Error::other)?;
             app.manage(storage);

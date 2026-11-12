@@ -3,6 +3,7 @@ import { ArrowLeft, ArrowRight, FolderOpen, Globe2, Network, SlidersHorizontal }
 import { native, request } from '../api';
 import { knownProvider, selectionLabel, type AiSelection, type ProviderStatus } from '../ai-provider';
 import { stageOpeningAnalysis } from '../chat-opening';
+import { defaultScanLimit, SensitiveScanConfirmation, startSecurityScan, supportsSecurityModel } from '../security-scan';
 import { parsePorts } from '../network';
 import type { ScopeTargetRef } from '../combined-scope';
 import type { ScopeRef } from '../scope';
@@ -13,6 +14,7 @@ import { Field, Notice } from './shared';
 import './ProjectLaunch.css';
 
 interface Props {
+  sourceOnly?:boolean;
   snapshot: Snapshot;
   action: Action;
   busy: boolean;
@@ -73,8 +75,8 @@ async function startOperation(action:Action, created:LaunchResult, kind:Kind, po
   return action<Execution>('plan.run',decision);
 }
 
-export default function ProjectLaunch({snapshot, action, busy, initialProject, initialKind='code', onCancel, onCreated,onModels}:Props) {
-  const [kind,setKind] = useState<Kind>(initialProject?.kind ?? initialKind);
+export default function ProjectLaunch({sourceOnly=false,snapshot, action, busy, initialProject, initialKind='code', onCancel, onCreated,onModels}:Props) {
+  const [kind,setKind] = useState<Kind>(sourceOnly?'code':initialProject?.kind ?? initialKind);
   const [root,setRoot] = useState(initialProject?.target ?? '');
   const [narrow,setNarrow] = useState(false);
   const [relative,setRelative] = useState('');
@@ -85,6 +87,9 @@ export default function ProjectLaunch({snapshot, action, busy, initialProject, i
   const [title,setTitle] = useState('');
   const [minutes,setMinutes] = useState('');
   const [ports,setPorts] = useState('443');
+  const [scanLimit,setScanLimit] = useState(String(defaultScanLimit));
+  const [saved,setSaved] = useState<LaunchResult>();
+  const [sensitiveReview,setSensitiveReview]=useState<{form:string;accepted:boolean}>();
   const [ripgrep,setRipgrep] = useState(false);
   const [tools,setTools] = useState<Tool[]>();
   const [catalogError,setCatalogError] = useState('');
@@ -98,15 +103,20 @@ export default function ProjectLaunch({snapshot, action, busy, initialProject, i
   const submittingRef = useRef(false);
   const intent = useRef<{content:string;key:string}|null>(null);
   const local=kind==='code' || kind==='files';
+  const securityScan=native && local && supportsSecurityModel(selection);
+  const unsupportedScan=native && local && !!selection && !supportsSecurityModel(selection);
+  const needsModel=sourceOnly && !supportsSecurityModel(selection);
   const name=initialProject?.name ?? projectName(root,kind).slice(0,120);
   const filtered=tools?.filter(tool=>compatibleTool(tool,kind)) ?? [];
   const selectedRipgrep=ripgrep && filtered.some(t=>t.adapter==='kali.rg.signals.v1' && t.adapterImplemented);
   const contextLabels=['Vetores de ataque','Áreas de foco','Contexto adicional de segurança'];
   const goal=[description.trim() || defaultGoals[kind],...(extra?context.flatMap((v,i)=>v.trim()?[contextLabels[i]+' — '+v.trim()]:[]):[])].join('\n\n');
   const parsedPorts=parsePorts(ports);
+  const scanForm=JSON.stringify([root,kind,narrow?relative:null,goal,selection,scanLimit]);
+  const review=sensitiveReview?.form===scanForm?sensitiveReview:undefined;
 
   useEffect(()=>{
-    if (!native || !advanced) return;
+    if (!native || !advanced || sourceOnly) return;
     let mounted=true;
     setCatalogError('');
     void request<{tools:Tool[];inventoryVerified:boolean}>('packages.catalog').then(catalog=>{
@@ -115,7 +125,7 @@ export default function ProjectLaunch({snapshot, action, busy, initialProject, i
       setTools(catalog.tools);
     }).catch(cause=>{if(mounted){setTools(undefined);setCatalogError(errorMessage(cause));}});
     return ()=>{mounted=false;};
-  },[advanced,attempt]);
+  },[advanced,attempt,sourceOnly]);
 
   async function launch() {
     if (submittingRef.current || busy) return;
@@ -123,6 +133,9 @@ export default function ProjectLaunch({snapshot, action, busy, initialProject, i
     if (!root.trim() || !name.trim() || narrow && !relative.trim()) {setError('Preencha o alvo da análise.');return;}
     if (goal.length>4000) {setError('Descrição e contexto juntos podem conter até 4.000 caracteres.');return;}
     if (kind==='network' && advanced && parsedPorts.error) {setError(parsedPorts.error);return;}
+    if (unsupportedScan||needsModel) {setError('Escolha um modelo OpenAI ou OpenRouter para o Codex Security.');return;}
+    const maxCostUsd=Number(scanLimit);
+    if (securityScan && (!Number.isFinite(maxCostUsd) || maxCostUsd<0.01 || maxCostUsd>100)) {setError('Informe um limite da análise entre US$ 0,01 e US$ 100.');return;}
     const relativeTarget=narrow && local ? projectEntry(root,relative) : null;
     if(relativeTarget!==null && (!relativeTarget || relativeTarget.split('/').some(part=>!part||part==='.'||part==='..'||part.includes(':')))) {
       setError('Escolha um arquivo ou pasta dentro da pasta do projeto.');return;
@@ -141,6 +154,12 @@ export default function ProjectLaunch({snapshot, action, busy, initialProject, i
         }
       }
       const created=await action<LaunchResult>('project.launch',{...body,idempotencyKey:intent.current.key});
+      setSaved(created);
+      if(securityScan && selection){
+        await startSecurityScan({projectId:created.projectId,assessmentId:created.assessmentId,selection,idempotencyKey:intent.current.key,prompt:goal,maxCostUsd,target:relativeTarget??undefined,acknowledgeSensitive:review?.accepted});
+        onCreated(created.projectId,created.assessmentId);
+        return;
+      }
       onCreated(created.projectId,created.assessmentId);
       if (!native) return;
       if (created.replayed) {
@@ -158,7 +177,10 @@ export default function ProjectLaunch({snapshot, action, busy, initialProject, i
         if (selection && current?.status==='blocked') stageOpeningAnalysis(created.assessmentId,goal);
         throw cause;
       }
-    } catch (cause) {setError(errorMessage(cause));}
+    } catch (cause) {
+      if(cause instanceof SensitiveScanConfirmation)setSensitiveReview({form:scanForm,accepted:false});
+      setError(errorMessage(cause));
+    }
     finally {submittingRef.current=false;setSubmitting(false);}
   }
   const locked=busy||submitting;
@@ -169,10 +191,10 @@ export default function ProjectLaunch({snapshot, action, busy, initialProject, i
     <header><button className="button quiet" onClick={onCancel} disabled={locked}><ArrowLeft size={16}/>Voltar</button>
       <h1>{initialProject?'Nova conversa':'Novo projeto'}</h1></header>
     <form onSubmit={event=>{event.preventDefault();void launch();}}>
-      <fieldset disabled={locked}><legend className="launch-legend">Tipo de análise</legend>
-        <div className="launch-modes">{modes.map(({kind:id,label,Icon})=><button key={id} type="button"
+      <fieldset disabled={locked}><legend className="launch-legend">{sourceOnly?'Código do projeto':'Tipo de análise'}</legend>
+        {!sourceOnly&&<div className="launch-modes">{modes.map(({kind:id,label,Icon})=><button key={id} type="button"
           disabled={!!initialProject} aria-pressed={(local?'code':kind)===id} onClick={()=>chooseMode(id)}>
-          <Icon size={18}/>{label}</button>)}</div>
+          <Icon size={18}/>{label}</button>)}</div>}
         <ProjectTargetField kind={kind} label={local?'Pasta do projeto':kind==='web'?'URL do site ou da API':'IP ou rede CIDR'} value={root}
           onChange={setRoot} disabled={!!initialProject || locked}/>
         {name && <p className="launch-name">Projeto <strong>{name}</strong></p>}
@@ -181,7 +203,11 @@ export default function ProjectLaunch({snapshot, action, busy, initialProject, i
           {narrow && <Field label="Caminho dentro do projeto"><input required value={relative} maxLength={4096} placeholder="src/autenticacao.ts" onChange={e=>setRelative(e.target.value)}/></Field>}</>}
         <div className="launch-model"><strong>Modelo de IA</strong>
           <div><ChatModelPicker value={selection} onChange={setSelection} disabled={locked} onModels={onModels}/>
-          {selection && <button className="button quiet" type="button" onClick={()=>setSelection(null)}>Usar só a análise nativa</button>}</div></div>
+          {selection && !sourceOnly && <button className="button quiet" type="button" onClick={()=>setSelection(null)}>Usar só a análise nativa</button>}</div></div>
+        {securityScan && <Field label="Limite da análise em USD" hint="O motor usa este teto para decidir se inicia novas chamadas. Uma solicitação já em andamento pode ultrapassá-lo.">
+          <input type="number" min="0.01" max="100" step="0.01" required value={scanLimit} onChange={event=>setScanLimit(event.target.value)}/>
+        </Field>}
+        {(unsupportedScan||needsModel) && <Notice>Escolha OpenAI ou OpenRouter para iniciar o Codex Security nesta pasta.</Notice>}
         <Field label="Descrição"><textarea rows={3} value={description} maxLength={4000} onChange={e=>setDescription(e.target.value)}
           placeholder={defaultGoals[kind]}/></Field>
         <section className="launch-disclosure"><label><strong>Contexto adicional</strong><input type="checkbox" role="switch" checked={extra}
@@ -195,20 +221,24 @@ export default function ProjectLaunch({snapshot, action, busy, initialProject, i
             <Field label="Limite para iniciar operações (minutos)" hint="Em branco, o escopo não tem prazo de término."><input type="number" min={1} max={1440}
               value={minutes} onChange={e=>setMinutes(e.target.value)}/></Field>
             {kind==='network' && <Field label="Portas TCP"><input value={ports} onChange={e=>setPorts(e.target.value)} maxLength={200}/></Field>}
-            <h3>Ferramentas do Kali</h3>
+            {!sourceOnly&&<><h3>Ferramentas do Kali</h3>
             {catalogError?<p role="status">{catalogError} <button type="button" className="text-link" onClick={()=>setAttempt(n=>n+1)}>Verificar novamente</button></p>
             :!native?<p>O inventário está disponível no aplicativo desktop.</p>:!tools?<p role="status">Consultando ferramentas instaladas…</p>
             :!filtered.length?<p>Nenhuma ferramenta instalada com suporte a esta análise.</p>
             :filtered.map(tool=><label className="launch-tool" key={tool.package}><input type="checkbox"
               checked={selectedRipgrep} onChange={e=>setRipgrep(e.target.checked)}/>
-              <span>{tool.package}<small>Escolha uma evidência na conversa para analisar no Kali.</small></span></label>)}</div>}</section>
-        <p className="launch-summary">{native ? local ? 'Ao criar, o OpenKoda verificará padrões de segurança nos arquivos selecionados, sem executar o código.'
+              <span>{tool.package}<small>Escolha uma evidência na conversa para analisar no Kali.</small></span></label>)}</>}</div>}</section>
+        <p className="launch-summary">{securityScan && selection
+          ? 'Ao criar, o Codex Security analisará o código selecionado com '+selectionLabel(selection)+'. O provedor poderá receber arquivos e contexto do projeto. A análise pode consumir créditos.'
+          : native ? local ? 'Ao criar, o OpenKoda verificará padrões de segurança nos arquivos selecionados, sem executar o código.'
           : kind==='web'?'Ao criar, o OpenKoda enviará uma requisição HEAD à URL informada, sem seguir redirecionamentos.'
             :'Ao criar, o OpenKoda tentará conexões TCP nas portas '+(advanced?ports:'443')+' do alvo informado, sem enviar conteúdo.'
           :'A prévia salva a conversa. A execução usa o aplicativo desktop.'}
-          {native && selection && ' A descrição, os metadados do escopo e o resumo da operação serão enviados a '+selectionLabel(selection)+' para análise. A chamada pode consumir créditos.'}</p>
+          {native && selection && !local && ' A descrição, os metadados do escopo e o resumo da operação serão enviados a '+selectionLabel(selection)+' para análise. A chamada pode consumir créditos.'}</p>
         {error && <div role="alert"><Notice tone="warning">{error}</Notice></div>}
-        <button type="submit" className="button primary launch-submit" disabled={locked || !root.trim() || narrow&&!relative.trim()}>
+        {review&&selection&&<label className="check-field"><input type="checkbox" checked={review.accepted} onChange={e=>setSensitiveReview({form:scanForm,accepted:e.target.checked})}/>Autorizo enviar a fonte sensível desta avaliação a {selectionLabel(selection)} para esta análise.</label>}
+        {error && saved && <button className="button" type="button" onClick={()=>onCreated(saved.projectId,saved.assessmentId)}>Abrir conversa criada</button>}
+        <button type="submit" className="button primary launch-submit" disabled={locked || unsupportedScan || needsModel || !!review&&!review.accepted || !root.trim() || narrow&&!relative.trim()}>
           {submitting?'Criando…':initialProject?'Criar conversa':'Criar projeto'}<ArrowRight size={16}/></button>
       </fieldset>
     </form>

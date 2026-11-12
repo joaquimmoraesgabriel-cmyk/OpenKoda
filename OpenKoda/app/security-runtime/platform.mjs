@@ -1,0 +1,79 @@
+import { execFile } from 'node:child_process';
+import { access, lstat, readFile, readdir, realpath } from 'node:fs/promises';
+import { dirname, join, delimiter } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
+
+const run = promisify(execFile);
+export const root = dirname(fileURLToPath(import.meta.url));
+export const sdkVersion = '0.10.0';
+const windows = process.platform === 'win32';
+
+// Both the worker and its tools start with an explicit environment. In
+// particular, developer credentials, provider overrides and interpreter
+// preload options from the desktop session do not reach the scanner.
+export function baseEnvironment() {
+  const allowed = new Set(['SystemRoot','WINDIR','SystemDrive','ComSpec','TEMP','TMP','TMPDIR','USERPROFILE','USERNAME','USERDOMAIN','APPDATA','LOCALAPPDATA','ProgramData','ProgramFiles','ProgramFiles(x86)','ProgramW6432','PROCESSOR_ARCHITECTURE','NUMBER_OF_PROCESSORS','PATHEXT','HOME','LANG','LC_ALL'].map(s => s.toUpperCase()));
+  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => allowed.has(key.toUpperCase())));
+  const paths = windows
+    ? [dirname(process.execPath), join(env.ProgramFiles || 'C:\\Program Files','Git','cmd'), join(env.SystemRoot || 'C:\\Windows','System32'), join(env.SystemRoot || 'C:\\Windows','System32','WindowsPowerShell','v1.0')]
+    : [dirname(process.execPath),'/usr/local/bin','/usr/bin','/bin'];
+  env.PATH = paths.join(delimiter);
+  env.PYTHONNOUSERSITE = '1';
+  env.PYTHONDONTWRITEBYTECODE = '1';
+  env.GIT_TERMINAL_PROMPT = '0';
+  return env;
+}
+
+async function binaryVersion(paths, args, pattern) {
+  for (const path of paths) {
+    try {
+      const exe = await realpath(path);
+      if (!(await lstat(exe)).isFile()) continue;
+      const {stdout} = await run(exe,args,{cwd:dirname(exe),env:baseEnvironment(),windowsHide:true,timeout:10000,maxBuffer:8192});
+      const match=stdout.trim().match(pattern);
+      if (match) return {path:exe,version:match[1]};
+    } catch { /* Try the next known installation. */ }
+  }
+  return null;
+}
+
+async function pythonCandidates() {
+  if (!windows) return [join(root,'python','bin','python3'),'/usr/local/bin/python3','/usr/bin/python3'];
+  const paths=[join(root,'python','python.exe')];
+  const bases=[process.env.LOCALAPPDATA && join(process.env.LOCALAPPDATA,'Programs','Python'),process.env.ProgramFiles];
+  for (const dir of bases.filter(Boolean)) {
+    const names=await readdir(dir,{withFileTypes:true}).catch(()=>[]);
+    for (const name of names.filter(entry=>entry.isDirectory() && /^Python3\d+$/.test(entry.name)).sort((a,b)=>b.name.localeCompare(a.name,undefined,{numeric:true}))) {
+      paths.push(join(dir,name.name,'python.exe'));
+    }
+  }
+  return paths;
+}
+
+export async function inspectPlatform() {
+  const major=Number(process.versions.node.split('.')[0]);
+  const goodNode=major===24 || major===26 || major===22 && Number(process.versions.node.split('.')[1])>=13;
+  const triple=(process.arch==='arm64'?'aarch64':'x86_64')+(windows?'-pc-windows-msvc':process.platform==='darwin'?'-apple-darwin':'-unknown-linux-musl');
+  const vendor=join(root,'node_modules','@openai',`codex-${process.platform}-${process.arch}`,'vendor',triple,'bin',windows?'codex.exe':'codex');
+  const gitPaths=windows?[join(process.env.ProgramFiles || 'C:\\Program Files','Git','cmd','git.exe')]:['/usr/bin/git','/usr/local/bin/git'];
+  const [sdk,python,git,codex]=await Promise.all([
+    (async()=>{
+      const dir=join(root,'node_modules','@openai','codex-security');
+      const pkg=JSON.parse(await readFile(join(dir,'package.json'),'utf8'));
+      if(pkg.name!=='@openai/codex-security'||pkg.version!==sdkVersion)return false;
+      await access(join(dir,'_bundled_plugin','skills','security-scan','SKILL.md'));
+      return typeof (await import('@openai/codex-security')).CodexSecurity==='function';
+    })().catch(()=>false),
+    binaryVersion(await pythonCandidates(),['-I','-B','-c','import sys, importlib, sqlite3; assert sys.version_info >= (3,10); importlib.import_module("tomllib" if sys.version_info >= (3,11) else "tomli"); print(sys.version.split()[0])'],/^(3\.\d+\.\d+)$/),
+    binaryVersion(gitPaths,['--version'],/^git version ([\w.\-]+)$/),
+    binaryVersion([vendor],['--version'],/^codex(?:-cli)?\s+([\w.\-]+)$/),
+  ]);
+  const missing=[];
+  if(!goodNode)missing.push('node');
+  if(!sdk)missing.push('sdk');
+  if(!python)missing.push('python');
+  if(!git)missing.push('git');
+  if(!codex)missing.push('codex');
+  return {python,git,codex,check:{type:'check',available:missing.length===0,sdkVersion:sdk?sdkVersion:null,nodeVersion:process.versions.node,pythonVersion:python?.version??null,gitVersion:git?.version??null,codexVersion:codex?.version??null,missing}};
+}

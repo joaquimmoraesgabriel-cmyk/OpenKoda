@@ -71,7 +71,7 @@ function Read-Renderer([string]$Expression) {
         $response.result.result.value
     } finally { $token.Dispose() }
 }
-function Find-WindowControl($App,$Type,[string]$Name,[switch]$Prefix) {
+function Find-WindowControl($App,$Type,[string]$Name,[switch]$Prefix,[switch]$IncludeDisabled) {
     $deadline = [DateTime]::UtcNow.AddSeconds(35)
     $typeFilter = [System.Windows.Automation.PropertyCondition]::new(
         [System.Windows.Automation.AutomationElement]::ControlTypeProperty,$Type)
@@ -85,7 +85,7 @@ function Find-WindowControl($App,$Type,[string]$Name,[switch]$Prefix) {
             $names = @(foreach ($item in $items) { $item.Current.Name })
             foreach ($item in $items) {
                 $caption = $item.Current.Name
-                if (($caption -eq $Name -or ($Prefix -and $caption.StartsWith($Name,[StringComparison]::Ordinal))) -and $item.Current.IsEnabled) { return $item }
+                if (($caption -eq $Name -or ($Prefix -and $caption.StartsWith($Name,[StringComparison]::Ordinal))) -and ($IncludeDisabled -or $item.Current.IsEnabled)) { return $item }
             }
         }
         Start-Sleep -Milliseconds 200
@@ -103,11 +103,60 @@ from pathlib import Path
 db = Path(sys.argv[1]) / 'openkoda.sqlite3'
 with sqlite3.connect(db.as_uri() + '?mode=ro', uri=True) as conn:
     state = json.loads(conn.execute('SELECT json FROM app_state WHERE id=1').fetchone()[0])
-print(json.dumps({'projects': [{k: p[k] for k in ('name','id','target','kind')} for p in state['projects']], 'assessments': len(state['assessments'])}))
+print(json.dumps({'projects': [{k: p[k] for k in ('name','id','target','kind')} for p in state['projects']], 'assessments': len(state['assessments']), 'timeoutSeconds': state['settings'].get('timeoutSeconds')}))
 '@
     $raw = & python -c $reader $Profile
     if ($LASTEXITCODE -ne 0) { throw 'Could not read the installed fixture database.' }
     $raw | ConvertFrom-Json
+}
+function Test-InstalledSourceWindow($App,[int]$Iteration,[string]$DataRoot,[string]$Target,[int]$ExpectedTimeout) {
+    Add-Type -AssemblyName UIAutomationClient
+    Add-Type -AssemblyName UIAutomationTypes
+    $button = [System.Windows.Automation.ControlType]::Button
+    $valuePattern = [System.Windows.Automation.ValuePattern]::Pattern
+    $null = Find-WindowControl $App ([System.Windows.Automation.ControlType]::RadioButton) 'Pasta local' -Prefix
+    $before = Read-ProjectFixture $DataRoot
+    if (@($before.projects).Count -or $before.assessments -ne 0 -or $null -eq $before.timeoutSeconds) { throw 'Unexpected native state in the clean source edition profile.' }
+    Invoke-WindowButton $App 'Criar projeto'
+    $folder = Find-WindowControl $App ([System.Windows.Automation.ControlType]::Edit) 'Pasta do projeto'
+    $folder.GetCurrentPattern($valuePattern).SetValue($Target)
+    $deadline = [DateTime]::UtcNow.AddSeconds(8)
+    do {
+        $folderValue = $folder.GetCurrentPattern($valuePattern).Current.Value
+        if ($folderValue -ceq $Target) { break }
+        Start-Sleep -Milliseconds 100
+    } until ([DateTime]::UtcNow -ge $deadline)
+    if ($folderValue -cne $Target) { throw "The Windows UI did not retain the fixture path (observed length $($folderValue.Length), expected $($Target.Length))." }
+    $null = Find-WindowControl $App $button 'Escolher modelo · Nenhum selecionado'
+    $submit = Find-WindowControl $App $button 'Criar projeto' -IncludeDisabled
+    if ($submit.Current.IsEnabled) { throw 'The source scan could start without a configured model.' }
+
+    Invoke-WindowButton $App 'Configurações'
+    Invoke-WindowButton $App 'Permissões'
+    $control = Find-WindowControl $App ([System.Windows.Automation.ControlType]::Spinner) 'Tempo por operação (segundos)'
+    $range = $control.GetCurrentPattern([System.Windows.Automation.RangeValuePattern]::Pattern)
+    if ($range.Current.Value -ne $before.timeoutSeconds) { throw 'The displayed operation timeout differs from SQLite.' }
+    if ($Iteration -eq 1) {
+        $ExpectedTimeout = if ($before.timeoutSeconds -eq 97) { 98 } else { 97 }
+        $range.SetValue($ExpectedTimeout)
+        Invoke-WindowButton $App 'Salvar alterações'
+        $deadline = [DateTime]::UtcNow.AddSeconds(12)
+        do {
+            $after = Read-ProjectFixture $DataRoot
+            if ($after.timeoutSeconds -eq $ExpectedTimeout) { break }
+            Start-Sleep -Milliseconds 150
+        } until ([DateTime]::UtcNow -ge $deadline)
+    } else { $after = $before }
+    if ($after.timeoutSeconds -ne $ExpectedTimeout -or $range.Current.Value -ne $ExpectedTimeout -or @($after.projects).Count -or $after.assessments -ne 0) { throw 'The UI preference was not persisted or the empty project graph changed.' }
+    return [pscustomobject]@{
+        iteration=$Iteration; view='Permissões'; projects=0; assessments=0; timeoutSeconds=$ExpectedTimeout
+        modelRequired=$true; settingsReopened=($Iteration -eq 2); transport='Windows UI Automation'
+    }
+}
+function Get-ProjectCreationExpression([string]$Kind,[string]$Target) {
+    $envelope = @{request=@{action='project.create';payload=@{name='Startup fixture';kind=$Kind;target=$Target;description='Disposable release verification'}}}
+    $payload = ConvertTo-Json -InputObject $envelope -Depth 5 -Compress
+    return "window.__TAURI_INTERNALS__.invoke('request',$payload).then(p=>p.id)"
 }
 function Test-InstalledWindow($App,[int]$Iteration,[string]$Profile,[string]$Target,[string]$ExpectedId) {
     Add-Type -AssemblyName UIAutomationClient
@@ -145,7 +194,7 @@ try {
         $receiptPath = Join-Path $runnerTemp 'openkoda-release-smoke.json'
         $manifest = Get-Content -Raw -LiteralPath (Join-Path $appRoot '.local\package-windows.json') | ConvertFrom-Json
         if ($manifest.profile -ne 'release' -or $manifest.version -notmatch '^\d+\.\d+\.\d+$' -or @($manifest.files).Count -ne 1) { throw 'Expected one packaged release.' }
-        $releaseRoot = Join-Path $appRoot 'src-tauri\target\release'
+        $releaseRoot = if ($manifest.releaseRoot) { $manifest.releaseRoot } else { Join-Path $appRoot 'src-tauri\target\release' }
         $installer = Join-Path $releaseRoot ('bundle\nsis\OpenKoda_'+$manifest.version+'_x64-setup.exe')
         if ($manifest.files[0].path -ne $installer) { throw 'Unexpected installer path in build receipt.' }
         $installerSha = $manifest.files[0].sha256
@@ -181,17 +230,46 @@ try {
         $result.sourceSha256 = $proof.sourceSha256
         $result.differingBytes = $proof.differingBytes
     } elseif ($result.payloadSha256 -ne $manifest.payloadSha256) { throw 'Installed payload hash mismatch.' }
+    if ([version]$manifest.version -ge [version]'0.2.0') {
+        $result.stage = 'installed-sdk'
+        $runtime = Join-Path $destination 'security-runtime'
+        foreach ($entry in @($destination,$runtime,(Join-Path $runtime 'bin'),(Join-Path $runtime 'bin/node.exe'))) {
+            if ((Get-Item -LiteralPath $entry).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Redirected installed runtime.' }
+        }
+        if (Get-ChildItem -LiteralPath $runtime -Force -Recurse -Attributes ReparsePoint | Select-Object -First 1) { throw 'Redirected component in installed runtime.' }
+        $node = Join-Path $runtime 'bin/node.exe'
+        $tree = & $node (Join-Path $PSScriptRoot 'security-runtime-inventory.mjs') $runtime
+        if ($LASTEXITCODE -ne 0) { throw 'Could not hash installed SDK files.' }
+        $result.securityRuntime = $tree | ConvertFrom-Json
+        if ($manifest.securityRuntime.sha256 -notmatch '^[a-f0-9]{64}$' -or $result.securityRuntime.sha256 -cne $manifest.securityRuntime.sha256 -or $result.securityRuntime.files -ne $manifest.securityRuntime.files -or $result.securityRuntime.bytes -ne $manifest.securityRuntime.bytes) { throw 'Installed SDK resources differ from the build.' }
+        $frame = & $node (Join-Path $runtime 'cli.mjs') --check
+        $checkExit = $LASTEXITCODE
+        $result.sdkDiagnostic = $frame | ConvertFrom-Json
+        $missing = @($result.sdkDiagnostic.missing)
+        $gitAbsent = !(Test-Path -LiteralPath (Join-Path $env:ProgramFiles 'Git/cmd/git.exe') -PathType Leaf)
+        if ($result.sdkDiagnostic.type -cne 'check' -or ($result.sdkDiagnostic.available -ne ($checkExit -eq 0))) { throw 'Invalid installed SDK diagnostic.' }
+        if ($result.sdkDiagnostic.available -ne $true -and !($gitAbsent -and $missing.Count -eq 1 -and $missing[0] -ceq 'git')) { throw ('Installed SDK unavailable: '+($missing -join ', ')) }
+        $result.sdkPrerequisiteGitMissing = !$result.sdkDiagnostic.available
+    }
     $result.stage = 'launch'
     $cacheRoot = if ($GitHubHosted) { $runnerTemp } else { $env:TEMP }
     $browserCache = Join-Path $cacheRoot ('openkoda-webview-'+[guid]::NewGuid())
     $project = $null
+    $sourceEdition = [version]$manifest.version -ge [version]'0.2.0'
+    $result.projectReopened = $false
+    $result.settingsReopened = $false
+    $savedTimeout = 0
+    if ($sourceEdition) {
+        $sourceFolder = Join-Path $cacheRoot ('openkoda-source-'+[guid]::NewGuid())
+        $null = New-Item -ItemType Directory -Path $sourceFolder -ErrorAction Stop
+    }
     $probe = @'
 (async () => {
   const main = document.querySelector('main');
   if (location.hostname !== 'tauri.localhost' || !main || main.getAttribute('aria-busy') !== 'false') return null;
   const request = (action,payload={}) => window.__TAURI_INTERNALS__.invoke('request',{request:{action,payload}});
   const state = await request('snapshot');
-  return {projects:state.projects.map(p=>({id:p.id,name:p.name})),heading:main.querySelector('h1')?.textContent??'',assessments:state.assessments.length};
+  return {projects:state.projects.map(p=>({id:p.id,name:p.name,kind:p.kind,target:p.target})),heading:main.querySelector('h1')?.textContent??'',assessments:state.assessments.length};
 })()
 '@
     foreach ($iteration in 1,2) {
@@ -207,8 +285,16 @@ try {
         $app = [Diagnostics.Process]::Start($launch)
         if ($GitHubHosted) {
             try {
-                $project = Test-InstalledWindow $app $iteration $profileRoot $destination $project
-                $result.starts += @{iteration=$iteration;view='Projetos';projects=($iteration-1);verifiedProjectId=$project;transport='Windows UI Automation'}
+                if ($sourceEdition) {
+                    $observation = Test-InstalledSourceWindow $app $iteration $profileRoot $sourceFolder $savedTimeout
+                    $savedTimeout = $observation.timeoutSeconds
+                    $result.starts += $observation
+                    $result.settingsReopened = $observation.settingsReopened
+                } else {
+                    $project = Test-InstalledWindow $app $iteration $profileRoot $destination $project
+                    $result.starts += @{iteration=$iteration;view='Projetos';projects=($iteration-1);verifiedProjectId=$project;transport='Windows UI Automation'}
+                    if ($iteration -eq 2) { $result.projectReopened = $true }
+                }
             } catch {
                 $result.diagnostics = Get-StartupDiagnostics $app $port $browserCache $profileRoot $null
                 throw
@@ -247,15 +333,19 @@ try {
         if (-not $state -or -not $state.heading -or $state.assessments -ne 0) { throw 'The native app did not return its initial state.' }
         if ($iteration -eq 1) {
             if (@($state.projects).Count -ne 0) { throw 'Unexpected projects in new profile.' }
-            $project = Read-Renderer "window.__TAURI_INTERNALS__.invoke('request',{request:{action:'project.create',payload:{name:'Startup fixture',kind:'web',target:'http://127.0.0.1/',description:'Disposable release verification'}}}).then(p=>p.id)"
+            $kind = if ($sourceEdition) { 'code' } else { 'web' }
+            $target = if ($sourceEdition) { $sourceFolder } else { 'http://127.0.0.1/' }
+            $project = Read-Renderer (Get-ProjectCreationExpression $kind $target)
             $projectId = [guid]::Empty
             if (-not ([guid]::TryParse($project,[ref]$projectId))) { throw 'Native project creation failed.' }
-        } elseif (@($state.projects).Count -ne 1 -or $state.projects[0].id -ne $project -or $state.projects[0].name -ne 'Startup fixture') { throw 'Saved project did not survive release restart.' }
+        } else {
+            if (@($state.projects).Count -ne 1 -or $state.projects[0].id -ne $project -or $state.projects[0].name -ne 'Startup fixture' -or $state.projects[0].kind -ne $kind -or ($sourceEdition -and $state.projects[0].target -ne $target)) { throw 'Saved project did not survive release restart.' }
+            $result.projectReopened = $true
+        }
         $result.starts += @{iteration=$iteration;heading=$state.heading;projects=@($state.projects).Count}
         $client.Dispose(); $client = $null
         $app.Kill(); if (-not $app.WaitForExit(10000)) { throw 'Owned process failed to exit.' }; $app.Dispose(); $app = $null
     }
-    $result.projectReopened = $true
     $result.stage = 'uninstall'
     $beforeRemoval = Database-Fingerprint $profileRoot
     $remove = Start-Process -FilePath $uninstaller -ArgumentList '/S' -WindowStyle Hidden -PassThru

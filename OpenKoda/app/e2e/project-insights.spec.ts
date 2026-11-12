@@ -4,10 +4,11 @@ import { emptySnapshot } from '../src/preview';
 import type { Finding } from '../src/types';
 import type { UsageRow } from '../src/usage-history';
 
-async function openPanel(page:Page, failUsage=false) {
+async function openPanel(page:Page, failUsage=false, longTarget=false) {
   const snapshot=emptySnapshot();
   const at='2026-11-12T12:00:00Z';
   snapshot.projects=['portal','externo'].map(id=>({id,name:id==='portal'?'Portal local':'Outro projeto',kind:'code',target:'D:/fixture/'+id,description:'Revisão de autorização.',createdAt:at}));
+  if(longTarget)snapshot.projects[0].target='C:/Users/fixture/.openkoda-security-tests-4587e883-e5b1-4135-9d43-464f0ff55003/OpenKoda-code';
   snapshot.assessments=Array.from({length:12},(_,index)=>{
     const projectId=index===11?'externo':'portal';
     const title=['Análise Alfa','Revisão Beta'][index]??(projectId==='externo'?'Conversa externa':'Consulta '+String(index+1).padStart(2,'0'));
@@ -107,4 +108,16 @@ test('histórico de uso se recupera de falha e distingue uso parcial, desconheci
   await expect(table.getByRole('row').last()).toContainText('Não informado');
   await panel.getByRole('searchbox',{name:'Buscar em uso de ia'}).fill('OpenRouter');
   await expect(table.getByRole('rowheader')).toHaveCount(1);
+});
+
+test('o caminho longo e Copiar alvo cabem no painel ao lado da conversa',async({page})=>{
+  await page.setViewportSize({width:1440,height:900});
+  const panel=await openPanel(page,false,true);
+  await panel.getByRole('button',{name:'Mostrar ao lado da conversa'}).click();
+  const copy=panel.getByRole('button',{name:'Copiar alvo',exact:true});
+  await expect(copy).toBeInViewport();
+  expect(await panel.evaluate(element=>element.scrollWidth<=element.clientWidth+1)).toBe(true);
+  const bounds=await panel.boundingBox(),button=await copy.boundingBox();
+  expect(bounds).not.toBeNull();expect(button).not.toBeNull();
+  expect(button!.x+button!.width).toBeLessThanOrEqual(bounds!.x+bounds!.width);
 });

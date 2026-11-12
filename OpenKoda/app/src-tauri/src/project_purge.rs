@@ -15,7 +15,7 @@ const MAX_BYTES:u64=128*1024*1024;
 const MAX_PLANS:usize=100;
 const LIMITS:[&str;6]=[
     "Exclusão lógica do projeto arquivado e de seu histórico no perfil ativo: avaliações/evidências/eventos, achados/validações, planos/execuções, conversas/requisições/investigações IA, correções/backups internos e sessões MCP vinculadas.",
-    "Não remove arquivos fonte/alvos, Kali, credencial/configurações, testes globais de conexão, backups/exportações, outros perfis, cópias externas nem dados retidos pelo provedor.",
+    "Não remove arquivos fonte/alvos, Kali, credencial/configurações, testes globais de conexão, backups/exportações, artefatos oficiais do Codex Security na pasta security-scans do perfil, outros perfis, cópias externas nem dados retidos pelo provedor.",
     "Os bancos SQLite confirmam etapas separadamente; a operação não é atômica entre bancos. Falha pode deixar histórico parcialmente removido. Não existe rollback automático.",
     "Uma interrupção bloqueia novas mutações até inspeção e decisão explícitas. Continuar exige o mesmo plano, digest e frase; nenhuma exclusão é repetida no reinício ou no diagnóstico.",
     "Esta exclusão não é apagamento seguro e não promete remover páginas livres/WAL, caches ou cópias. O recibo conserva somente identidades, hashes, contagens e estados.",

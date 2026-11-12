@@ -17,15 +17,18 @@ import { ConversationTimeline, type ChatMessage } from './ConversationTimeline';
 import { ConversationText } from './ConversationText';
 import { ChatModelPicker } from './ChatModelPicker';
 import { ChatComposerMenus } from './ChatComposerMenus';
+import SecurityScanPanel, { useSecurityScan } from './SecurityScan';
+import { scanActive, scanStateLabel } from '../security-scan';
 import './project-conversation.css';
 
 type Turn=Awaited<ReturnType<typeof prepareChat>>&{budget?:BudgetReview;selection:AiSelection;line:string;opening:boolean;draft:ChatDraft;image?:string;signal:AbortSignal};
-type Props={assessment:Assessment;settings:Settings;plans?:ExecutionPlan[];action:Action;busy:boolean;onAdvanced?:()=>void;onModels?:()=>void};
+type Props={sourceOnly?:boolean;assessment:Assessment;settings:Settings;plans?:ExecutionPlan[];action:Action;busy:boolean;onAdvanced?:()=>void;onModels?:()=>void};
 export default function ProjectConversation(props:Props){return <Conversation key={props.assessment.id} {...props}/>;}
 
-function Conversation({assessment,plans,action,busy,onAdvanced,onModels}:Props){
+function Conversation({sourceOnly=false,assessment,plans,action,busy,onAdvanced,onModels}:Props){
   const [messages,setMessages]=useState<ChatMessage[]>([]);
-  const {text:draft,attachment,proposing}=useChatDraft(assessment.id);
+  const {text:draft,attachment,proposing:requestedProposal}=useChatDraft(assessment.id);
+  const proposing=!sourceOnly&&requestedProposal;
   const [mode,setMode]=useState<ApprovalMode>(()=>{
     try{const saved=localStorage.getItem('openkoda.chat.approval.'+assessment.id);return saved==='always'||saved==='scope'?saved:'risk';}catch{return 'risk';}
   });
@@ -36,8 +39,10 @@ function Conversation({assessment,plans,action,busy,onAdvanced,onModels}:Props){
   const scroll=useRef<HTMLDivElement>(null),transcript=useRef<HTMLDivElement>(null),stick=useRef(true),input=useRef<HTMLTextAreaElement>(null);
   const [awayFromEnd,setAwayFromEnd]=useState(false);
   const sel:AiSelection|null=assessment.aiSelection??null;
-  const localRunning=['queued','preparing','planning','running','pausing','canceling'].includes(assessment.status);
-  const running=!!phase||!!remote.requestId||localRunning;
+  const scanner=useSecurityScan(assessment);
+  const scanRunning=!!scanner.scan && scanActive(scanner.scan.status);
+  const localRunning=!sourceOnly&&['queued','preparing','planning','running','pausing','canceling'].includes(assessment.status);
+  const running=!!phase||!!remote.requestId||localRunning||scanRunning;
   const refresh=useCallback(async()=>{
     if(!native)return;
     const version=++stamp.current;
@@ -121,13 +126,14 @@ function Conversation({assessment,plans,action,busy,onAdvanced,onModels}:Props){
   }
   const auto=useRef(prepare);auto.current=prepare;
   useEffect(()=>{
+    if(sourceOnly)return;
     // Wait one microtask so StrictMode can finish remounting before consuming the one-shot handoff.
     let active=true;
     const run=()=>{if(!active||job.current)return;const prompt=takeOpeningAnalysis(assessment.id);if(prompt)void auto.current(prompt,true);};
     void Promise.resolve().then(run);
     window.addEventListener(openingAnalysisEvent,run);
     return()=>{active=false;window.removeEventListener(openingAnalysisEvent,run);};
-  },[assessment.id]);
+  },[assessment.id,sourceOnly]);
   async function confirm(){
     if(!approval||phase)return;
     const turn=approval;setApproval(undefined);
@@ -146,7 +152,8 @@ function Conversation({assessment,plans,action,busy,onAdvanced,onModels}:Props){
         if(live.requestId)await request('ai.chat.stop',{assessmentId:assessment.id,requestId:live.requestId});
         else throw new Error('A solicitação está mudando de etapa. Confira o estado antes de interromper.');
         await refresh();
-      }else if(localRunning)await action('assessment.cancel',{id:assessment.id});
+      }else if(scanRunning)await scanner.cancel();
+      else if(localRunning)await action('assessment.cancel',{id:assessment.id});
       else discard();
     }catch(e){if(mount.current)setError(errorMessage(e));}
     finally{if(mount.current)setStopping(false);}
@@ -169,14 +176,15 @@ function Conversation({assessment,plans,action,busy,onAdvanced,onModels}:Props){
       onScroll={e=>{const el=e.currentTarget;if(!el.clientHeight)return;stick.current=el.scrollHeight-el.clientHeight-el.scrollTop<=64;setAwayFromEnd(!stick.current);}}
       onClickCapture={e=>{if(e.target instanceof Element && e.target.closest('summary'))stick.current=false;}}>
       <div className="project-chat-transcript" ref={transcript}><header className="chat-heading">
-        <div><h2>{assessment.title}</h2><span className="chat-state" data-state={assessment.status}>{statusLabels[assessment.status]}</span></div>
+        <div><h2>{assessment.title}</h2><span className="chat-state" title={scanner.scan?'Estado da análise do Codex Security':'Estado da avaliação'} data-state={scanner.scan?.status??assessment.status}>{scanner.scan?scanStateLabel[scanner.scan.status]:statusLabels[assessment.status]}</span></div>
         <p title={assessment.target}><TargetIcon size={14}/><span>{assessment.target}</span></p>
       </header>
       <ConversationTimeline events={assessment.events} messages={messages}/>
+      <SecurityScanPanel assessment={assessment} controller={scanner}/>
       {assessment.summary&&<section className="chat-summary"><h3>Resultado da análise</h3><ConversationText text={assessment.summary}/></section>}
-      {offer&&<ChatVerification proposal={offer.proposal} scopeRef={offer.scopeRef} action={action} disabled={busy||running||!!approval} onPrepared={()=>setOffer(undefined)}/>}
-      <ProjectKaliTools assessment={assessment} action={action} busy={busy||running||!!approval}/>
-      {(plans??[]).filter(plan=>plan.assessmentId===assessment.id&&['proposed','approved'].includes(plan.status)&&Date.parse(plan.expiresAt)>Date.now()).map(plan=>
+      {!sourceOnly&&offer&&<ChatVerification proposal={offer.proposal} scopeRef={offer.scopeRef} action={action} disabled={busy||running||!!approval} onPrepared={()=>setOffer(undefined)}/>}
+      {!sourceOnly&&<ProjectKaliTools assessment={assessment} action={action} busy={busy||running||!!approval}/>}
+      {!sourceOnly&&(plans??[]).filter(plan=>plan.assessmentId===assessment.id&&['proposed','approved'].includes(plan.status)&&Date.parse(plan.expiresAt)>Date.now()).map(plan=>
         <ChatPlanApproval key={plan.id} plan={plan} mode={mode} disabled={busy||!!phase||!!remote.requestId||!!approval} action={action}/>)}
       {pendingLine&&<article className="project-chat-turn user"><header><strong>Você</strong></header><p>{pendingLine}</p></article>}
       {workLabel&&<p className="chat-progress" role="status"><LoaderCircle size={16}/>{workLabel}</p>}
@@ -197,10 +205,10 @@ function Conversation({assessment,plans,action,busy,onAdvanced,onModels}:Props){
           if(!e.repeat && canSend)e.currentTarget.form?.requestSubmit();
         }}/>
         <div className="project-composer-tools"><input type="file" hidden ref={file} onChange={e=>{void attach(e.target.files?.[0]);e.currentTarget.value='';}}/>
-          <ChatComposerMenus mode={mode} onMode={changeApproval} proposing={proposing} hasAttachment={!!attachment} disabled={disabled} canPropose={native}
+          <ChatComposerMenus mode={mode} onMode={changeApproval} proposing={proposing} hasAttachment={!!attachment} disabled={disabled} canPropose={native&&!sourceOnly}
             onAttach={()=>file.current?.click()} onPropose={()=>updateDraft(assessment.id,{proposing:!proposing})}/>
           <ChatModelPicker value={sel} disabled={disabled} onModels={onModels} onChange={async choice=>{await action('ai.selection.save',{assessmentId:assessment.id,aiSelection:choice});}}/>
-          {running?<button className="chat-send" type="button" disabled={stopping||remote.stopping} aria-label="Cancelar trabalho" title="Cancelar trabalho" onClick={()=>void stop()}><Square size={14} fill="currentColor"/></button>:<button className="chat-send" type="submit" disabled={!canSend} aria-label="Enviar mensagem" aria-keyshortcuts={shortcut==='enter'?'Enter':'Control+Enter Meta+Enter'} title={shortcut==='enter'?'Enviar mensagem (Enter)':'Enviar mensagem (Ctrl + Enter)'}><ArrowUp size={18}/></button>}
+          {running?<button className="chat-send" type="button" disabled={stopping||remote.stopping||scanner.busy||scanner.scan?.status==='cancelling'} aria-label="Cancelar trabalho" title="Cancelar trabalho" onClick={()=>void stop()}><Square size={14} fill="currentColor"/></button>:<button className="chat-send" type="submit" disabled={!canSend} aria-label="Enviar mensagem" aria-keyshortcuts={shortcut==='enter'?'Enter':'Control+Enter Meta+Enter'} title={shortcut==='enter'?'Enviar mensagem (Enter)':'Enviar mensagem (Ctrl + Enter)'}><ArrowUp size={18}/></button>}
         </div></form>
         <small>{sel?providers[sel.provider].name+' recebe a mensagem e o contexto do projeto'+(proposing?'.':', incluindo turnos recentes e o anexo escolhido.'):'Escolha um modelo ativo para conversar.'}</small>
     </div>

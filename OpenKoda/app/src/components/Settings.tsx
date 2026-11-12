@@ -17,6 +17,7 @@ import ProjectPurge, { ProjectPurgeStatus } from './ProjectPurge';
 import Recovery from './Recovery';
 import Retention from './Retention';
 import SupportPackage from './SupportPackage';
+import SecurityRuntimeStatus from './SecurityRuntimeStatus';
 import './settings.css';
 
 const groups = [
@@ -175,7 +176,7 @@ export default function Settings({settings, projects, action, busy, dataRequest=
           <Retention action={action} busy={busy}/>
         </>}
         {section === 'Backup e recuperação' && <Recovery projects={projects} action={action} busy={busy}/>}
-        {section === 'Diagnóstico e suporte' && <SupportPackage/>}
+        {section === 'Diagnóstico e suporte' && <><SecurityRuntimeStatus/><SupportPackage/></>}
         {section === 'Atualizações' && <>
           <div className="installed-version"><Boxes size={25} aria-hidden="true"/><div><strong>OpenKoda</strong><p>Versão {version}</p></div></div>
           <KeyValue label="Canal">Distribuição local</KeyValue>

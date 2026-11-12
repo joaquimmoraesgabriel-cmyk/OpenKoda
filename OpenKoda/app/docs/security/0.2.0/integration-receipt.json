@@ -1,0 +1,41 @@
+{
+  "version": "0.2.0",
+  "binarySha256": "d61b48a2840345ed2944592ceb29bba71d65786ce6fc4dd4fa29844b7dff7fa0",
+  "passed": true,
+  "checks": [
+    "Repetição idempotente confirma a mesma execução",
+    "Projeto criado pela interface e registro nativo do motor confirmado",
+    "SDK oficial executado no código OpenKoda com relatório e cobertura na interface",
+    "Resultado durável após reabrir sem reexecutar a análise"
+  ],
+  "sourceCommit": "58fa65e48886defed56dc6e9569b0531ffc04acf",
+  "runtime": {
+    "available": true,
+    "codexVersion": "0.167.1",
+    "gitVersion": "2.55.0.windows.5",
+    "missing": [],
+    "nodeVersion": "24.19.0",
+    "pythonVersion": "3.14.7",
+    "sdkVersion": "0.10.0",
+    "type": "check"
+  },
+  "assessmentId": "7023ca05-7895-5df1-ba79-c359ff10eba4",
+  "scanId": "9ea42ca7-48d8-4d5c-929a-5f6144cea2b9",
+  "status": "completed",
+  "phase": "completed",
+  "officialScanId": "6cbd978b-af83-4750-b2a4-171ba0ef6c95",
+  "coverage": {
+    "additionalExclusions": 0,
+    "excludedPaths": [],
+    "findingsTotal": 0,
+    "reportTruncated": false,
+    "scope": [
+      "."
+    ]
+  },
+  "cost": {
+    "estimatedUsd": 0.270424255
+  },
+  "credentialRemoved": true,
+  "stage": "Concluído"
+}

@@ -58,7 +58,13 @@ function ComposerMenu({ label, title, trigger, disabled, children, kind, trigger
       onClick={e => { if (e.target instanceof Element && e.target.closest('button:enabled')) close(); }}
       onBlur={e => { if (e.relatedTarget instanceof Element && !e.currentTarget.contains(e.relatedTarget) && e.relatedTarget !== anchor.current) e.currentTarget.hidePopover(); }}
       onKeyDown={e => {
-        if (e.key === 'Tab') { e.currentTarget.hidePopover(); return; }
+        if (e.key === 'Tab') {
+          // The popover items are outside the normal tab order. Resume from
+          // the trigger so hiding the currently focused item cannot drop focus.
+          close();
+          if(e.shiftKey)e.preventDefault();
+          return;
+        }
         if (e.key === 'Escape') { e.preventDefault(); close(); return; }
         if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) return;
         e.preventDefault();
@@ -96,9 +102,9 @@ export function ChatComposerMenus({ mode, onMode, proposing, hasAttachment, disa
   return <>
     <ComposerMenu kind="actions" label="Adicionar à mensagem" trigger={<Plus size={19}/>} disabled={disabled}>
       <button type="button" role="menuitem" tabIndex={-1} disabled={proposing} onClick={onAttach}><Paperclip size={16}/>Anexar foto ou arquivo</button>
-      <button type="button" role="menuitemcheckbox" tabIndex={-1} aria-checked={proposing} disabled={hasAttachment || !canPropose} onClick={onPropose}>
+      {canPropose && <button type="button" role="menuitemcheckbox" tabIndex={-1} aria-checked={proposing} disabled={hasAttachment} onClick={onPropose}>
         <ListChecks size={16}/>Pedir verificação{proposing && <Check size={15} className="composer-selected"/>}
-      </button>
+      </button>}
     </ComposerMenu>
     <ComposerMenu kind="approval" label="Modo de aprovação" title={'Modo de aprovação · ' + approvalModes[mode]} disabled={disabled}
       triggerLabel={'Modo de aprovação, ' + current.trigger}

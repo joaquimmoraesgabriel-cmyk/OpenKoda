@@ -24,6 +24,8 @@ pub struct Event {
     pub at: String,
     pub message: String,
     pub kind: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub security_scan: Option<crate::security_scan::Receipt>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -190,5 +192,5 @@ pub struct Execution {
 pub fn now() -> String { chrono::Utc::now().to_rfc3339() }
 pub fn id() -> String { uuid::Uuid::new_v4().to_string() }
 pub fn event(message: impl Into<String>, kind: &str) -> Event {
-    Event { id: id(), at: now(), message: message.into(), kind: kind.into() }
+    Event { id: id(), at: now(), message: message.into(), kind: kind.into(), security_scan: None }
 }

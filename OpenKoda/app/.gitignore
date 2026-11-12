@@ -6,4 +6,6 @@ playwright-report/
 .local/
 .test-work/
 releases/
+security-runtime/bin/
+security-runtime/python/
 *.log

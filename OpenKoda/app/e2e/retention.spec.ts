@@ -193,7 +193,7 @@ test('inspeção confirma consolidação Kali após resposta perdida sem novo ap
   await expect(review.getByRole('button',{name:'Excluir itens revisados permanentemente',exact:true})).toHaveCount(0);
 });
 
-test('retenção revisa captura por hash e preserva aviso do histórico após exclusão',async({page})=>{
+test('retenção revisa captura por hash e preserva aviso do histórico após exclusão', { tag: '@source-edition' }, async ({page})=>{
   await retentionFixture(page,'capture');const panel=page.locator('.retention');
   const selection=panel.getByRole('checkbox',{name:/Captura da operação local/});
   await expect(selection).toBeVisible();expect(await calls(page,'retention.apply')).toEqual([]);
@@ -209,7 +209,7 @@ test('retenção revisa captura por hash e preserva aviso do histórico após ex
   expect(await calls(page,'retention.apply')).toHaveLength(1);
 });
 
-test('retenção exige seleção, revisão e frase exata sem exclusão automática',async({page})=>{
+test('retenção exige seleção, revisão e frase exata sem exclusão automática', { tag: '@source-edition' }, async ({page})=>{
   await retentionFixture(page);const panel=page.locator('.retention');
   await expect(panel.getByRole('button',{name:'Revisar exclusão selecionada',exact:true})).toBeDisabled();
   expect(await calls(page,'retention.plan')).toEqual([]);expect(await calls(page,'retention.apply')).toEqual([]);
@@ -232,7 +232,7 @@ test('retenção exige seleção, revisão e frase exata sem exclusão automáti
   expect(await calls(page,'settings.save')).toEqual([]);
 });
 
-test('retenção descarta confirmação ao mudar a seleção e bloqueia plano expirado',async({page})=>{
+test('retenção descarta confirmação ao mudar a seleção e bloqueia plano expirado', { tag: '@source-edition' }, async ({page})=>{
   await retentionFixture(page,'expired');await prepare(page);const panel=page.locator('.retention');
   await expect(panel.getByLabel('Plano de exclusão')).toContainText('Expirado');
   await expect(page.getByLabel('Frase de confirmação',{exact:true})).toBeDisabled();
@@ -241,7 +241,7 @@ test('retenção descarta confirmação ao mudar a seleção e bloqueia plano ex
   await expect(panel.getByLabel('Plano de exclusão')).toHaveCount(0);expect(await calls(page,'retention.apply')).toEqual([]);
 });
 
-test('inventário de retenção recupera disputa inicial e limpa somente erros de consulta',async({page})=>{
+test('inventário de retenção recupera disputa inicial e limpa somente erros de consulta', { tag: '@source-edition' }, async ({page})=>{
   await retentionFixture(page,'busy-inventory');const panel=page.locator('.retention');
   const update=panel.getByRole('button',{name:'Atualizar arquivos e histórico'});
   const choice=panel.getByRole('checkbox',{name:/Backup do laboratório/});
@@ -257,7 +257,7 @@ test('inventário de retenção recupera disputa inicial e limpa somente erros d
   expect(await calls(page,'retention.plan')).toHaveLength(1);expect(await calls(page,'retention.apply')).toHaveLength(0);
 });
 
-test('retenção recusa arquivo alterado e atualizar inventário não repete exclusão',async({page})=>{
+test('retenção recusa arquivo alterado e atualizar inventário não repete exclusão', { tag: '@source-edition' }, async ({page})=>{
   await retentionFixture(page,'stale');await prepare(page);await confirm(page);const panel=page.locator('.retention');
   await expect(panel.getByLabel('Plano de exclusão')).toContainText('Recusado');
   await expect(panel.getByLabel('Plano de exclusão')).toContainText('Arquivo alterado após a revisão');
@@ -267,7 +267,7 @@ test('retenção recusa arquivo alterado e atualizar inventário não repete exc
   await expect(panel.getByRole('button',{name:'Excluir itens revisados permanentemente',exact:true})).toHaveCount(0);
 });
 
-test('retenção parcial conserva resultado e não oferece repetir a exclusão',async({page})=>{
+test('retenção parcial conserva resultado e não oferece repetir a exclusão', { tag: '@source-edition' }, async ({page})=>{
   await retentionFixture(page,'partial');await prepare(page);await confirm(page);const panel=page.locator('.retention');
   await expect(panel.getByLabel('Plano de exclusão')).toContainText('Resultado parcial');
   await expect(panel.getByLabel('Plano de exclusão')).toContainText('Nenhuma exclusão será repetida automaticamente.');
@@ -275,7 +275,7 @@ test('retenção parcial conserva resultado e não oferece repetir a exclusão',
   expect(await calls(page,'retention.apply')).toHaveLength(1);
 });
 
-test('retenção desconhecida bloqueia novo plano e reconcilia apenas após inspeção explícita',async({page})=>{
+test('retenção desconhecida bloqueia novo plano e reconcilia apenas após inspeção explícita', { tag: '@source-edition' }, async ({page})=>{
   await retentionFixture(page,'unknown');await prepare(page);await confirm(page);const panel=page.locator('.retention');
   await expect(panel.getByLabel('Plano de exclusão')).toContainText('Resultado desconhecido');
   await expect(panel.getByRole('checkbox',{name:/Backup do laboratório/})).toBeDisabled();
@@ -288,7 +288,7 @@ test('retenção desconhecida bloqueia novo plano e reconcilia apenas após insp
   expect(await calls(page,'retention.apply')).toHaveLength(1);
 });
 
-test('retenção bloqueada por avaliação ativa informa o motivo sem presumir exclusão anterior',async({page})=>{
+test('retenção bloqueada por avaliação ativa informa o motivo sem presumir exclusão anterior', { tag: '@source-edition' }, async ({page})=>{
   await retentionFixture(page,'active');const panel=page.locator('.retention');
   await expect(panel).toContainText('Encerre ou reconcilie avaliações ativas');
   await expect(panel).not.toContainText('Há uma exclusão em andamento');
@@ -297,7 +297,7 @@ test('retenção bloqueada por avaliação ativa informa o motivo sem presumir e
 });
 
 
-test('nova retenção de captura parcial mostra o recibo anterior e exige outra confirmação',async({page})=>{
+test('nova retenção de captura parcial mostra o recibo anterior e exige outra confirmação', { tag: '@source-edition' }, async ({page})=>{
   await retentionFixture(page,'kali_partial');const panel=page.locator('.retention');
   await panel.getByRole('checkbox',{name:/Captura do Kali do laboratório/}).check();
   await panel.getByRole('button',{name:'Revisar exclusão selecionada',exact:true}).click();

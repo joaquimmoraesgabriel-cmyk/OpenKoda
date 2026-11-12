@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "OpenKoda",
-  "version": "0.1.19",
+  "version": "0.2.0",
   "identifier": "com.openkoda.desktop",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -21,6 +21,7 @@
     "active": true,
     "targets": ["nsis"],
     "resources": {
+      "../security-runtime/": "security-runtime/",
       "../docs/avisos/AVISOS.txt": "avisos/AVISOS.txt",
       "../docs/avisos/Prestige-UI-LICENSE.txt": "avisos/Prestige-UI-LICENSE.txt",
       "../docs/avisos/Cindy-LICENSE.txt": "avisos/Cindy-LICENSE.txt",

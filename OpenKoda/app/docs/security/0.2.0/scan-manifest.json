@@ -1,0 +1,96 @@
+{
+  "documentType": "codex-security.scan-manifest",
+  "scan": {
+    "artifacts": [
+      {
+        "mediaType": "application/json",
+        "path": "findings.json",
+        "sha256": "dbfbb9cc8f8eadd023379d0ccb59f8568240a74b92b7936ec510d8757849b4e2"
+      }
+    ],
+    "completedAt": "2026-11-12T14:25:17.603910Z",
+    "findingsRef": "findings.json",
+    "id": "6cbd978b-af83-4750-b2a4-171ba0ef6c95",
+    "mode": "repository",
+    "preservedCheckpointHeads": {
+      ".": "checkpoint-heads/466ef62ad4eaa9c6ed0cadeee1512b028847daf6a5797414a68a4062b8eb8264.json"
+    },
+    "preservedSources": {
+      "checkpoint-heads/466ef62ad4eaa9c6ed0cadeee1512b028847daf6a5797414a68a4062b8eb8264.json": "466ef62ad4eaa9c6ed0cadeee1512b028847daf6a5797414a68a4062b8eb8264",
+      "checkpoints/2136b277b3cae51123fba7dbe252a4271408f63cee931778c3d891aa7b3c8a8b.json": "a15fc2e9f7b3722e27cb3b9c36e7c74db0f71eff07051113d661c039bfc43e62",
+      "checkpoints/262f1d8a9aa7a312710a8058b54139b717b3b39a0f53c8ce722997e2e3b89129.json": "262f1d8a9aa7a312710a8058b54139b717b3b39a0f53c8ce722997e2e3b89129",
+      "checkpoints/26c33d218376f8b4c73d0d6d79c4f1d75de16f74b16541547e81bb187216ee98.json": "26c33d218376f8b4c73d0d6d79c4f1d75de16f74b16541547e81bb187216ee98",
+      "checkpoints/4ba3735fe7b62b80d4a454cf916827b9f92de6a38afee1b7b5bb77a7846131a7.json": "4ba3735fe7b62b80d4a454cf916827b9f92de6a38afee1b7b5bb77a7846131a7",
+      "checkpoints/55c204ec526b869c665db95ca2f74b03ca86c38f6bd6f8b43b31f553ac06478b.json": "cc95b673d16f57d180cc4a7a50f3e58ada964a134d183813ad2f205798847ec7",
+      "checkpoints/be1ef39df1e31801ef7fb74658e663e1626bda1eaf86066a6c158f6e5259de21.json": "be1ef39df1e31801ef7fb74658e663e1626bda1eaf86066a6c158f6e5259de21",
+      "checkpoints/f87e62bd623ee7d5f89bfd9d2219d2954e4d585a1a5b47a94e07c4af6034a48b.json": "b1b6c2ec9894f8e039a12fbc8e463233767b22b9d1821bc616513315b6a01189",
+      "source-order/98b0624ee45d452615b4e47c1d083a33d9780f6375d822b721865858f49b3c15.json": "98b0624ee45d452615b4e47c1d083a33d9780f6375d822b721865858f49b3c15"
+    },
+    "producer": {
+      "name": "codex-security-plugin",
+      "version": "0.1.95"
+    },
+    "review": {
+      "excludedPaths": []
+    },
+    "scope": {
+      "context": "Analise a seguran\u00e7a do c\u00f3digo do pr\u00f3prio OpenKoda. Priorize fronteiras IPC, gest\u00e3o de processos do motor e tratamento de credenciais. N\u00e3o edite arquivos. Produza o relat\u00f3rio com cobertura e evid\u00eancias. Repository-wide scan of revision 58fa65e48886defed56dc6e9569b0531ffc04acf.",
+      "excludePaths": [],
+      "includePaths": [
+        "."
+      ],
+      "limitations": [
+        "Coverage is partial: 39 distinct fully reviewed source paths out of the SDK estimate of 252; the remaining 213 paths were not reviewed, so no repository-wide clean conclusion is claimed.",
+        "The checkout has no scripts directory, although Rust compile-time includes reference scripts/environment-helper.py, scripts/kali-executor.py, scripts/kali-bootstrap.py, scripts/kali-archive-inspect.py, and scripts/kali-restore-marker.py. The Linux bootstrap, executor, and archive helper behavior could not be reviewed.",
+        "No Tauri config, capability, or permission files are present in the checkout; packaged WebView CSP and navigation restrictions could not be confirmed.",
+        "The pinned @openai/codex-security implementation is not present in the reviewed source. Whether its child tools inherit or filter the provider API key remains unresolved.",
+        "Root and reviewed nested SECURITY.md resolution returned no policy content. No knowledge-base file, target-path inventory, or reviewer feedback file was supplied."
+      ],
+      "runtimeStatus": "Source-only offline review; application and test code were not run.",
+      "summary": "No validated exploitable vulnerabilities were established in the 39 distinct source paths fully reviewed. This is partial coverage of the repository-wide scan: the SDK estimates 252 in-scope files, leaving 213 unreviewed.",
+      "validationMode": "Manual source tracing and control/counterevidence review. No exploit was reproduced."
+    },
+    "sealedAt": "2026-11-12T14:25:17.603910Z",
+    "startedAt": "2026-11-12T14:10:57.020027Z",
+    "status": "completed",
+    "target": {
+      "displayName": "OpenKoda-code",
+      "kind": "git_revision",
+      "revision": "58fa65e48886defed56dc6e9569b0531ffc04acf",
+      "targetId": "target_sha256_d886f909a6bf154fe9655d34666997fd19987ce66516598a738cc54c6c56ac48"
+    },
+    "threatModel": {
+      "assets": [
+        "Provider API credentials and their intended provider-use authority",
+        "Local project, assessment, evidence, and workflow data",
+        "Host files and managed WSL/Kali environment state",
+        "Authority to issue provider requests or perform local engine operations"
+      ],
+      "assumptions": [
+        "The application runs with the desktop user's local privileges.",
+        "No external unauthenticated attacker path is assumed without source evidence.",
+        "The checkout omits packaged Tauri configuration, embedded WSL helper scripts, and pinned SDK internals; corresponding deployment and child-process properties are unverified."
+      ],
+      "attackerCapabilities": [
+        "Influence data submitted through the local WebView IPC or imported into project/evidence workflows",
+        "Supply untrusted repository content that the local security scanner analyzes",
+        "Interact with a lower-trust local workload only if a source-backed interface permits it"
+      ],
+      "securityObjectives": [
+        "Validate and authorize each IPC action against the exact values used by sensitive operations",
+        "Keep credential bytes unavailable to the WebView and untrusted workflows except for intended provider requests",
+        "Constrain engine process authority and treat uncertain termination as unresolved",
+        "Prevent untrusted imported or returned content from crossing host and data boundaries"
+      ],
+      "summary": "OpenKoda is a local Tauri desktop app. `src-tauri/src/lib.rs:71-82` defines the single Tauri `request` IPC command and checks that the caller is the `main` window; line 448 registers that command. Native services manage project data, provider credentials, provider requests, WSL/Kali work, and the local Codex Security runtime. The code uses Windows DPAPI for provider-key storage (`src-tauri/src/ai.rs:745-754`) and fixed provider endpoints (`src-tauri/src/ai_provider.rs:24-61`). The repository does not establish a public remote API. Untrusted project/evidence/repository content can enter local workflows, so the security review traced those paths to sensitive operations. The scanner key is passed to the local SDK runtime and set in its worker environment (`src-tauri/src/security_scan.rs:361-365`, `security-runtime/worker.mjs:35-40`); the downstream SDK child-process boundary is unavailable here.",
+      "trustBoundaries": [
+        "Local WebView to Rust through Tauri IPC",
+        "Rust services to local persistent storage and Windows DPAPI",
+        "Rust process supervisors to WSL/Kali and the Node SDK runtime",
+        "Security-scanner SDK tools to attacker-controlled repository content",
+        "Application to fixed external AI-provider endpoints"
+      ]
+    }
+  },
+  "schemaVersion": "1.0"
+}

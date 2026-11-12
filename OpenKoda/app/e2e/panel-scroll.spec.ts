@@ -23,7 +23,7 @@ async function checkIndependentScroll(page: Page, menu: Locator, detail: Locator
   expect(await position(page.getByRole('main'))).toBe(0);
 }
 
-test('as categorias e o conteúdo das configurações rolam de forma independente', async ({page}) => {
+test('as categorias e o conteúdo das configurações rolam de forma independente', { tag: '@source-edition' }, async ({page}) => {
   await page.setViewportSize({width: 1280, height: 580});
   await page.goto('/');
   await page.getByRole('button', {name:'Configurações', exact:true}).click();

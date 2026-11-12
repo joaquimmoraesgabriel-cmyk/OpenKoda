@@ -131,8 +131,9 @@ impl Ledger {
         for mut c in existing {
             // A human allocation before the first policy is still a debit.
             // Adopt quantified receipts without changing their amounts/rates.
-            if first_epoch&&c.epoch_id.is_none()&&(c.priced.is_some()||c.assumed.is_some()){c.epoch_id=m.epoch_id.clone();c.excluded=false;save_charge(&tx,&c)?;}
-            if input.enabled&&c.price.is_none()&&c.priced.is_none()&&c.assumed.is_none(){c.excluded=true;save_charge(&tx,&c)?;}
+            let sdk_hold=c.resolution.as_ref().is_some_and(|r|r["kind"]=="security_sdk_cap");
+            if first_epoch&&c.epoch_id.is_none()&&(c.priced.is_some()||c.assumed.is_some()||sdk_hold){c.epoch_id=m.epoch_id.clone();c.excluded=false;save_charge(&tx,&c)?;}
+            if input.enabled&&c.price.is_none()&&c.priced.is_none()&&c.assumed.is_none()&&!sdk_hold{c.excluded=true;save_charge(&tx,&c)?;}
         }
         let p=Policy{revision:model::id(),epoch_id:m.epoch_id.clone(),enabled:input.enabled,installation_limit_usd:installation.map(usd),assessment_limit_usd:assessment.map(usd),prices,created_at:model::now()};m.revision=Some(p.revision.clone());
         tx.execute("INSERT INTO budget_policies VALUES(?1,?2)",params![p.revision,serde_json::to_string(&p).map_err(err)?]).map_err(err)?;tx.execute("UPDATE budget_meta SET data=?1 WHERE id=1",[serde_json::to_string(&m).map_err(err)?]).map_err(err)?;tx.commit().map_err(err)
@@ -164,6 +165,27 @@ impl Ledger {
         }else{None};
         let charge=Charge{id:id.into(),scope,epoch_id:m.epoch_id,policy_revision:p.as_ref().map(|p|p.revision.clone()),model:spec.model.clone(),endpoint:spec.endpoint.clone(),created_at:model::now(),state:"reserved".into(),reserved,priced:None,assumed:None,price,input_tokens:None,output_tokens:None,review_id,slot,excluded:false,resolution:None,dispatched_at:None};
         tx.execute("INSERT INTO budget_charges VALUES(?1,?2,?3,?4)",params![charge.id,charge.scope,charge.state,serde_json::to_string(&charge).map_err(err)?]).map_err(err)?;tx.commit().map_err(err)?;Ok(charge_public(&charge))
+    }
+    // The SDK manages an unknown number of model calls. Reserve its explicit
+    // USD limit directly rather than estimating a fictitious token count.
+    pub(super) fn reserve_security(&self,id:&str,assessment:&str,provider:ProviderId,model:&str,cap:u64)->Result<(),String>{
+        let mut db=self.lock()?;
+        let tx=db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate).map_err(err)?;
+        let m=meta(&tx)?;let p=policy(&tx)?;let current=charges(&tx)?;let scope=scope(&m,assessment);
+        if current.iter().filter(|c|c.scope==scope&&c.state!="not_dispatched").count()>=100{return Err("Limite de operações de IA desta avaliação atingido.".into());}
+        if let Some(p)=p.as_ref().filter(|p|p.enabled){admit(&current,&m,p,&scope,cap)?;}
+        let charge=Charge{id:id.into(),scope,epoch_id:m.epoch_id,policy_revision:p.map(|p|p.revision),model:model.into(),endpoint:provider.endpoint().into(),created_at:model::now(),state:"reserved".into(),reserved:Some(cap),priced:None,assumed:None,price:None,input_tokens:None,output_tokens:None,review_id:None,slot:0,excluded:false,resolution:Some(json!({"kind":"security_sdk_cap"})),dispatched_at:None};
+        tx.execute("INSERT INTO budget_charges VALUES(?1,?2,?3,?4)",params![charge.id,charge.scope,charge.state,serde_json::to_string(&charge).map_err(err)?]).map_err(err)?;
+        tx.commit().map_err(err)
+    }
+    pub(super) fn security_settle(&self,id:&str,estimate:Option<u64>)->Result<(),String>{
+        self.transition(id,|c|{
+            if c.state!="dispatched"||c.resolution.as_ref().is_none_or(|r|r["kind"]!="security_sdk_cap"){return Err(err("SDK settlement"));}
+            if let Some(amount)=estimate{
+                c.state="assumed".into();c.assumed=Some(amount);c.resolution=Some(json!({"kind":"security_sdk_estimate","billingAmountKnown":false}));
+            }else{c.state="unknown".into();}
+            Ok(())
+        }).map(|_|())
     }
     pub(super) fn preflight(&self,specs:&[Spec],consent:Option<&Consent>)->Result<(),String>{
         let db=self.lock()?;let m=meta(&db)?;let Some(p)=policy(&db)?.filter(|p|p.enabled)else{return Ok(());};let consent=consent.ok_or("Revise e confirme a estimativa de custo antes de iniciar a investigação.")?;

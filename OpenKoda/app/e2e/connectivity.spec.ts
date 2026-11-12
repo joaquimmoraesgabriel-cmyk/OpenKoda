@@ -10,7 +10,7 @@ async function generalSettings(page: Page) {
 
 test('a prévia não atribui ao Windows o estado online do navegador', async ({ page }) => {
   await page.addInitScript(() => Object.defineProperty(navigator, 'onLine', { value: true }));
-  await page.goto('/?area=tecnica');
+  await page.goto('/');
   const panel = await generalSettings(page);
   await expect(panel.getByText('O indicador do Windows está indisponível na prévia do navegador.')).toBeVisible();
   await expect(panel.getByRole('button')).toHaveCount(0);
@@ -49,7 +49,7 @@ test('reabrir as configurações compartilha a consulta e preserva o acesso aos 
       },
     };
   }, { snapshot, observedAt });
-  await page.goto('/?area=tecnica');
+  await page.goto('/');
   const panel = await generalSettings(page);
   const read = panel.getByRole('button', { name: 'Consultar conectividade' });
   await expect(panel.getByRole('status')).toContainText('Ainda não consultado');
@@ -70,6 +70,6 @@ test('reabrir as configurações compartilha a consulta e preserva o acesso aos 
   await expect(panel).not.toContainText('Private fixture diagnostic');
   await read.click();
   await expect(panel.getByRole('status')).toContainText('Desconectado da rede');
-  await page.getByRole('button', { name: 'Projetos', exact: true }).click();
-  await expect(page.getByText('Projeto disponível sem rede', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Início', exact: true }).click();
+  await expect(page.getByRole('button',{name:'Projeto disponível sem rede',exact:true})).toBeVisible();
 });

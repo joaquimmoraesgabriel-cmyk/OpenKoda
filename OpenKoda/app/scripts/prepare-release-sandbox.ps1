@@ -21,8 +21,12 @@ $in=Join-Path $directory 'input'; $out=Join-Path $directory 'result'
 New-Item -ItemType Directory -Path $in,$out | Out-Null
 Copy-Item -LiteralPath $inputInstaller.FullName -Destination (Join-Path $in 'setup.exe')
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'sandbox-release-guest.ps1') -Destination $in
+if ([version]$release.version -ge [version]'0.2.0') {
+    if ($release.securityRuntime.sha256 -notmatch '^[a-f0-9]{64}$') { throw 'Missing build fingerprint for the installed SDK.' }
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'security-runtime-inventory.mjs') -Destination $in
+}
 if ((Get-FileHash -LiteralPath (Join-Path $in 'setup.exe')).Hash.ToLowerInvariant() -ne $release.sha256) { throw 'Copied installer changed.' }
-@{version=$release.version;installerSha256=$release.sha256;payloadSha256=$extract.newPayload.verification.sha256} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $in 'release.json') -Encoding UTF8
+@{version=$release.version;installerSha256=$release.sha256;payloadSha256=$extract.newPayload.verification.sha256;securityRuntime=$release.securityRuntime} | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $in 'release.json') -Encoding UTF8
 $inputXml=[Security.SecurityElement]::Escape($in); $outputXml=[Security.SecurityElement]::Escape($out)
 $config=Join-Path $directory 'test-release.wsb'
 @"

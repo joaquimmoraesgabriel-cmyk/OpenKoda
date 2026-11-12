@@ -9,6 +9,9 @@ on:
       - 'OpenKoda/app/src/**'
       - 'OpenKoda/app/src-tauri/**'
       - 'OpenKoda/app/scripts/package-windows.ps1'
+      - 'OpenKoda/app/scripts/prepare-security-runtime.ps1'
+      - 'OpenKoda/app/scripts/security-runtime-inventory.mjs'
+      - 'OpenKoda/app/security-runtime/**'
       - 'OpenKoda/app/scripts/sandbox-release-guest.ps1'
       - 'OpenKoda/app/scripts/verify-bundled-binary.py'
       - 'OpenKoda/app/scripts/windows_release_recovery.py'
@@ -41,6 +44,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          architecture: 'x64'
       - name: Install locked frontend dependencies
         working-directory: OpenKoda/app
         run: npm ci
@@ -68,6 +75,7 @@ jobs:
             runId = $env:GITHUB_RUN_ID
             setupSha256 = $setupHash
             sourceExeSha256 = (Get-FileHash -LiteralPath $exe.FullName).Hash.ToLowerInvariant()
+            securityRuntime = $package.securityRuntime
           } | ConvertTo-Json | Set-Content -LiteralPath $manifest -Encoding utf8
           "manifest-sha256=$((Get-FileHash -LiteralPath $manifest).Hash.ToLowerInvariant())" >> $env:GITHUB_OUTPUT
       - uses: actions/upload-artifact@v4

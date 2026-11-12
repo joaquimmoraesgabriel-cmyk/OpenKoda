@@ -21,6 +21,7 @@
 .project-shell .rail-button { border-radius: 11px; }
 .project-shell .rail-button[aria-current]::before { display: none; }
 .project-shell .project-tree { padding-block: 16px; }
+.tree-brand { padding: 0 10px 18px; font-size: 1.05rem; font-weight: 640; letter-spacing: -.035em; }
 .project-shell .tree-new {
   border-color: transparent;
   background: transparent;

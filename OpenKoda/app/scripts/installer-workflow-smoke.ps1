@@ -142,16 +142,13 @@ function Extract-Payload($Release,[string]$Destination,[string]$Tool){
 }
 
 function Test-BundleResources([string]$Destination, [string]$Installer, [string]$Extractor) {
-    $configPath = Plain-Owned (Join-Path $appRoot 'src-tauri/tauri.conf.json')
-    $resources = (Read-Json $configPath).bundle.resources
-    $expected = [ordered]@{}
-    foreach ($resource in $resources.PSObject.Properties) {
-        $relative = [string]$resource.Value
-        if ($relative -cnotmatch '^(avisos|recuperacao)/[A-Za-z0-9_-]+\.[A-Za-z0-9]+$') {
-            throw 'Unexpected destination for a bundled resource.'
-        }
-        $source = Plain-Owned (Join-Path (Split-Path $configPath) $resource.Name)
-        $expected[$relative] = Sha $source
+    # Immutable 0.1.12 payload, committed in 2977d47 and checked against its extraction receipt.
+    $expected = [ordered]@{
+        'avisos/AVISOS.txt'='6a04d6e60ccff562536820c15f0d8d1e68c727c22b982289bd5f3c2150186c33'
+        'avisos/COPYRIGHT-library.html'='5647be074c8edf7339fd863055923a8fc80bc5610a8d4661ec3b767b9d392c27'
+        'avisos/fontes-MPL.zip'='fc9f8ffb6b16d2f01a4cd295f983276ea4f71f4009bbd6d98305bbbce9f03b85'
+        'recuperacao/windows_release_recovery.py'='6ed8d57fc6397b1a3c45ef920a862fa1d6297d275689125757277d4a1f23703f'
+        'recuperacao/RECUPERACAO-WINDOWS.md'='7f8700f7e605253e7d49619f2254934ac6b153fab275ba7907a81ddc13ba1766'
     }
     if ($Extractor) {
         New-Item -ItemType Directory -Path $Destination | Out-Null

@@ -428,6 +428,28 @@ impl AiService {
     #[cfg(test)]
     fn credential(&self)->Result<(Zeroizing<String>,String),String>{ self.provider_credential(ProviderId::OpenAI) }
 
+    pub(crate) fn security_selection(&self,store:&Store,assessment:Option<&str>)->Result<(ProviderId,String,bool),String>{
+        let cfg=self.config_for(store,assessment,false)?;
+        let provider=ProviderId::parse(&cfg.provider)?;
+        Ok((provider,cfg.model,self.revision(provider)?.is_some()))
+    }
+    pub(crate) fn security_key(&self,store:&Store,assessment:&str,expected:ProviderId,model:&str)->Result<Zeroizing<String>,String>{
+        let cfg=self.config_for(store,Some(assessment),true)?;
+        if !matches!(expected,ProviderId::OpenAI|ProviderId::OpenRouter)||cfg.provider!=expected.id()||cfg.model!=model{
+            return Err("O provedor ou modelo mudou. Revise a seleção desta avaliação.".into());
+        }
+        self.provider_credential(expected).map(|(key,_)|key)
+    }
+    pub(crate) fn security_lease(&self)->Result<std::sync::MutexGuard<'_,()>,String>{
+        self.inference.try_lock().map_err(|_|"Aguarde a operação de IA antes de iniciar o SDK.".into())
+    }
+    pub(crate) fn reserve_security(&self,id:&str,assessment:&str,provider:ProviderId,model:&str,cap:u64)->Result<(),String>{
+        self.budget.reserve_security(id,assessment,provider,model,cap)
+    }
+    pub(crate) fn security_dispatched(&self,id:&str)->Result<(),String>{self.budget.dispatched(id)}
+    pub(crate) fn security_not_sent(&self,id:&str)->Result<(),String>{self.budget.not_sent(id)}
+    pub(crate) fn security_settle(&self,id:&str,estimate:Option<u64>)->Result<(),String>{self.budget.security_settle(id,estimate)}
+
     fn config_for(&self,store:&Store,assessment:Option<&str>,require_model:bool)->Result<model::Settings,String>{
         let state = store.snapshot()?;
         let settings = Self::config_in(&state,assessment,require_model)?;

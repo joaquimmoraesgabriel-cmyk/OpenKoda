@@ -1,0 +1,19 @@
+.security-scan { margin:14px 0; padding:14px 16px; border:1px solid var(--line); border-radius:12px; background:var(--surface); font-size:.86rem; overflow-wrap:anywhere; }
+.security-scan header,.security-scan>summary { display:flex; align-items:center; gap:8px; }
+.security-scan h3,.security-scan h4 { margin:0; font-size:.94rem; font-weight:600; }
+.security-scan header span { display:flex; gap:5px; align-items:center; margin-inline-start:auto; font-size:.8rem; }
+.security-scan :is(small,time) { color:var(--muted); font-size:.76rem; }
+.security-scan>small { display:block; margin-block:6px; }
+.security-scan details { margin-block:10px; }
+.security-scan summary { cursor:pointer; padding-block:4px; font-weight:550; }
+.security-scan p { margin-block:8px; }
+.security-scan form { display:grid; gap:6px; justify-items:start; }
+.security-scan label { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
+.security-scan input[type=number] { width:7rem; }
+.security-scan li { margin-block:5px; }
+.security-scan ul,.security-events { padding-inline-start:20px; }
+.security-scan-result { border-block-start:1px solid var(--line); margin-top:12px; padding-top:12px; }
+.security-scan-result h4 span { font-size:.8rem; color:var(--muted); margin-inline-start:4px; }
+.security-findings { list-style:none; padding:0; }
+.security-findings li { border-block-end:1px solid var(--line); }
+.security-findings summary small,.security-events time { margin-inline-start:8px; }

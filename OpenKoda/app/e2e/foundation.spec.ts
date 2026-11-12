@@ -111,12 +111,12 @@ test('navegação responde ao teclado em janela menor sem rolagem horizontal', a
   await page.screenshot({ path: test.info().outputPath('kali-1024.png'), fullPage: true });
 });
 
-test('salva configurações para a próxima avaliação sem testar conexão implicitamente', async ({ page }) => {
+test('salva configurações para a próxima avaliação sem testar conexão implicitamente', { tag: '@source-edition' }, async ({ page }) => {
   const providerRequests: string[] = [];
   page.on('request', request => {
     if (request.url().startsWith('https://api.example.test')) providerRequests.push(request.url());
   });
-  await page.goto('/?area=tecnica');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Configurações', exact: true }).click();
   await page.getByRole('button',{name:'IA e modelos',exact:true}).click();
   await page.getByLabel('Endpoint', { exact: true }).fill('https://api.example.test/v1');
@@ -132,8 +132,8 @@ test('salva configurações para a próxima avaliação sem testar conexão impl
   expect(providerRequests).toEqual([]);
 });
 
-test('configurações e navegação continuam legíveis em janela estreita',async({page})=>{
-  await page.setViewportSize({width:390,height:844});await page.goto('/?area=tecnica');
+test('configurações e navegação continuam legíveis em janela estreita', { tag: '@source-edition' }, async ({page})=>{
+  await page.setViewportSize({width:390,height:844});await page.goto('/');
   await page.getByRole('button',{name:'Configurações',exact:true}).click();
   await page.getByRole('button',{name:'IA e modelos',exact:true}).click();
   await expect(page.getByLabel('Endpoint',{exact:true})).toBeVisible();

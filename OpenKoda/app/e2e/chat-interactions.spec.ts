@@ -16,9 +16,9 @@ async function installChat(page: Page, turns: Turn[] = [], running = false) {
   const snapshot = emptySnapshot();
   snapshot.settings = { ...snapshot.settings, provider: 'openai', model: 'modelo-original', endpoint: 'https://api.openai.com/v1', hasApiKey: true };
   const date = '2026-01-01T12:00:00Z';
-  snapshot.projects = [{ id: 'fixture', name: 'Laboratório', kind: 'network', target: '127.0.0.1', description: '', createdAt: date }];
+  snapshot.projects = [{ id: 'fixture', name: 'Laboratório', kind: 'code', target: 'D:/Fixture/source', description: '', createdAt: date }];
   snapshot.assessments = ['A', 'B'].map(letter => ({
-    id: letter, projectId: 'fixture', title: 'Conversa ' + letter, kind: 'network', target: '127.0.0.1',
+    id: letter, projectId: 'fixture', title: 'Conversa ' + letter, kind: 'code', target: 'D:/Fixture/source',
     objective: '', status: 'completed', events: [
       { id: 'e1', message: 'Alvo resolvido', kind: 'info', at: date },
       { id: 'e2', message: 'Leitura concluída', kind: 'info', at: date },
@@ -27,7 +27,7 @@ async function installChat(page: Page, turns: Turn[] = [], running = false) {
     aiSelection: { provider: 'openai', model: 'modelo-original' },
   }));
   await page.addInitScript(({ snapshot, turns, running }) => {
-    const scope = window.__scopeFixture(snapshot, ['network.tcp-connect.v1', 'ai.remote-review.v1']);
+    const scope = window.__scopeFixture(snapshot, ['source.rules.v1', 'ai.remote-review.v1']);
     const bridge: Bridge = { turns, running, calls: [] };
     window.__conversationTest = bridge;
     Object.assign(window, { isTauri: true, __TAURI_INTERNALS__: { invoke: async (_cmd: string, args: { request?: Bridge['calls'][number] }) => {
@@ -149,17 +149,20 @@ test('Ctrl + Enter escolhido continua enviando e os menus trocam em um clique', 
   const attachment = chat.getByRole('menuitem', { name: 'Anexar foto ou arquivo' });
   await expect(attachment).toBeFocused();
   await page.keyboard.press('ArrowDown');
-  await expect(chat.getByRole('menuitemcheckbox', { name: 'Pedir verificação' })).toBeFocused();
+  await expect(attachment).toBeFocused();
+  await expect(chat.getByRole('menuitemcheckbox', { name: 'Pedir verificação' })).toHaveCount(0);
   await chat.getByRole('button', { name: 'Modo de aprovação' }).click();
   await expect(chat.getByRole('menu', { name: 'Adicionar à mensagem' })).toBeHidden();
   await expect(chat.getByRole('menuitemradio', { name: 'Solicitar para ações de risco' })).toHaveAttribute('aria-checked', 'true');
   await page.keyboard.press('Escape');
   await expect(chat.getByRole('button', { name: 'Modo de aprovação' })).toBeFocused();
   await chat.getByRole('button', { name: 'Modo de aprovação' }).click();
+  await expect(chat.getByRole('menuitemradio', { name: 'Solicitar para ações de risco' })).toBeFocused();
   await page.keyboard.press('Shift+Tab');
   await expect(chat.getByRole('menu', { name: 'Modo de aprovação' })).toBeHidden();
   await expect(chat.getByRole('button', { name: 'Modo de aprovação' })).toBeFocused();
   await chat.getByRole('button', { name: 'Modo de aprovação' }).click();
+  await expect(chat.getByRole('menuitemradio', { name: 'Solicitar para ações de risco' })).toBeFocused();
   await page.keyboard.press('Tab');
   await expect(chat.getByRole('menu', { name: 'Modo de aprovação' })).toBeHidden();
   await expect(chat.getByRole('button', { name: 'Escolher modelo' })).toBeFocused();

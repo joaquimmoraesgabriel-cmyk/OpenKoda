@@ -10,15 +10,15 @@ const targets = [
   {kind:'network', label:'Rede', hint:'Endereço IP ou CIDR', icon:Network},
 ] as const;
 
-export default function ProjectWelcome({onStart}:{onStart:(kind:StartKind)=>void}) {
+export default function ProjectWelcome({onStart,sourceOnly=false}:{onStart:(kind:StartKind)=>void;sourceOnly?:boolean}) {
   const [kind,setKind]=useState<StartKind>('code');
   return <section className="welcome-stage" aria-labelledby="welcome-title">
     <div className="welcome-content">
       <div className="welcome-brand"><KMark size={28}/><span>OpenKoda</span></div>
       <h1 id="welcome-title">Seu primeiro projeto</h1>
-      <p>Escolha o que você quer analisar.</p>
+      <p>{sourceOnly?'Escolha uma pasta e revise a segurança do seu código.':'Escolha o que você quer analisar.'}</p>
       <fieldset className="welcome-targets"><legend className="sr-only">Alvo do projeto</legend>
-        {targets.map(({kind:id,label,hint,icon:Icon})=><label key={id} className="welcome-option">
+        {(sourceOnly?targets.slice(0,1):targets).map(({kind:id,label,hint,icon:Icon})=><label key={id} className="welcome-option">
           <input type="radio" name="welcome-target" value={id} checked={id===kind} onChange={()=>setKind(id)}/>
           <span className="welcome-type"><Icon size={20} strokeWidth={1.65}/></span>
           <span><strong>{label}</strong><small>{hint}</small></span>

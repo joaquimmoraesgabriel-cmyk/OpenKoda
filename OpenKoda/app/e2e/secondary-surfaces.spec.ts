@@ -24,7 +24,7 @@ test('o formulário compacto cabe na janela e as opções adicionais continuam a
   await fitsWidth(form);
 });
 
-test('conteúdos de ajustes, perfil, achados e ferramentas cabem na coluna estreita', async ({page}) => {
+test('conteúdos de ajustes, perfil, achados e diagnóstico cabem na coluna estreita', async ({page}) => {
   await page.setViewportSize({width: 390, height: 720});
   await page.emulateMedia({reducedMotion: 'reduce', colorScheme: 'dark'});
   await page.goto('/');
@@ -42,8 +42,7 @@ test('conteúdos de ajustes, perfil, achados e ferramentas cabem na coluna estre
   await expect(page.getByLabel('Nome de exibição')).toBeFocused();
   await page.getByRole('button', {name: 'Achados', exact: true}).click();
   await fitsWidth(page.getByRole('region', {name: 'Lista de achados'}));
-  await page.getByRole('button', {name: 'Kali e ferramentas', exact: true}).click();
-  await fitsWidth(page.locator('.kali-workspace'));
-  await page.getByRole('button', {name: 'Ambiente', exact: true}).click();
-  await expect(page.getByRole('heading', {name: 'Identidade e diagnóstico'})).toBeVisible();
+  await page.getByRole('button', {name: 'Configurações', exact:true}).click();
+  await categories.getByRole('button', {name:'Diagnóstico e suporte', exact:true}).click();
+  await fitsWidth(page.getByRole('region', {name:'Conteúdo de Diagnóstico e suporte'}));
 });

@@ -84,6 +84,7 @@
 .project-primary-target { display:flex; align-items:center; gap:12px; min-width:0; }
 .project-primary-target>svg { flex:none; color:var(--muted); }
 .project-primary-target>div { min-width:0; }
+.project-primary-target>.target-copy-action { flex:0 0 auto; margin-inline-start:auto; }
 .project-primary-target small,.project-primary-target strong { display:block; }
 .project-primary-target small { font-size:.73rem; color:var(--muted); margin-bottom:2px; }
 .project-primary-target strong { font-size:.87rem; font-weight:550; overflow-wrap:anywhere; }

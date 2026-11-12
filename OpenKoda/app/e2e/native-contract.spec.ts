@@ -356,8 +356,8 @@ async function saveKey(page:Page, value:string) {
   await input.fill(value);
   await wizard.getByRole('button',{name:'Salvar chave e buscar modelos'}).click();
 }
-test('credencial chega ao cofre e ativação e teste de conexão são ações distintas',async({page})=>{
-  await nativeFixture(page);await page.goto('/?area=tecnica');await openProviderSettings(page);
+test('credencial chega ao cofre e ativação e teste de conexão são ações distintas', { tag: '@source-edition' }, async ({page})=>{
+  await nativeFixture(page);await page.goto('/');await openProviderSettings(page);
   await page.getByRole('button',{name:'Conectar com chave de API'}).click();
   await saveKey(page,'fixture-not-a-real-secret');
   const wizard=page.getByRole('dialog');
@@ -372,8 +372,8 @@ test('credencial chega ao cofre e ativação e teste de conexão são ações di
   expect(await calls(page,'ai.test')).toHaveLength(1);
 });
 
-test('catálogo e modelos ativados alimentam configurações, rascunhos e avaliação existente',async({page})=>{
-  await nativeFixture(page);await page.goto('/?area=tecnica');await openProviderSettings(page);
+test('catálogo e modelos ativados alimentam configurações e uma nova análise oficial', { tag: '@source-edition' }, async ({page})=>{
+  await nativeFixture(page);await page.goto('/');await openProviderSettings(page);
   await beginProvider(page,'OpenRouter');
   await expect(page.getByRole('dialog')).toContainText('https://openrouter.ai/api/v1');
   await saveKey(page,'synthetic-not-a-key');
@@ -396,32 +396,21 @@ test('catálogo e modelos ativados alimentam configurações, rascunhos e avalia
   expect((await calls(page,'ai.models')).every(call=>call.payload.provider==='openrouter')).toBe(true);
   expect((await calls(page,'ai.provider.configure'))[0].payload).toMatchObject({provider:'openrouter',models:['example/model-a','example/model-b'],defaultModel:'example/model-a'});
   expect(await calls(page,'ai.test')).toEqual([]);
-  await page.getByRole('button',{name:'Nova avaliação',exact:true}).click();
-  await page.getByLabel('Modelo da avaliação',{exact:true}).selectOption('custom');
-  const model=page.getByLabel('Modelo',{exact:true});
-  await expect(model).toHaveValue('example/model-a');
-  await model.selectOption('example/model-b');
-  await expect(model.locator('option').filter({hasText:'fixture/model-'})).toHaveCount(0);
-  await page.getByRole('button',{name:'Combinar fontes e alvos',exact:true}).click();
-  await page.getByLabel('Modelo da avaliação',{exact:true}).selectOption('custom');
-  await model.selectOption('example/model-b');
-  await openAssessmentList(page);
-  await page.getByRole('button',{name:/Avaliação de contrato/}).first().click();
-  const conversation=page.locator('details.disclosure').filter({has:page.locator('summary').filter({hasText:'Conversa com a IA'})});
-  await conversation.locator('summary').first().click();
-  const picker=conversation.getByRole('region',{name:'Modelo desta avaliação'});
-  await picker.getByRole('button',{name:'Alterar modelo'}).click();
-  await picker.getByLabel('Modelo da avaliação',{exact:true}).selectOption('custom');
-  await picker.getByLabel('Modelo',{exact:true}).selectOption('example/model-b');
-  await picker.getByRole('button',{name:'Aplicar nesta avaliação'}).click();
-  await expect(picker).toContainText('OpenRouter · example/model-b');
-  expect((await calls(page,'ai.selection.save'))[0].payload).toEqual({assessmentId:'assessment-fixture',aiSelection:{provider:'openrouter',model:'example/model-b'}});
+  await page.getByRole('button',{name:'Início',exact:true}).click();
+  const create=page.getByRole('button',{name:'Criar projeto',exact:true});
+  const treeNew=page.getByRole('button',{name:'Novo projeto',exact:true});
+  await create.or(treeNew).first().click();
+  await page.getByRole('button',{name:'Escolher modelo'}).click();
+  const picker=page.getByRole('dialog',{name:'Escolher provedor e modelo'});
+  await expect(picker.getByRole('button',{name:'example/model-a'})).toBeVisible();
+  await picker.getByRole('button',{name:'example/model-b'}).click();
+  await expect(page.getByRole('button',{name:'Escolher modelo'})).toContainText('example/model-b');
   expect(await calls(page,'ai.ask')).toEqual([]);
 });
 
-test('provedor salvo sem modelo na versão anterior pode ser ativado sem redigitar a chave', async({page})=>{
+test('provedor salvo sem modelo na versão anterior pode ser ativado sem redigitar a chave', { tag: '@source-edition' }, async ({page})=>{
   await nativeFixture(page,false,'success','none','available','none','legacy-provider');
-  await page.goto('/?area=tecnica');await openProviderSettings(page);
+  await page.goto('/');await openProviderSettings(page);
   await page.getByRole('button',{name:'Escolher modelos e ativar'}).click();
   const wizard=page.getByRole('dialog');
   await expect(wizard.getByRole('checkbox',{name:'fixture-model'})).toBeChecked();
@@ -431,9 +420,9 @@ test('provedor salvo sem modelo na versão anterior pode ser ativado sem redigit
   expect((await calls(page,'ai.provider.configure'))[0].payload).toMatchObject({defaultModel:'fixture-model',provider:'openai'});
 });
 
-test('novos provedores admitem consulta repetida e retomada após salvar a chave',async({page})=>{
+test('novos provedores admitem consulta repetida e retomada após salvar a chave', { tag: '@source-edition' }, async ({page})=>{
   await nativeFixture(page,false,'success','none','available','none','catalog-transient');
-  await page.goto('/?area=tecnica');await openProviderSettings(page);
+  await page.goto('/');await openProviderSettings(page);
   await page.getByRole('button',{name:'Adicionar provedor'}).click();
   const wizard=page.getByRole('dialog');
   for(const domain of ['api.anthropic.com','generativelanguage.googleapis.com','api.deepseek.com','api.x.ai'])await expect(wizard.getByText(domain,{exact:true})).toBeVisible();
@@ -453,8 +442,8 @@ test('novos provedores admitem consulta repetida e retomada após salvar a chave
   expect(await calls(page,'ai.test')).toEqual([]);
 });
 
-test('voltar ou cancelar descarta a chave não salva e conserva o padrão',async({page})=>{
-  await nativeFixture(page);await page.goto('/?area=tecnica');await openProviderSettings(page);
+test('voltar ou cancelar descarta a chave não salva e conserva o padrão', { tag: '@source-edition' }, async ({page})=>{
+  await nativeFixture(page);await page.goto('/');await openProviderSettings(page);
   await beginProvider(page,'OpenAI');
   const wizard=page.getByRole('dialog');
   const credential=wizard.getByLabel('Chave de API',{exact:true});
@@ -470,8 +459,8 @@ test('voltar ou cancelar descarta a chave não salva e conserva o padrão',async
   expect(await calls(page,'ai.models')).toEqual([]);
 });
 
-test('ativar um segundo provedor conserva o padrão até a troca explícita',async({page})=>{
-  await nativeFixture(page);await page.goto('/?area=tecnica');await openProviderSettings(page);
+test('ativar um segundo provedor conserva o padrão até a troca explícita', { tag: '@source-edition' }, async ({page})=>{
+  await nativeFixture(page);await page.goto('/');await openProviderSettings(page);
   await beginProvider(page,'OpenAI');await saveKey(page,'first-provider-fixture');
   const wizard=page.getByRole('dialog');
   await wizard.getByRole('button',{name:'Ativar provedor'}).click();
@@ -488,8 +477,8 @@ test('ativar um segundo provedor conserva o padrão até a troca explícita',asy
   await expect(page.getByRole('complementary',{name:'Provedores configurados'}).getByRole('button',{name:/Groq/})).toContainText('Padrão da instalação');
 });
 
-test('nenhum modelo no catálogo mantém a credencial pendente e permite voltar sem redigitá-la',async({page})=>{
-  await nativeFixture(page);await page.goto('/?area=tecnica');await openProviderSettings(page);
+test('nenhum modelo no catálogo mantém a credencial pendente e permite voltar sem redigitá-la', { tag: '@source-edition' }, async ({page})=>{
+  await nativeFixture(page);await page.goto('/');await openProviderSettings(page);
   await beginProvider(page,'Anthropic');await saveKey(page,'empty-catalog-fixture');
   const wizard=page.getByRole('dialog');
   await expect(wizard.getByRole('status')).toContainText('O provedor não retornou modelos');
@@ -583,12 +572,12 @@ async function openRecoveryCandidate(page: Page, mode: string) {
 
 async function openSupport(page: Page, mode?: string) {
   if(mode) await nativeFixture(page,true,'success','none',mode);
-  await page.goto('/?area=tecnica');
+  await page.goto('/');
   await page.getByRole('button',{name:'Configurações',exact:true}).click();
   await page.getByRole('button',{name:'Diagnóstico e suporte',exact:true}).click();
   return page.getByRole('region',{name:'Pacote de suporte local'});
 }
-test('pacote de suporte mostra os bytes exatos, exige confirmação e confere o recibo',async({page})=>{
+test('pacote de suporte mostra os bytes exatos, exige confirmação e confere o recibo', { tag: '@source-edition' }, async ({page})=>{
   const panel=await openSupport(page,'support-ok');
   await expect(panel).toContainText('Desativada');
   expect(await calls(page,'support.review')).toEqual([]);
@@ -611,7 +600,7 @@ test('pacote de suporte mostra os bytes exatos, exige confirmação e confere o 
   expect((await calls(page,'support.export')).map(c=>c.payload)).toEqual([{reviewId,confirmation:true}]);
   expect(await calls(page,'ai.test')).toEqual([]);
 });
-for(const mode of ['changed','expired','error','receipt']) test('pacote de suporte trata falha '+mode+' sem declarar arquivo salvo',async({page})=>{
+for(const mode of ['changed','expired','error','receipt']) test('pacote de suporte trata falha '+mode+' sem declarar arquivo salvo', { tag: '@source-edition' }, async ({page})=>{
   const panel=await openSupport(page,'support-'+mode);
   await panel.getByRole('button',{name:'Preparar prévia do pacote de suporte'}).click();
   const invalidReview=['changed','expired'].includes(mode);
@@ -624,7 +613,7 @@ for(const mode of ['changed','expired','error','receipt']) test('pacote de supor
   await expect(panel.getByRole('status')).not.toContainText('Pacote de suporte salvo');
   expect(await calls(page,'support.export')).toHaveLength(invalidReview?0:1);
 });
-test('pacote de suporte na prévia do navegador explica a disponibilidade no desktop',async({page})=>{
+test('pacote de suporte na prévia do navegador explica a disponibilidade no desktop', { tag: '@source-edition' }, async ({page})=>{
   const panel=await openSupport(page);await expect(panel).toContainText('Telemetria');await expect(panel).toContainText('Desativada');
   await expect(panel).toContainText('aplicativo desktop');await expect(panel.getByRole('button')).toHaveCount(0);
 });
@@ -828,7 +817,7 @@ test('recuperação Kali com erro preserva diagnóstico e impede reenviar o mesm
 });
 
 async function openRecovery(page:Page,mode='success'){
-  await nativeFixture(page,false,'success','none','available',mode);await page.goto('/?area=tecnica');
+  await nativeFixture(page,false,'success','none','available',mode);await page.goto('/');
   await page.getByRole('button',{name:'Configurações',exact:true}).click();await page.getByRole('button',{name:'Backup e recuperação',exact:true}).click();
   await expect(page.getByRole('heading',{name:'Ativação de uma cópia',exact:true})).toBeVisible();
 }
@@ -840,7 +829,7 @@ async function stageAndReviewRecovery(page:Page){
   await expect(page.getByLabel('Revisão da ativação')).toContainText('Arquivos externos de projetos não são restaurados.');
 }
 
-test('ativação agenda a cópia revisada para próxima abertura e permite cancelar',async({page})=>{
+test('ativação agenda a cópia revisada para próxima abertura e permite cancelar', { tag: '@source-edition' }, async ({page})=>{
   await openRecovery(page);await stageAndReviewRecovery(page);
   expect((await calls(page,'activation.plan'))[0].payload).toEqual({recoveryId:'recovery-receipt-fixture'});
   await expect(page.getByRole('button',{name:'Agendar ativação revisada',exact:true})).toBeDisabled();
@@ -857,7 +846,7 @@ test('ativação agenda a cópia revisada para próxima abertura e permite cance
   expect((await calls(page,'activation.cancel'))[0].payload).toEqual({id:'activation-fixture',digest:'activation-fixture-digest'});
 });
 
-test('ativação recusada por integridade exige nova revisão sem repetir o agendamento',async({page})=>{
+test('ativação recusada por integridade exige nova revisão sem repetir o agendamento', { tag: '@source-edition' }, async ({page})=>{
   await openRecovery(page,'schedule-error');await stageAndReviewRecovery(page);
   await page.getByRole('checkbox',{name:'Revisei os perfis, os arquivos e os efeitos. Autorizo esta troca na próxima abertura do aplicativo.'}).check();
   await page.getByRole('button',{name:'Agendar ativação revisada',exact:true}).click();
@@ -869,7 +858,7 @@ test('ativação recusada por integridade exige nova revisão sem repetir o agen
   await expect(page.getByRole('heading',{name:'Troca pendente',exact:true})).toHaveCount(0);
 });
 
-test('retorno ao perfil anterior prepara nova cópia e conserva revisão explícita',async({page})=>{
+test('retorno ao perfil anterior prepara nova cópia e conserva revisão explícita', { tag: '@source-edition' }, async ({page})=>{
   await openRecovery(page,'rollback');
   expect(await calls(page,'activation.rollbackPlan')).toEqual([]);
   await page.getByRole('button',{name:'Revisar retorno ao perfil anterior',exact:true}).click();
@@ -881,7 +870,7 @@ test('retorno ao perfil anterior prepara nova cópia e conserva revisão explíc
   expect((await calls(page,'activation.rollbackPlan'))[0].payload).toEqual({});
 });
 
-test('ativação bloqueada preserva aviso e só pode ser cancelada explicitamente',async({page})=>{
+test('ativação bloqueada preserva aviso e só pode ser cancelada explicitamente', { tag: '@source-edition' }, async ({page})=>{
   await openRecovery(page,'blocked');
   await expect(page.getByRole('heading',{name:'Agendamento bloqueado',exact:true})).toBeVisible();
   await expect(page.getByText('Integridade da cópia não confirmada; perfil original preservado.',{exact:true})).toBeVisible();
@@ -891,8 +880,8 @@ test('ativação bloqueada preserva aviso e só pode ser cancelada explicitament
   await expect(page.getByRole('heading',{name:'Agendamento bloqueado',exact:true})).toHaveCount(0);
 });
 
-test('candidato só é validado com revisão humana e evidência selecionada',async({page})=>{
-  await nativeFixture(page);await page.goto('/?area=tecnica');await page.getByRole('button',{name:'Achados',exact:true}).click();
+test('candidato só é validado com revisão humana e evidência selecionada', { tag: '@source-edition' }, async ({page})=>{
+  await nativeFixture(page);await page.goto('/');await page.getByRole('button',{name:'Achados',exact:true}).click();
   await page.getByText('Candidato de contrato',{exact:true}).click();
   expect(await calls(page,'finding.validate')).toEqual([]);
   await page.getByRole('button',{name:'Validar candidato',exact:true}).click();

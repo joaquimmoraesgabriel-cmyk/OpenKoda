@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { ArrowDown, ArrowUp, ArrowUpDown, ChartNoAxesColumn, ChevronLeft, ChevronRight, FolderOpen, MessageSquare, Play, Shield } from 'lucide-react';
 import { native, request } from '../api';
 import { groupUsage, modelKey, providerName, type UsageRow } from '../usage-history';
+import { projectScanReceipts, scanStateLabel } from '../security-scan';
 import { errorMessage, findingLabels, severityLabels, shortDate, statusLabels, type Finding, type Project, type Snapshot } from '../types';
 import CopyTargetButton from './CopyTargetButton';
 import { SearchBox, Status } from './shared';
@@ -87,6 +88,8 @@ export default function ProjectInsights({ snapshot, project, selected, onConvers
   const [refresh, setRefresh] = useState(0);
   const chats = new Map(snapshot.assessments.filter(a => a.projectId === project.id).map(a => [a.id, a]));
   const executions = (snapshot.executions ?? []).filter(run => chats.has(run.assessmentId));
+  const scans = projectScanReceipts(chats.values());
+  const withResults = scans.filter(scan => scan.findingsTotal !== undefined);
   const plans = new Map((snapshot.plans ?? []).filter(plan => chats.has(plan.assessmentId)).map(plan => [plan.id, plan]));
   const findings = snapshot.findings.filter(finding => chats.has(finding.assessmentId));
   const projectUsage = (usage ?? []).filter(row => row.assessmentId !== null && chats.has(row.assessmentId));
@@ -111,17 +114,21 @@ export default function ProjectInsights({ snapshot, project, selected, onConvers
 
   const categories = [
     { key: 'conversations', title: 'Conversas', icon: MessageSquare, count: chats.size },
-    { key: 'executions', title: 'Execuções', icon: Play, count: executions.length },
+    { key: 'executions', title: 'Execuções', icon: Play, count: executions.length+scans.length },
     { key: 'findings', title: 'Achados', icon: Shield, count: findings.length },
     { key: 'usage', title: 'Uso de IA', icon: ChartNoAxesColumn, count: usage ? projectUsage.reduce((sum, row) => sum + row.requests, 0) : null },
   ] as const;
 
   let table: ReactNode;
   if (view === 'conversations') {
-    const rows: Row[] = [...chats.values()].map(chat => ({ id: chat.id, cells: [conversationCell(chat.id),
-      { text: statusLabels[chat.status], content: <Status value={chat.status}/> },
-      { text: shortDate(chat.updatedAt), order: Date.parse(chat.updatedAt) },
-    ] }));
+    const latest = new Map(scans.map(scan=>[scan.assessmentId,scan]));
+    const rows: Row[] = [...chats.values()].map(chat => {
+      const scan=latest.get(chat.id);
+      const state=scan?scanStateLabel[scan.status]:statusLabels[chat.status];
+      return {id:chat.id,cells:[conversationCell(chat.id),
+        {text:state,content:scan?<span title="Estado da análise do Codex Security">{state}</span>:<Status value={chat.status}/>},
+        {text:shortDate(chat.updatedAt),order:Date.parse(chat.updatedAt)}]};
+    });
     table = <RecordTable key={view} title="Conversas" columns={['Conversa', 'Estado', 'Atualizada em']} rows={rows} initialSort={{ column: 2, descending: true }} empty="Nenhuma conversa neste projeto."/>;
   } else if (view === 'executions') {
     const rows: Row[] = executions.map(run => ({ id: run.id, cells: [
@@ -129,6 +136,8 @@ export default function ProjectInsights({ snapshot, project, selected, onConvers
       { text: statusLabels[run.status as keyof typeof statusLabels] ?? run.status },
       { text: shortDate(run.startedAt), order: Date.parse(run.startedAt) },
     ] }));
+    rows.push(...scans.map(scan=>({id:'security-'+scan.id,cells:[{text:'Codex Security'},conversationCell(scan.assessmentId),
+      {text:scanStateLabel[scan.status]},{text:shortDate(scan.createdAt),order:Date.parse(scan.createdAt)}]})));
     table = <RecordTable key={view} title="Execuções" columns={['Operação', 'Conversa', 'Estado', 'Iniciada em']} rows={rows} initialSort={{ column: 3, descending: true }} empty="Nenhuma execução registrada neste projeto."/>;
   } else if (view === 'findings') {
     const rows: Row[] = findings.map(finding => ({ id: finding.id, status: finding.status, severity: finding.severity, cells: [
@@ -136,7 +145,10 @@ export default function ProjectInsights({ snapshot, project, selected, onConvers
       { text: severityLabels[finding.severity], order: severityOrder[finding.severity], content: <span className={'record-severity level-' + finding.severity}>{severityLabels[finding.severity]}</span> },
       { text: findingLabels[finding.status] }, conversationCell(finding.assessmentId),
     ] }));
-    table = <RecordTable key={view} title="Achados" columns={['Achado', 'Severidade', 'Estado', 'Conversa']} rows={rows} initialSort={{ column: 1, descending: true }} findings empty="Nenhum achado registrado neste projeto."/>;
+    table = <><RecordTable key={view} title={withResults.length?'Achados registrados':'Achados'} columns={['Achado', 'Severidade', 'Estado', 'Conversa']} rows={rows} initialSort={{ column: 1, descending: true }} findings empty="Nenhum achado registrado neste projeto."/>
+      {withResults.length>0&&<RecordTable title="Resultados do Codex Security" columns={['Conversa','Achados relatados','Análise']}
+        rows={withResults.map(scan=>({id:scan.id,cells:[conversationCell(scan.assessmentId),{text:number.format(scan.findingsTotal!),order:scan.findingsTotal},{text:scanStateLabel[scan.status]}]}))}
+        initialSort={{column:1,descending:true}} empty="Nenhum resultado do motor neste projeto."/>}</>;
   } else if (error) {
     table = <div className="record-empty"><p role="alert">{error}</p><button className="button" type="button" onClick={() => setRefresh(value => value + 1)}>Tentar novamente</button></div>;
   } else if (!native || !usage) {

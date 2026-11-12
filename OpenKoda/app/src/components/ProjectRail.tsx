@@ -7,7 +7,7 @@ export function KMark({size=23}:{size?:number}) {
   return <svg viewBox="0 0 26 24" width={size} height={size} aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round"><path d="M3.5 3.5v17M21.5 3.5l-9 8.5 9 8.5"/></svg>;
 }
 
-export function Rail({view,navigate}:{view:View;navigate:(v:View)=>void}) {
+export function Rail({view,navigate,sourceOnly=false}:{view:View;navigate:(v:View)=>void;sourceOnly?:boolean}) {
   const identity=useIdentity();
   const destinations=[
     {id:'overview',label:'Início',icon:House},{id:'findings',label:'Achados',icon:ScanSearch},
@@ -16,7 +16,7 @@ export function Rail({view,navigate}:{view:View;navigate:(v:View)=>void}) {
   ] as const;
   return <nav className="project-rail" aria-label="Navegação principal">
     <div className="rail-brand" aria-label="OpenKoda"><KMark/></div>
-    {destinations.map(({id,label,icon:Icon})=><button key={id} type="button" className={'rail-button rail-'+id} aria-label={label} aria-current={view===id?'page':undefined} onClick={()=>navigate(id)}>
+    {destinations.filter(item=>!sourceOnly || item.id!=='kali').map(({id,label,icon:Icon})=><button key={id} type="button" className={'rail-button rail-'+id} aria-label={label} aria-current={view===id?'page':undefined} onClick={()=>navigate(id)}>
       {id==='profile' && identity.name ? <span className="rail-avatar" data-color={identity.color}>{identity.name.trim().split(/\s+/).slice(0,2).map(s=>s[0]).join('').toUpperCase()}</span> : <Icon size={20} strokeWidth={1.65}/>}
       <span className="rail-hint" aria-hidden="true">{label}</span>
     </button>)}
@@ -30,6 +30,7 @@ interface TreeProps {
 export function ProjectTree({projects,assessments,projectId,assessmentId,busy,onNew,onProject,onChat,onNewChat}:TreeProps) {
   const [collapsed,setCollapsed]=useState<string[]>([]);
   return <aside id="project-tree" className="project-tree" aria-label="Projetos e conversas">
+    <div className="tree-brand">OpenKoda</div>
     <button className="tree-new" type="button" onClick={onNew} disabled={busy}><Plus size={18}/>Novo projeto</button>
     <h2>Projetos <span>{projects.filter(p=>!p.archived).length}</span></h2>
     <div className="tree-list">{projects.filter(p=>!p.archived).map(project=>{
