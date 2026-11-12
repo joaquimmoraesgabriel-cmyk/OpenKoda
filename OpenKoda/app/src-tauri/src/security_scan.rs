@@ -9,6 +9,7 @@ use zeroize::Zeroizing;
 const LIMIT:usize=2*1024*1024;
 const UNEXPECTED:&str="O SDK não entregou um resultado terminal válido. Consulte o histórico antes de iniciar outra varredura.";
 const INTERRUPTED:&str="Execução interrompida. O resultado remoto e o custo final podem ser desconhecidos.";
+const CODE_SCAN_PROVIDER_UNAVAILABLE:&str="A análise de código usa OpenAI nesta versão. Os demais provedores continuam disponíveis nas conversas.";
 
 #[derive(Clone,Debug,Serialize,Deserialize)]
 #[serde(rename_all="camelCase",deny_unknown_fields)]
@@ -106,27 +107,73 @@ fn public(a:&Assessment,r:&Receipt)->Result<Value,String>{
     }else{Value::Null};
     o.insert("result".into(),result);Ok(json!({"scan":v}))
 }
-fn public_checked(store:&Store,s:&Snapshot,a:&Assessment,r:&Receipt)->Result<Value,String>{
-    use crate::data_policy::{DataDestination,DataOperation,DataPolicyService,DataSubject,DataUseSpec,RequestFingerprint};
-    use crate::data_projection::{classification_state,resolve_subject,subject_versions,RejectExternal};
-    let mut value=public(a,r)?;
-    let Some(eid)=r.result_evidence_id.as_ref()else{return Ok(value)};
-    // SDK reports can contain complete source excerpts. They are a local view
-    // of their canonical evidence, so a get or idempotency replay must respect
-    // the same current/adopted policy and transitive classifications as reads.
+fn local_subject_reasons(store:&Store,s:&Snapshot,a:&Assessment,subject:&crate::data_policy::DataSubject)->Result<Vec<String>,String>{
+    use crate::data_policy::{self,DataDestination,DataOperation,DataPolicyService,DataSubject,DataUseSpec,RequestFingerprint,Sensitivity};
+    use crate::data_projection::{resolve_subject,subject_versions,RejectExternal};
+    let resolved=resolve_subject(store,s,subject,&RejectExternal)?;
+    let mut reasons=Vec::new();
+    // Check each contributor separately: an unclassified activity must not
+    // dilute a Sensitive source into a separately allowed Unclassified package.
+    for version in subject_versions(store,s,subject,&RejectExternal)?{
+        let classification=data_policy::current_classification(s,&version.subject);
+        let retained=classification.filter(|c|c.source_fingerprint!=version.source_fingerprint).map(|c|c.sensitivity);
+        let sensitivity=classification.filter(|c|c.source_fingerprint==version.source_fingerprint).map_or(Sensitivity::Unclassified,|c|c.sensitivity);
+        let mut spec=DataUseSpec::new(DataOperation::DerivedRead,DataDestination::LocalRawView,vec![a.project_id.clone()],Some(a.id.clone()));
+        spec.selection.package_sensitivity=sensitivity;spec.selection.categories=resolved.categories.clone();spec.selection.origins=resolved.origins.clone();
+        if let DataSubject::Evidence{evidence_id,..}=&version.subject{spec.selection.evidence_ids.push(evidence_id.clone());}
+        spec.requests=vec![RequestFingerprint{index:0,input_sha256:version.source_fingerprint.clone(),output_sha256:version.source_fingerprint.clone(),input_bytes:0,output_bytes:0}];
+        spec.subjects=vec![version];reasons.extend(DataPolicyService::check_use(s,&spec)?.reason_codes);
+        if let Some(sensitivity)=retained{
+            // A progress append changes the activity fingerprint while retaining
+            // older bytes. Keep its last observed sensitivity as a policy floor
+            // until a human explicitly classifies the current Subject again.
+            // This extra policy-only check creates no new classification ref.
+            spec.subjects.clear();spec.selection.package_sensitivity=sensitivity;
+            reasons.extend(DataPolicyService::check_use(s,&spec)?.reason_codes);
+        }
+    }
+    Ok(reasons)
+}
+fn content_reasons(store:&Store,s:&Snapshot,a:&Assessment,r:&Receipt)->Vec<String>{
+    use crate::data_policy::{DataCategory,DataSubject};
     let decision=(||{
-        let subject=DataSubject::Evidence{assessment_id:a.id.clone(),evidence_id:eid.clone()};
-        let resolved=resolve_subject(store,s,&subject,&RejectExternal)?;
-        let class=classification_state(s,&resolved)?;
-        let evidence=a.evidence.iter().find(|e|e.id==*eid).ok_or("data_subject_missing")?;
-        let mut spec=DataUseSpec::new(DataOperation::EvidenceRead,DataDestination::LocalRawView,vec![a.project_id.clone()],Some(a.id.clone()));
-        spec.selection.package_sensitivity=class.sensitivity;spec.selection.categories=resolved.categories;spec.selection.origins=resolved.origins;
-        spec.selection.evidence_ids=vec![eid.clone()];spec.subjects=subject_versions(store,s,&subject,&RejectExternal)?;
-        spec.requests=vec![RequestFingerprint{index:0,input_sha256:evidence.sha256.clone(),output_sha256:evidence.sha256.clone(),input_bytes:evidence.content.len() as u64,output_bytes:evidence.content.len() as u64}];
-        DataPolicyService::check_use(s,&spec)
+        let reference=scope::current_ref(s,&a.id)?.ok_or("data_source_unknown")?;
+        let body=scope_targets::current_body(s,&a.id)?;
+        let mut subjects=vec![
+            DataSubject::AssessmentMetadata{assessment_id:a.id.clone(),category:DataCategory::ActivityMetadata},
+            DataSubject::AssessmentMetadata{assessment_id:a.id.clone(),category:DataCategory::HumanText},
+        ];
+        if let Some(set)=&body.target_set{
+            for entry in &set.entries{subjects.push(DataSubject::ScopeSource{assessment_id:a.id.clone(),scope_ref:reference.clone(),target_ref:Some(scope_targets::entry_ref(entry))});}
+        }else{subjects.push(DataSubject::ScopeSource{assessment_id:a.id.clone(),scope_ref:reference,target_ref:None});}
+        if let Some(id)=&r.result_evidence_id{subjects.push(DataSubject::Evidence{assessment_id:a.id.clone(),evidence_id:id.clone()});}
+        let mut reasons=Vec::new();for subject in subjects{reasons.extend(local_subject_reasons(store,s,a,&subject)?);}
+        reasons.sort();reasons.dedup();Ok::<_,String>(reasons)
     })();
-    let reasons=match decision{Ok(d) if d.allowed=>return Ok(value),Ok(d)=>d.reason_codes,Err(_)=>vec!["data_source_unknown".into()]};
-    value["scan"]["result"]=Value::Null;value["scan"]["resultUnavailable"]=json!(true);value["scan"]["resultReasonCodes"]=json!(reasons);
+    decision.unwrap_or_else(|_|vec!["data_source_unknown".into()])
+}
+fn project_content(store:&Store,s:&Snapshot,a:&Assessment,r:&Receipt,value:&mut Value){
+    let reasons=content_reasons(store,s,a,r);if reasons.is_empty(){return;}
+    // SDK stages, errors and public assistant messages can contain repository
+    // code. Keep control metadata, but never treat those strings as metadata.
+    const HIDDEN:&str="Conteúdo indisponível pela política de dados deste projeto.";
+    value["message"]=json!(HIDDEN);value["stage"]=json!("restricted");
+    if !value["error"].is_null(){value["error"]=json!(HIDDEN);}
+    if let Some(events)=value["events"].as_array_mut(){for event in events{event["message"]=json!(HIDDEN);event["stage"]=json!("restricted");}}
+    value["contentUnavailable"]=json!(true);value["contentReasonCodes"]=json!(reasons);
+    if value.get("result").is_some(){value["result"]=Value::Null;value["resultUnavailable"]=json!(true);value["resultReasonCodes"]=value["contentReasonCodes"].clone();}
+}
+fn public_checked(store:&Store,s:&Snapshot,a:&Assessment,r:&Receipt)->Result<Value,String>{
+    let mut value=public(a,r)?;project_content(store,s,a,r,&mut value["scan"]);Ok(value)
+}
+/// Same policy boundary for the duplicated Event.message and nested receipt.
+/// Snapshot keeps its receipt shape: full reports remain exclusive to scan.get.
+pub(crate) fn event_view(store:&Store,s:&Snapshot,a:&Assessment,event:&model::Event)->Result<Value,String>{
+    let mut value=serde_json::to_value(event).map_err(|_|"data_projection_failed")?;
+    if let Some(receipt)=&event.security_scan{
+        project_content(store,s,a,receipt,&mut value["securityScan"]);
+        value["message"]=value["securityScan"]["message"].clone();
+    }
     Ok(value)
 }
 fn record(store:&Store,aid:&str,id:&str,edit:impl FnOnce(&mut Receipt)->Result<(),String>)->Result<(),String>{
@@ -290,8 +337,8 @@ impl Service {
         let input:Status=decode(payload)?;
         let (provider,model,key)=ai.security_selection(store,input.assessment_id.as_deref())?;
         let runtime=self.check();
-        let reason=if runtime["available"]!=true{Some("Confira os componentes do runtime OpenKoda.")}
-            else if !matches!(provider,ProviderId::OpenAI|ProviderId::OpenRouter){Some("Selecione OpenAI ou OpenRouter para a análise SDK.")}
+        let reason=if provider!=ProviderId::OpenAI{Some(CODE_SCAN_PROVIDER_UNAVAILABLE)}
+            else if runtime["available"]!=true{Some("Confira os componentes do runtime OpenKoda.")}
             else if !key{Some("Configure a chave deste provedor.")}
             else if !crate::ai_provider::valid_model(&model){Some("Selecione e salve um modelo.")}else{None};
         let sensitive=if let Some(aid)=input.assessment_id.as_deref(){check_data(&store.snapshot()?,aid,provider).unwrap_or(false)}else{false};
@@ -330,6 +377,8 @@ impl Service {
             if r.request_digest!=digest{return Err("A mesma chave de execução já representa outra solicitação.".into());}
             return Ok((public_checked(store,&state,a,r)?,None));
         }
+        let (provider,_,_)=ai.security_selection(store,Some(&input.assessment_id))?;
+        if provider!=ProviderId::OpenAI{return Err(CODE_SCAN_PROVIDER_UNAVAILABLE.into());}
         if active.is_some(){return Err("Já existe uma varredura OpenKoda em andamento.".into());}
         if !(0.01..=100.0).contains(&input.max_cost_usd){return Err("Informe um limite de US$ 0,01 a US$ 100.".into());}
         let prompt=input.prompt.as_deref().filter(|p|!p.trim().is_empty()).unwrap_or(&a.objective).trim();
@@ -340,6 +389,7 @@ impl Service {
         let _gate=store.scope_gate.lock().map_err(|_|"Escopo indisponível.")?;
         let state=store.snapshot()?;let scope=approved_scope(&state,&input)?;
         let (provider,model,_)=ai.security_selection(store,Some(&input.assessment_id))?;
+        if provider!=ProviderId::OpenAI{return Err(CODE_SCAN_PROVIDER_UNAVAILABLE.into());}
         let objective_digest=core::hash(prompt);
         check_disclosure(&state,&input.assessment_id,provider,&objective_digest,input.acknowledge_sensitive)?;
         let key=ai.security_key(store,&input.assessment_id,provider,&model)?;
@@ -598,6 +648,98 @@ console.log(JSON.stringify({type:'result',status:'completed',scanId:'sdk-fixture
         f.run(f.input("complete"));assert_eq!(f.get()["scan"]["status"],"completed");
         assert_eq!(f.store.snapshot().unwrap().findings.len(),1);
     }
+    #[test]fn sdk_activity_text_obeys_local_policy_before_and_after_result(){
+        use crate::data_policy::{DataPolicyService,test_support::TestRedactor};
+        use crate::data_projection::{self,RejectExternal};
+        const CANARY:&str="SDK_PRIVATE_SOURCE_CANARY_a7f24";
+        for completed in [false,true]{
+            let f=Fixture::new(None);let input=f.input("complete");
+            if completed{f.run(input.clone());}else{let(_,job)=f.service.prepare(&f.store,&f.ai,decode(input.clone()).unwrap()).unwrap();drop(job);}
+            let id=latest(&f.store.snapshot().unwrap().assessments[0]).unwrap().id.clone();
+            record(&f.store,&f.aid,&id,|r|{r.update(if completed{"completed"}else{"running"},CANARY,CANARY);r.error=Some(CANARY.into());Ok(())}).unwrap();
+            f.ai.test_data_authority(&f.store,&f.aid);
+            let views=||{
+                let state=f.store.snapshot().unwrap();
+                [f.get(),f.service.cancel(&f.store,json!({"assessmentId":f.aid})).unwrap(),f.run(input.clone()),data_projection::snapshot_view(&f.store,&state,&TestRedactor).unwrap()]
+            };
+            for view in views(){assert!(view.to_string().contains(CANARY),"allowed activity must remain available");}
+            let policy=DataPolicyService::new();let state=f.store.snapshot().unwrap();let pid=state.projects[0].id.clone();
+            let call=|action:&str,payload:Value|policy.handle(action,payload,&f.store,&TestRedactor,&RejectExternal,None).unwrap();
+            let original=state.data_policy_revisions.last().unwrap().body.clone();
+            let change=|body:crate::data_policy::DataPolicyBody|{let status=call("data.policy.status",json!({"projectId":pid}));let review=call("data.policy.prepare",json!({"projectId":pid,"expectedStateDigest":status["stateDigest"],"body":body}));call("data.policy.commit",json!({"review":review["review"],"idempotencyKey":model::id(),"acknowledgePolicy":true}));};
+            let mut denied=original.clone();denied.local_raw_view.enabled=false;change(denied);
+            for view in views(){assert!(!view.to_string().contains(CANARY),"SDK activity bypassed local read policy: {view}");}
+            change(original);
+            for view in views(){assert!(view.to_string().contains(CANARY),"reallow must not erase canonical activity");}
+            let status=call("data.policy.status",json!({"projectId":pid}));call("data.policy.revoke",json!({"projectId":pid,"expectedStateDigest":status["stateDigest"],"idempotencyKey":model::id(),"acknowledgeRevocation":true}));
+            for view in views(){assert!(!view.to_string().contains(CANARY),"SDK activity bypassed revoked policy");}
+            assert!(serde_json::to_string(&f.store.snapshot().unwrap()).unwrap().contains(CANARY));
+        }
+    }
+    #[test]fn sdk_activity_inherits_each_sensitive_subject_and_adopted_local_policy(){
+        use crate::data_policy::{self,DataPolicyService,DataSubject,DataCategory,test_support::TestRedactor};
+        use crate::data_projection::{self,RejectExternal};
+        const CANARY:&str="SDK_SENSITIVE_ACTIVITY_CANARY_3db21";
+        for selected in ["source","activity","human","result","adopted_source"]{
+            let f=Fixture::new(None);let input=f.input("complete");f.run(input.clone());
+            let id=latest(&f.store.snapshot().unwrap().assessments[0]).unwrap().id.clone();
+            record(&f.store,&f.aid,&id,|r|{r.update("completed",CANARY,CANARY);Ok(())}).unwrap();
+            f.ai.test_data_authority(&f.store,&f.aid);
+            let policy=DataPolicyService::new();let state=f.store.snapshot().unwrap();let pid=state.projects[0].id.clone();
+            let call=|action:&str,payload:Value|policy.handle(action,payload,&f.store,&TestRedactor,&RejectExternal,None).unwrap();
+            let change=|body:data_policy::DataPolicyBody|{let status=call("data.policy.status",json!({"projectId":pid}));let review=call("data.policy.prepare",json!({"projectId":pid,"expectedStateDigest":status["stateDigest"],"body":body}));call("data.policy.commit",json!({"review":review["review"],"idempotencyKey":model::id(),"acknowledgePolicy":true}));};
+            let adopt=||{let status=call("data.policy.status",json!({"projectId":pid,"assessmentId":f.aid}));let current=&status["currentRevision"];let reference=json!({"projectId":pid,"revisionId":current["id"],"digest":current["digest"]});let review=call("data.binding.prepare",json!({"assessmentId":f.aid,"policyRef":reference,"expectedStateDigest":status["stateDigest"]}));call("data.binding.commit",json!({"review":review["review"],"idempotencyKey":model::id(),"acknowledgeProspectiveAdoption":true}));};
+            let original=state.data_policy_revisions.last().unwrap().body.clone();let mut limited=original.clone();limited.local_raw_view.sensitivities.retain(|s|*s!=data_policy::Sensitivity::Sensitive);change(limited);
+            if selected=="adopted_source"{adopt();change(original.clone());}
+            let state=f.store.snapshot().unwrap();let a=&state.assessments[0];
+            let subject=match selected{
+                "source"|"adopted_source"=>state.data_classifications.iter().find(|c|matches!(c.subject,DataSubject::ScopeSource{..})).unwrap().subject.clone(),
+                "activity"=>DataSubject::AssessmentMetadata{assessment_id:f.aid.clone(),category:DataCategory::ActivityMetadata},
+                "human"=>DataSubject::AssessmentMetadata{assessment_id:f.aid.clone(),category:DataCategory::HumanText},
+                _=>DataSubject::Evidence{assessment_id:f.aid.clone(),evidence_id:latest(a).unwrap().result_evidence_id.clone().unwrap()},
+            };
+            let fingerprint=data_projection::canonical_fingerprint(&state,&subject).unwrap().unwrap();
+            let review=call("data.classification.prepare",json!({"subject":subject,"expectedSourceFingerprint":fingerprint,"sensitivity":"sensitive","reason":"Synthetic source-bearing SDK activity"}));
+            call("data.classification.commit",json!({"review":review["review"],"idempotencyKey":model::id(),"acknowledgeClassification":true}));
+            let views=||{let state=f.store.snapshot().unwrap();[f.get(),f.service.cancel(&f.store,json!({"assessmentId":f.aid})).unwrap(),f.run(input.clone()),data_projection::snapshot_view(&f.store,&state,&TestRedactor).unwrap()]};
+            for view in views(){assert!(!view.to_string().contains(CANARY),"{selected}: sensitive SDK activity leaked");}
+            if selected=="adopted_source"{adopt();}else{change(original);}
+            for view in views(){assert!(view.to_string().contains(CANARY),"{selected}: permitted activity was lost");}
+            let state=f.store.snapshot().unwrap();let snapshot=data_projection::snapshot_view(&f.store,&state,&TestRedactor).unwrap();
+            let event=snapshot["assessments"][0]["events"].as_array().unwrap().iter().find(|e|e["securityScan"].is_object()).unwrap();
+            assert!(event["securityScan"].get("result").is_none(),"snapshot must never gain a full SDK report");
+        }
+    }
+    #[test]fn sdk_activity_retains_sensitive_floor_after_progress_or_metadata_changes(){
+        use crate::data_policy::{self,DataPolicyService,DataSubject,DataCategory,test_support::TestRedactor};
+        use crate::data_projection::{self,RejectExternal};
+        const CANARY:&str="SDK_STALE_CLASSIFICATION_CANARY_b94da";
+        for selected in ["activity","human"]{
+            let f=Fixture::new(None);let input=f.input("complete");f.run(input.clone());
+            let id=latest(&f.store.snapshot().unwrap().assessments[0]).unwrap().id.clone();
+            record(&f.store,&f.aid,&id,|r|{r.update("completed","message",CANARY);Ok(())}).unwrap();
+            f.ai.test_data_authority(&f.store,&f.aid);
+            let policy=DataPolicyService::new();let state=f.store.snapshot().unwrap();let pid=state.projects[0].id.clone();
+            let call=|action:&str,payload:Value|policy.handle(action,payload,&f.store,&TestRedactor,&RejectExternal,None).unwrap();
+            let status=call("data.policy.status",json!({"projectId":pid}));
+            let mut limited=state.data_policy_revisions.last().unwrap().body.clone();limited.local_raw_view.sensitivities.retain(|s|*s!=data_policy::Sensitivity::Sensitive);
+            let review=call("data.policy.prepare",json!({"projectId":pid,"expectedStateDigest":status["stateDigest"],"body":limited}));
+            call("data.policy.commit",json!({"review":review["review"],"idempotencyKey":model::id(),"acknowledgePolicy":true}));
+            let subject=DataSubject::AssessmentMetadata{assessment_id:f.aid.clone(),category:if selected=="activity"{DataCategory::ActivityMetadata}else{DataCategory::HumanText}};
+            let classify=|sensitivity:&str|{let state=f.store.snapshot().unwrap();let fingerprint=data_projection::canonical_fingerprint(&state,&subject).unwrap().unwrap();let review=call("data.classification.prepare",json!({"subject":subject,"expectedSourceFingerprint":fingerprint,"sensitivity":sensitivity,"reason":"Explicit synthetic activity classification"}));call("data.classification.commit",json!({"review":review["review"],"idempotencyKey":model::id(),"acknowledgeClassification":true,"acknowledgeDowngrade":true}));};
+            let views=||{let state=f.store.snapshot().unwrap();[f.get(),f.service.cancel(&f.store,json!({"assessmentId":f.aid})).unwrap(),f.run(input.clone()),data_projection::snapshot_view(&f.store,&state,&TestRedactor).unwrap()]};
+            classify("sensitive");
+            for view in views(){assert!(!view.to_string().contains(CANARY),"current Sensitive classification must deny activity");}
+            if selected=="activity"{record(&f.store,&f.aid,&id,|r|{r.update("completed","message","Next public progress message");Ok(())}).unwrap();}
+            else{f.store.mutate(|s|{s.assessments[0].summary.push_str(" Updated reviewed metadata");Ok(())}).unwrap();}
+            let state=f.store.snapshot().unwrap();let prior=data_policy::current_classification(&state,&subject).unwrap();
+            assert_ne!(Some(&prior.source_fingerprint),data_projection::canonical_fingerprint(&state,&subject).unwrap().as_ref());
+            for view in views(){assert!(!view.to_string().contains(CANARY),"{selected}: new progress/metadata diluted Sensitive into Unclassified");}
+            classify("internal");
+            for view in views(){assert!(view.to_string().contains(CANARY),"explicit current Internal classification must restore permitted activity");}
+            assert!(serde_json::to_string(&f.store.snapshot().unwrap()).unwrap().contains(CANARY));
+        }
+    }
     #[test]fn stored_report_respects_local_read_policy_and_revocation_on_get_and_replay(){
         use crate::data_policy::{DataPolicyService,test_support::TestRedactor};
         use crate::data_projection::RejectExternal;
@@ -638,6 +780,57 @@ console.log(JSON.stringify({type:'result',status:'completed',scanId:'sdk-fixture
         assert!(f.service.prepare(&f.store,&f.ai,decode(changed).unwrap()).is_err());
         assert_eq!(f.store.snapshot().unwrap().findings.len(),1);
         assert!(f.dir.path().join("profile/security-scans").is_dir());
+    }
+    #[test]fn unsupported_code_scan_provider_has_no_dispatch_budget_receipt_or_artifacts(){
+        const REASON:&str="A análise de código usa OpenAI nesta versão. Os demais provedores continuam disponíveis nas conversas.";
+        for provider in ProviderId::ALL.into_iter().filter(|p|*p!=ProviderId::OpenAI){
+            let f=Fixture::new(None);
+            f.ai.handle("ai.key.save",json!({"provider":provider,"key":KEY}),&f.store).unwrap();
+            f.ai.handle("ai.selection.save",json!({"assessmentId":f.aid,"aiSelection":{"provider":provider,"model":"openai/gpt-6-luna"}}),&f.store).unwrap();
+            let called=f.dir.path().join("sdk-called");
+            let helper=fs::read_to_string(&f.service.helper).unwrap();
+            fs::write(&f.service.helper,format!("import {{appendFileSync}} from 'node:fs';appendFileSync({},'1');\n{helper}",serde_json::to_string(&called).unwrap())).unwrap();
+            let before=serde_json::to_value(f.store.snapshot().unwrap()).unwrap();
+            let budget=f.ai.handle("ai.budget.status",json!({"assessmentId":f.aid}),&f.store).unwrap();
+            let input=f.input("complete");
+            for _ in 0..2{
+                let(tx,_rx)=mpsc::sync_channel(1);
+                let error=f.service.start_worker(&f.store,&f.ai,input.clone(),&tx).err().expect("unsupported provider must be rejected before preparing a scan");
+                assert_eq!(error,REASON,"{}",provider.id());
+            }
+            assert!(!called.exists(),"even the SDK runtime check must not run for {}",provider.id());
+            assert_eq!(f.ai.handle("ai.budget.status",json!({"assessmentId":f.aid}),&f.store).unwrap(),budget);
+            assert_eq!(serde_json::to_value(f.store.snapshot().unwrap()).unwrap(),before);
+            assert!(f.get()["scan"].is_null());
+            assert!(!f.store.root.join("security-scans").exists());
+            *f.service.check_cache.lock().unwrap()=Some((Instant::now(),json!({"available":false})));
+            let status=f.service.status(&f.store,&f.ai,json!({"assessmentId":f.aid})).unwrap();
+            assert_eq!(status["available"],false);assert_eq!(status["reason"],REASON);
+        }
+    }
+    #[test]fn openai_code_scan_keeps_cap_and_legacy_router_receipts_remain_replayable(){
+        let f=Fixture::new(None);let mut body=f.input("complete");body["maxCostUsd"]=json!(5.0);
+        assert_eq!(f.service.status(&f.store,&f.ai,json!({"assessmentId":f.aid})).unwrap()["available"],true);
+        f.run(body.clone());let completed=f.get();
+        assert_eq!(completed["scan"]["provider"],"openai");assert_eq!(completed["scan"]["maxCostUsd"],5.0);
+        let id=completed["scan"]["id"].as_str().unwrap();
+        // An existing historical receipt is retained when the supported new-scan providers change.
+        record(&f.store,&f.aid,id,|r|{r.provider="openrouter".into();r.model="openai/gpt-6-luna".into();Ok(())}).unwrap();
+        f.ai.handle("ai.key.save",json!({"provider":"openrouter","key":KEY}),&f.store).unwrap();
+        f.ai.handle("ai.selection.save",json!({"assessmentId":f.aid,"aiSelection":{"provider":"openrouter","model":"openai/gpt-6-luna"}}),&f.store).unwrap();
+        let called=f.dir.path().join("sdk-replayed");
+        fs::write(&f.service.helper,format!("import {{writeFileSync}} from 'node:fs';writeFileSync({},'1');process.exit(9);",serde_json::to_string(&called).unwrap())).unwrap();
+        *f.service.check_cache.lock().unwrap()=None;
+        let expected=f.get();let before=serde_json::to_value(f.store.snapshot().unwrap()).unwrap();
+        let budget=f.ai.handle("ai.budget.status",json!({"assessmentId":f.aid}),&f.store).unwrap();
+        assert_eq!(f.run(body.clone()),expected);
+        assert_eq!(f.service.cancel(&f.store,json!({"assessmentId":f.aid})).unwrap(),expected);
+        assert_eq!(serde_json::to_value(f.store.snapshot().unwrap()).unwrap(),before);
+        assert_eq!(f.ai.handle("ai.budget.status",json!({"assessmentId":f.aid}),&f.store).unwrap(),budget);
+        assert!(!called.exists());
+        body["prompt"]=json!("different request");
+        let error=f.service.prepare(&f.store,&f.ai,decode(body).unwrap()).err().unwrap();
+        assert!(error.contains("mesma chave"));
     }
     #[test]fn verbatim_tauri_paths_launch_node_and_invalid_exit_cannot_mark_available(){
         let mut f=Fixture::new(None);

@@ -3,7 +3,7 @@ import { ArrowLeft, ArrowRight, FolderOpen, Github, Globe2, Network, SlidersHori
 import { native, request } from '../api';
 import { knownProvider, selectionLabel, type AiSelection, type ProviderStatus } from '../ai-provider';
 import { stageOpeningAnalysis } from '../chat-opening';
-import { defaultScanLimit, SensitiveScanConfirmation, startSecurityScan, supportsSecurityModel } from '../security-scan';
+import { analysisFileAccessNotice, codeAnalysisProviderNotice, defaultScanLimit, SensitiveScanConfirmation, startSecurityScan, supportsSecurityModel } from '../security-scan';
 import { parsePorts } from '../network';
 import type { ScopeTargetRef } from '../combined-scope';
 import type { ScopeRef } from '../scope';
@@ -151,7 +151,7 @@ export default function ProjectLaunch({sourceOnly=false,snapshot, action, busy, 
     if (!(source==='github'?githubUrl.trim():root.trim()) || !name.trim() || narrow && !relative.trim()) {setError('Preencha o alvo da análise.');return;}
     if (goal.length>4000) {setError('Descrição e contexto juntos podem conter até 4.000 caracteres.');return;}
     if (kind==='network' && advanced && parsedPorts.error) {setError(parsedPorts.error);return;}
-    if (unsupportedScan||needsModel) {setError('Escolha um modelo OpenAI ou OpenRouter para analisar o código.');return;}
+    if (unsupportedScan||needsModel) {setError(codeAnalysisProviderNotice);return;}
     const maxCostUsd=advanced&&customLimit?Number(scanLimit):defaultScanLimit;
     if (securityScan && (!Number.isFinite(maxCostUsd) || maxCostUsd<0.01 || maxCostUsd>100)) {setError('Informe um limite da análise entre US$ 0,01 e US$ 100.');return;}
     const relativeTarget=narrow && local ? source==='github'?relative.trim().replaceAll('\\','/'):projectEntry(root,relative) : null;
@@ -264,7 +264,7 @@ export default function ProjectLaunch({sourceOnly=false,snapshot, action, busy, 
         <div className="launch-model"><strong>Modelo de IA</strong>
           <div><ChatModelPicker value={selection} onChange={setSelection} disabled={locked} onModels={onModels}/>
           {selection && !sourceOnly && <button className="button quiet" type="button" onClick={()=>setSelection(null)}>Usar só a análise nativa</button>}</div></div>
-        {(unsupportedScan||needsModel) && <Notice>Escolha OpenAI ou OpenRouter para iniciar a análise do projeto.</Notice>}
+        {(unsupportedScan||needsModel) && <Notice>{codeAnalysisProviderNotice}</Notice>}
         <Field label="Descrição"><textarea rows={3} value={description} maxLength={4000} onChange={e=>setDescription(e.target.value)}
           placeholder={defaultGoals[kind]}/></Field>
         <section className="launch-disclosure"><label><strong>Contexto adicional</strong><input type="checkbox" role="switch" checked={extra}
@@ -290,15 +290,17 @@ export default function ProjectLaunch({sourceOnly=false,snapshot, action, busy, 
               <span>{tool.package}<small>Escolha uma evidência na conversa para analisar no Kali.</small></span></label>)}</>}</div>}</section>
         <p className="launch-summary">{securityScan && selection
           ? 'Ao criar, o OpenKoda analisará o código selecionado com '+selectionLabel(selection)+'. O provedor poderá receber arquivos e contexto do projeto. A análise pode consumir créditos.'
+          : unsupportedScan||needsModel ? 'Selecione um modelo OpenAI para criar o projeto e iniciar a análise.'
           : native ? local ? 'Ao criar, o OpenKoda verificará padrões de segurança nos arquivos selecionados, sem executar o código.'
           : kind==='web'?'Ao criar, o OpenKoda enviará uma requisição HEAD à URL informada, sem seguir redirecionamentos.'
             :'Ao criar, o OpenKoda tentará conexões TCP nas portas '+(advanced?ports:'443')+' do alvo informado, sem enviar conteúdo.'
           :'A prévia salva a conversa. A execução usa o aplicativo desktop.'}
           {native && selection && !local && ' A descrição, os metadados do escopo e o resumo da operação serão enviados a '+selectionLabel(selection)+' para análise. A chamada pode consumir créditos.'}</p>
+        {native&&local&&<p className="launch-summary">{analysisFileAccessNotice}</p>}
         {error && <div role="alert"><Notice tone="warning">{error}</Notice></div>}
         {review&&selection&&<label className="check-field"><input type="checkbox" checked={review.accepted} onChange={e=>setSensitiveReview({form:scanForm,accepted:e.target.checked})}/>Autorizo enviar a fonte sensível desta avaliação a {selectionLabel(selection)} para esta análise.</label>}
         {error && saved && <button className="button" type="button" onClick={()=>onCreated(saved.projectId,saved.assessmentId)}>Abrir conversa criada</button>}
-        {terminalImport&&<div className="inline-actions"><p>O download anterior terminou sem uma cópia pronta. Inicie outra tentativa para este mesmo repositório.</p><button type="button" className="button" disabled={locked} onClick={()=>void launch(true)}>Tentar novo download</button></div>}
+        {terminalImport&&<div className="inline-actions"><p>O download anterior terminou sem uma cópia pronta. Inicie outra tentativa para este mesmo repositório.</p><button type="button" className="button" disabled={locked||unsupportedScan||needsModel} onClick={()=>void launch(true)}>Tentar novo download</button></div>}
         <button type="submit" className="button primary launch-submit" disabled={locked || terminalImport || unsupportedScan || needsModel || !!review&&!review.accepted || !(source==='github'?githubUrl.trim():root.trim()) || narrow&&!relative.trim()}>
           {submitting?imported?.status==='downloading'?'Baixando repositório…':'Criando…':initialProject?'Criar conversa':'Criar projeto'}<ArrowRight size={16}/></button>
       </fieldset>

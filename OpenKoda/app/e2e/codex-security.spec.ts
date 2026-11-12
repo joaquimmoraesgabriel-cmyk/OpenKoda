@@ -5,10 +5,10 @@ import { test,expect } from './fixtures';
 import { installScopeFixture } from './scope-fixture';
 
 type Scenario = 'available'|'unavailable'|'lost-receipt'|'foreign-record'|'existing-policy'|'revoked-policy'|'sensitive'|'github-download-fails'|'github-cancel'|'github-cancel-ready'|'github-retry-cancelled'|'github-retry-failed'|'github-retry-interrupted'|'github-import-reply-lost';
-async function newProject(page:Page,scenario:Scenario='available'){
+async function newProject(page:Page,scenario:Scenario='available',configuredProvider:'openai'|'openrouter'|'anthropic'='openai'){
   const state=emptySnapshot();
   const existingPolicy=scenario==='existing-policy'||scenario==='revoked-policy';
-  state.settings={...state.settings,hasApiKey:true,provider:existingPolicy?'openai':'openrouter',model:'fixture/modelo-seguro'};
+  state.settings={...state.settings,hasApiKey:true,provider:configuredProvider,model:'fixture/modelo-seguro'};
   await installScopeFixture(page);
   await page.addInitScript(({state,scenario})=>{
     type Call={action:string;payload:Record<string,unknown>};
@@ -21,7 +21,7 @@ async function newProject(page:Page,scenario:Scenario='available'){
     let importReplyLost=false;
     let finishConcurrentDownload:(()=>void)|undefined;
     let options={advancedEnabled:false,additionalContextEnabled:false,context:['','',''],maxCostUsd:null as number|null,minutes:null as number|null,title:''};
-    const provider=state.settings.provider==='openai'?'openai':'openrouter';
+    const provider=state.settings.provider as 'openai'|'openrouter'|'anthropic';
     let scope:ReturnType<typeof window.__scopeFixture>;
     const at='2026-11-12T12:00:00Z';
     function publish(){
@@ -50,7 +50,14 @@ async function newProject(page:Page,scenario:Scenario='available'){
       if(!args?.request)return {};
       const {action,payload}=args.request;calls.push({action,payload});
       if(action==='snapshot')return state;
-      if(action==='ai.status')return {provider,hasApiKey:true,enabledModels:['fixture/modelo-seguro']};
+      if(action==='ai.status'){
+        const requested=String(payload.provider??provider);
+        return {provider:requested,hasApiKey:['openai','openrouter',provider].includes(requested),enabledModels:['fixture/modelo-seguro']};
+      }
+      if(action==='ai.selection.save'){
+        state.assessments[0].aiSelection=payload.aiSelection as typeof state.assessments[number]['aiSelection'];
+        return state.assessments[0];
+      }
       if(action==='assessment.scopeStatus')return (scope??=window.__scopeFixture(state,['source.rules.v1','ai.remote-review.v1'])).status(payload.assessmentId);
       if(action==='ai.history')return {messages:[]};
       if(action==='ai.chat.status')return {requestId:null,stopping:false};
@@ -117,6 +124,63 @@ async function calls(page:Page,action:string){
   return page.evaluate(name=>(window as unknown as {__securityCalls:{action:string;payload:Record<string,unknown>}[]}).__securityCalls.filter(c=>c.action===name),action);
 }
 const stage=(page:Page,value:string)=>page.evaluate(detail=>window.dispatchEvent(new CustomEvent('fixture:stage',{detail})),value);
+
+const providerSupportNotice='A análise de código usa OpenAI nesta versão. Os demais provedores continuam disponíveis nas conversas.';
+const analysisFileNotice='Os comandos da análise podem ler outros arquivos acessíveis à sua conta Windows. Use apenas código em que você confia nesta versão local.';
+
+for(const provider of ['openrouter','anthropic'] as const){
+  test(`${provider} não inicia importação nem cria um projeto de análise de código`,async({page})=>{
+    const create=await newProject(page,'available',provider);
+    await expect(page.getByText(providerSupportNotice,{exact:true})).toBeVisible();
+    await expect(create).toBeDisabled();
+    await page.getByRole('button',{name:'GitHub',exact:true}).click();
+    await page.getByLabel('Link do repositório no GitHub').fill('https://github.com/fixture/remote-fixture');
+    await expect(create).toBeDisabled();
+    // The form handler must also refuse implicit/programmatic submits.
+    await create.evaluate(button=>(button as HTMLButtonElement).form?.requestSubmit());
+    for(const action of ['github.repository.import','project.launch','security.scan.start'])expect(await calls(page,action)).toEqual([]);
+    await page.getByRole('button',{name:'Escolher modelo · fixture/modelo-seguro'}).click();
+    const chooser=page.getByRole('dialog',{name:'Escolher provedor e modelo'});
+    await expect(chooser.getByRole('button',{name:'OpenRouter',exact:true})).toBeVisible();
+    await chooser.getByRole('heading',{name:'OpenAI',exact:true}).locator('..').getByRole('button',{name:'fixture/modelo-seguro',exact:true}).click();
+    await expect(create).toBeEnabled();
+  });
+}
+
+test('o aviso de leitura aparece antes de criar e antes de iniciar uma análise existente',async({page})=>{
+  const create=await newProject(page,'unavailable');
+  await expect(page.getByText(analysisFileNotice,{exact:true})).toBeVisible();
+  await expect(create).toBeEnabled();
+  await create.click();
+  await expect(page.getByRole('alert').filter({hasText:'Motor oficial indisponível'})).toBeVisible();
+  await page.evaluate(()=>{
+    const host=(window as unknown as {__TAURI_INTERNALS__:{invoke:(command:string,args:{request?:{action:string}})=>Promise<unknown>}}).__TAURI_INTERNALS__;
+    const invoke=host.invoke.bind(host);
+    host.invoke=async(command,args)=>{
+      const response=await invoke(command,args);
+      return args.request?.action==='security.status'?{...response as object,available:true,reason:''}:response;
+    };
+  });
+  await page.getByRole('button',{name:'Abrir conversa criada'}).click();
+  const panel=page.getByRole('region',{name:'Análise de segurança'});
+  await expect(panel.getByText(analysisFileNotice,{exact:true})).toBeVisible();
+  await panel.getByRole('button',{name:'Iniciar análise de segurança',exact:true}).click();
+  await expect(panel.getByRole('status')).toHaveText('Iniciando');
+  expect(await calls(page,'security.scan.start')).toHaveLength(1);
+});
+
+test('OpenAI continua analisando e OpenRouter permanece selecionável nas conversas',async({page})=>{
+  await (await newProject(page)).click();
+  await expect(page.getByRole('region',{name:'Análise de segurança'}).getByRole('status')).toHaveText('Iniciando');
+  expect(await calls(page,'security.scan.start')).toHaveLength(1);
+  await stage(page,'completed');
+  await page.getByRole('button',{name:'Escolher modelo · fixture/modelo-seguro'}).click();
+  const chooser=page.getByRole('dialog',{name:'Escolher provedor e modelo'});
+  await chooser.getByRole('heading',{name:'OpenRouter',exact:true}).locator('..').getByRole('button',{name:'fixture/modelo-seguro',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Escolher modelo · fixture/modelo-seguro'})).toHaveAttribute('title','OpenRouter · fixture/modelo-seguro');
+  expect((await calls(page,'ai.selection.save'))[0].payload).toMatchObject({aiSelection:{provider:'openrouter',model:'fixture/modelo-seguro'}});
+  await expect(page.getByRole('region',{name:'Análise de segurança'}).getByRole('status')).toHaveText('Concluída');
+});
 
 test('a criação executa somente o motor selecionado e apresenta progresso, relatório e cobertura recebidos',async({page})=>{
   const create=await newProject(page);

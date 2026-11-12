@@ -25,17 +25,48 @@ export function baseEnvironment() {
   return env;
 }
 
-async function binaryVersion(paths, args, pattern) {
-  for (const path of paths) {
+const probeCodes=new Set(['ENOENT','ENOTDIR','EACCES','EPERM','ELOOP','EINVAL','ENOEXEC','ENAMETOOLONG','EMFILE','ENFILE','ENOMEM','EBUSY','ETXTBSY','EAGAIN','UNKNOWN','ERR_CHILD_PROCESS_STDIO_MAXBUFFER']);
+const probeSignals=new Set(['SIGHUP','SIGINT','SIGQUIT','SIGILL','SIGTRAP','SIGABRT','SIGBUS','SIGFPE','SIGKILL','SIGUSR1','SIGSEGV','SIGUSR2','SIGPIPE','SIGALRM','SIGTERM','SIGBREAK']);
+
+// Diagnostics cross the native bridge. Never retain a path, exception message,
+// stdout or stderr: child-process errors can contain command arguments or keys.
+export async function probeBinaryVersion(paths, args, pattern, timeoutMs=10000) {
+  if(!Number.isInteger(timeoutMs)||timeoutMs<1||timeoutMs>10000)throw new TypeError('invalid_probe_timeout');
+  const attempts=[];
+  const result=binary=>({binary,diagnostic:{attempts:attempts.slice(0,8),additionalAttempts:Math.max(0,attempts.length-8)}});
+  for (const [index,path] of paths.entries()) {
+    const started=performance.now();let executing=false,child=null,stdoutBytes=null,stderrBytes=null,spawnElapsedMs=null;
+    const record=(category,error)=>{
+      const raw=error?.code;
+      const code=typeof raw==='number' && Number.isSafeInteger(raw)?raw:probeCodes.has(raw)?raw:null;
+      attempts.push({candidate:index+1,category,code,signal:probeSignals.has(error?.signal)?error.signal:null,elapsedMs:Math.max(0,Math.round(performance.now()-started)),stdoutBytes,stderrBytes,spawnElapsedMs,childKilled:typeof child?.killed==='boolean'?child.killed:null,exitCode:Number.isSafeInteger(child?.exitCode)?child.exitCode:null});
+    };
     try {
       const exe = await realpath(path);
-      if (!(await lstat(exe)).isFile()) continue;
-      const {stdout} = await run(exe,args,{cwd:dirname(exe),env:baseEnvironment(),windowsHide:true,timeout:10000,maxBuffer:8192});
+      if (!(await lstat(exe)).isFile()){record('not_file');continue;}
+      executing=true;
+      const beforeSpawn=performance.now();
+      const pending=run(exe,args,{cwd:dirname(exe),env:baseEnvironment(),windowsHide:true,timeout:timeoutMs,maxBuffer:8192});
+      spawnElapsedMs=Math.max(0,Math.round(performance.now()-beforeSpawn));child=pending.child;
+      const {stdout,stderr} = await pending;
+      stdoutBytes=Buffer.byteLength(stdout);stderrBytes=Buffer.byteLength(stderr);
+      // execFile can resolve an exit-zero callback even after its kill path.
+      // A terminated child is never evidence of a usable installation.
+      if(child?.killed===true){record('terminated',{code:child.exitCode,signal:child.signalCode});continue;}
       const match=stdout.trim().match(pattern);
-      if (match) return {path:exe,version:match[1]};
-    } catch { /* Try the next known installation. */ }
+      if (match){record('available');return result({path:exe,version:match[1]});}
+      record('output_format');
+    } catch(error) {
+      if(typeof error.stdout==='string'||Buffer.isBuffer(error.stdout))stdoutBytes=Buffer.byteLength(error.stdout);
+      if(typeof error.stderr==='string'||Buffer.isBuffer(error.stderr))stderrBytes=Buffer.byteLength(error.stderr);
+      const category=error.code==='ERR_CHILD_PROCESS_STDIO_MAXBUFFER'?'output_limit':
+        error.killed===true?'timeout':typeof error.code==='number'?'exit':
+        probeSignals.has(error.signal)?'signal':['ENOENT','ENOTDIR'].includes(error.code)?'missing':
+        ['EACCES','EPERM'].includes(error.code)?'access_denied':executing?'spawn_error':'filesystem_error';
+      record(category,error);
+    }
   }
-  return null;
+  return result(null);
 }
 
 async function pythonCandidates() {
@@ -57,7 +88,7 @@ export async function inspectPlatform() {
   const triple=(process.arch==='arm64'?'aarch64':'x86_64')+(windows?'-pc-windows-msvc':process.platform==='darwin'?'-apple-darwin':'-unknown-linux-musl');
   const vendor=join(root,'node_modules','@openai',`codex-${process.platform}-${process.arch}`,'vendor',triple,'bin',windows?'codex.exe':'codex');
   const gitPaths=windows?[join(process.env.ProgramFiles || 'C:\\Program Files','Git','cmd','git.exe')]:['/usr/bin/git','/usr/local/bin/git'];
-  const [sdk,python,git,codex]=await Promise.all([
+  const [sdk,pythonProbe,gitProbe,codexProbe]=await Promise.all([
     (async()=>{
       const dir=join(root,'node_modules','@openai','codex-security');
       const pkg=JSON.parse(await readFile(join(dir,'package.json'),'utf8'));
@@ -65,15 +96,16 @@ export async function inspectPlatform() {
       await access(join(dir,'_bundled_plugin','skills','security-scan','SKILL.md'));
       return typeof (await import('@openai/codex-security')).CodexSecurity==='function';
     })().catch(()=>false),
-    binaryVersion(await pythonCandidates(),['-I','-B','-c','import sys, importlib, sqlite3; assert sys.version_info >= (3,10); importlib.import_module("tomllib" if sys.version_info >= (3,11) else "tomli"); print(sys.version.split()[0])'],/^(3\.\d+\.\d+)$/),
-    binaryVersion(gitPaths,['--version'],/^git version ([\w.\-]+)$/),
-    binaryVersion([vendor],['--version'],/^codex(?:-cli)?\s+([\w.\-]+)$/),
+    probeBinaryVersion(await pythonCandidates(),['-I','-B','-c','import sys, importlib, sqlite3; assert sys.version_info >= (3,10); importlib.import_module("tomllib" if sys.version_info >= (3,11) else "tomli"); print(sys.version.split()[0])'],/^(3\.\d+\.\d+)$/),
+    probeBinaryVersion(gitPaths,['--version'],/^git version ([\w.\-]+)$/),
+    probeBinaryVersion([vendor],['--version'],/^codex(?:-cli)?\s+([\w.\-]+)$/),
   ]);
+  const python=pythonProbe.binary,git=gitProbe.binary,codex=codexProbe.binary;
   const missing=[];
   if(!goodNode)missing.push('node');
   if(!sdk)missing.push('sdk');
   if(!python)missing.push('python');
   if(!git)missing.push('git');
   if(!codex)missing.push('codex');
-  return {python,git,codex,check:{type:'check',available:missing.length===0,sdkVersion:sdk?sdkVersion:null,nodeVersion:process.versions.node,pythonVersion:python?.version??null,gitVersion:git?.version??null,codexVersion:codex?.version??null,missing}};
+  return {python,git,codex,check:{type:'check',available:missing.length===0,sdkVersion:sdk?sdkVersion:null,nodeVersion:process.versions.node,pythonVersion:python?.version??null,gitVersion:git?.version??null,codexVersion:codex?.version??null,missing,diagnostics:{python:pythonProbe.diagnostic,git:gitProbe.diagnostic,codex:codexProbe.diagnostic}}};
 }

@@ -23,3 +23,13 @@ test('progress counts preserve the SDK unit and reject inconsistent counts',()=>
   assert.match(progressMessage({filesCompleted:2,filesTotal:8,reviewItems:{completed:3,total:12}},'Revisando.'),/3 de 12 itens/);
   assert.equal(progressMessage({filesCompleted:9,filesTotal:8},'Revisando.'),'Revisando.');
 });
+
+test('public message and path limits preserve complete Unicode characters',()=>{
+  const message=publicSessionUpdate({event:{type:'event_msg',payload:{type:'agent_message',message:'a'.repeat(479)+'🔒tail'}}}).message;
+  assert.equal(message.isWellFormed(),true);
+  assert.equal([...message].length,480);
+  assert.equal(message.endsWith('🔒'),true);
+  const path=publicToolUpdate({kind:'tool',status:'completed',paths:['a'.repeat(99)+'🔒.ts']}).message;
+  assert.equal(path.isWellFormed(),true);
+  assert.equal(path.endsWith('🔒'),true);
+});

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { LoaderCircle, ScanLine } from 'lucide-react';
 import { native, request } from '../api';
 import { providers } from '../ai-provider';
-import { analysisDisplayText, projectScanReceipts, readScan, scanActive, scanStateLabel, SensitiveScanConfirmation, startSecurityScan, supportsSecurityModel, type ScanResult, type SecurityScan, type SecurityStatus } from '../security-scan';
+import { analysisDisplayText, analysisFileAccessNotice, codeAnalysisProviderNotice, projectScanReceipts, readScan, scanActive, scanStateLabel, SensitiveScanConfirmation, startSecurityScan, supportsSecurityModel, type ScanResult, type SecurityScan, type SecurityStatus } from '../security-scan';
 import { effectiveScanLimit, loadProjectOptions } from '../project-analysis-options';
 import { errorMessage, shortDate, type Assessment } from '../types';
 import { ConversationText } from './ConversationText';
@@ -71,7 +71,7 @@ export function useSecurityScan(assessment:Assessment) {
   }
   const start=(maxCostUsd:number|undefined,acknowledgeSensitive:boolean)=>mutate(async()=>{
     if(!recordKnown||scan)throw new Error('Consulte o registro da análise antes de iniciar.');
-    if(!selection||!supportsSecurityModel(selection))throw new Error('Escolha um modelo OpenAI ou OpenRouter para analisar o projeto.');
+    if(!selection||!supportsSecurityModel(selection))throw new Error(codeAnalysisProviderNotice);
     key.current??=crypto.randomUUID();
     const limit=maxCostUsd??effectiveScanLimit(await loadProjectOptions(assessment.projectId));
     return startSecurityScan({projectId:assessment.projectId,assessmentId:id,selection,idempotencyKey:key.current,prompt:assessment.objective,maxCostUsd:limit,acknowledgeSensitive});
@@ -122,13 +122,14 @@ export default function SecurityScanPanel({assessment,controller}:{assessment:As
   const review=JSON.stringify([assessment.id,assessment.target,assessment.objective,selection]);
   const acknowledged=sensitiveConsent===review;
   if(!native||!['code','files'].includes(assessment.kind))return null;
-  if(!scan && (!status||!selection||!supportsSecurityModel(selection)))return null;
+  if(!scan && (!status||!selection))return null;
   if(!scan)return <section className="security-start" aria-label="Análise de segurança">
-    {status?.available&&selection?<form onSubmit={event=>{event.preventDefault();void controller.start(undefined,acknowledged);}}>
+    {status?.available&&selection&&supportsSecurityModel(selection)?<form onSubmit={event=>{event.preventDefault();void controller.start(undefined,acknowledged);}}>
       <small>A análise usa {providers[selection.provider].name} com {selection.model}. Arquivos e contexto poderão ser enviados ao provedor.</small>
+      <small>{analysisFileAccessNotice}</small>
       {status.requiresSensitiveConfirmation&&<label><input type="checkbox" checked={acknowledged} onChange={e=>setSensitiveConsent(e.target.checked?review:'')}/>Autorizo enviar a fonte sensível desta avaliação a {providers[selection.provider].name} para esta análise.</label>}
       <button className="button" disabled={busy||!controller.recordKnown||!!status.requiresSensitiveConfirmation&&!acknowledged}>Iniciar análise de segurança</button>
-    </form>:<p>{analysisDisplayText(status?.reason||'A análise de segurança está indisponível.')}</p>}
+    </form>:<p>{!supportsSecurityModel(selection)?codeAnalysisProviderNotice:analysisDisplayText(status?.reason||'A análise de segurança está indisponível.')}</p>}
     {error&&<p role="alert">{analysisDisplayText(error)} <button className="text-button" onClick={controller.refresh}>Consultar estado novamente</button></p>}
   </section>;
   const updates=scan.events.filter(event=>event.stage==='message');

@@ -39,6 +39,34 @@ test('only scoped paths and supported options reach a provider',async()=>{
   assert.equal(config.codexOverrides.model_providers.openrouter.base_url,'https://openrouter.ai/api/v1');
   assert.ok(!JSON.stringify(config).includes(key));
 });
+
+test('prefers supported Windows process isolation without weakening SDK access policy',()=>{
+  for(const provider of ['openai','openrouter']){
+    const config=sdkConfig({provider,model:'fixture-model',apiKey:key},'fixture-python');
+    assert.equal(config.codexOverrides.features?.prefer_mxc,true);
+    assert.equal(config.pythonPath,'fixture-python');
+    assert.equal(config.codexOverrides.model_provider,provider);
+    assert.equal(config.codexOverrides.model,'fixture-model');
+    // Let the SDK keep its elevated fallback and credential read denials.
+    for(const name of ['windows','permissions','default_permissions','sandbox_mode','approvals_reviewer']){
+      assert.equal(Object.hasOwn(config.codexOverrides,name),false,name);
+    }
+    assert.ok(!JSON.stringify(config).includes(key));
+  }
+});
+
+test('scanner denies extra permission requests for either provider without selecting another profile',()=>{
+  for(const provider of ['openai','openrouter']){
+    const config=sdkConfig({provider,model:'fixture-model',apiKey:key,profile:'caller-profile',codexOverrides:{approval_policy:'on-request'}},'fixture-python');
+    assert.equal(config.codexOverrides.approval_policy,'never');
+    assert.equal(Object.hasOwn(config.codexOverrides,'profile'),false);
+    assert.equal(Object.hasOwn(config.codexOverrides,'profiles'),false);
+    assert.equal(config.codexOverrides.model_provider,provider);
+    assert.equal(config.codexOverrides.model,'fixture-model');
+    assert.equal(config.codexOverrides.features.prefer_mxc,true);
+    assert.ok(!JSON.stringify(config).includes(key));
+  }
+});
 test('rejects existing nonempty output or output overlapping the repository',async()=>{
   const req=await fixture();
   await assert.rejects(preparePaths({...req,outputDir:join(req.repository,'results')}));
@@ -95,11 +123,14 @@ test('official SDK accepts a bounded local path scan in offline preflight',async
   let client;
   try{
     const {CodexSecurity}=await import('@openai/codex-security');
-    client=new CodexSecurity({codexOverrides:{model:req.model,model_provider:req.provider}});
+    client=new CodexSecurity(sdkConfig(req));
     const checked=await client.preflight(paths.repository,{target:req.target,maxCostUsd:req.maxCostUsd,outputDir:paths.artifacts,mode:'standard',auth:'api-key'});
     assert.equal(await realpath(checked.repository),paths.repository);
     assert.equal(checked.maxCostUsd,1);
     assert.equal(checked.mode,'standard');
+    assert.equal(checked.model,req.model);
+    assert.equal(checked.modelProvider,req.provider);
+    assert.deepEqual(checked.target,{kind:'paths',paths:req.target});
   }finally{
     await client?.close();
     delete process.env.OPENAI_API_KEY;

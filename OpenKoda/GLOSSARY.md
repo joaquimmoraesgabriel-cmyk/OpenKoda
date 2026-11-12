@@ -1,12 +1,20 @@
 # OpenKoda — cibersegurança local
 
-Vocabulário da proposta do desktop de cibersegurança com Kali. Reutiliza as definições de instalação, plano de ação, aprovação, política de automação, executor e revogação do glossário da pasta pai. Os termos novos abaixo pertencem ao produto proposto nesta pasta.
+Vocabulário do desktop de segurança, incluindo modalidades históricas. Reutiliza as definições de instalação, plano de ação, aprovação, política de automação, executor e revogação do glossário da pasta pai. Os termos abaixo pertencem ao produto desta pasta.
 
 ## Trabalho e autoridade
 
 **Projeto**:
 Conjunto duradouro de alvos, avaliações, regras e evidências de um trabalho de segurança.
 _Evitar_: Avaliação, pasta, conta.
+
+**Repositório importado**:
+Cópia de um repositório obtida de uma origem remota identificada para compor um projeto.
+_Evitar_: Conexão contínua, autorização sobre todos os repositórios de uma conta.
+
+**Opções de análise do projeto**:
+Preferências para preparar os próximos trabalhos de um projeto, sem reescrever avaliações já iniciadas.
+_Evitar_: Escopo já adotado, aprovação retroativa.
 
 **Alvo**:
 Recurso identificado que pode ser avaliado dentro de um escopo autorizado.

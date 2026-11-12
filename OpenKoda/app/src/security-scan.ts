@@ -4,6 +4,8 @@ import type { Assessment } from './types';
 import { prepareScanMetadata } from './project-chat';
 
 export const defaultScanLimit = 5;
+export const codeAnalysisProviderNotice = 'A análise de código usa OpenAI nesta versão. Os demais provedores continuam disponíveis nas conversas.';
+export const analysisFileAccessNotice = 'Os comandos da análise podem ler outros arquivos acessíveis à sua conta Windows. Use apenas código em que você confia nesta versão local.';
 // Product copy only. Original reports and engine receipts remain unchanged on disk.
 export const analysisDisplayText=(text:string)=>text.replace(/Codex Security/gi,'OpenKoda');
 const states = ['starting','running','cancelling','completed','failed','cancelled','interrupted'] as const;
@@ -14,7 +16,7 @@ export const scanStateLabel:Record<ScanState,string> = {
 };
 export const scanActive = (status:ScanState) => status === 'starting' || status === 'running' || status === 'cancelling';
 export const supportsSecurityModel = (selection:AiSelection|null|undefined) =>
-  selection?.provider === 'openai' || selection?.provider === 'openrouter';
+  selection?.provider === 'openai';
 type ScanEvent = {at:string;stage:string;message:string};
 type ScanFinding = {title:string;severity:string;description:string;location:string|null};
 type Coverage = {scope:string[];excludedPaths:string[];additionalExclusions:number;findingsTotal:number;reportTruncated:boolean;summary?:string;limitations?:string[]};
@@ -71,6 +73,7 @@ export function readScan(response:unknown, assessmentId:string):SecurityScan|nul
 
 type StartScan = {projectId:string;assessmentId:string;selection:AiSelection;idempotencyKey:string;prompt:string;maxCostUsd:number;target?:string;acknowledgeSensitive?:boolean;signal?:AbortSignal};
 export async function startSecurityScan({projectId,assessmentId,selection,idempotencyKey,prompt,maxCostUsd,target,acknowledgeSensitive,signal}:StartScan) {
+  if(!supportsSecurityModel(selection))throw new Error(codeAnalysisProviderNotice);
   function requireActive(){if(signal?.aborted)throw new Error('Criação cancelada antes da análise. O projeto criado foi preservado.');}
   async function currentStatus(){
     requireActive();

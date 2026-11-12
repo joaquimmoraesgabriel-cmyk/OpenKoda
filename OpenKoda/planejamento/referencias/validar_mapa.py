@@ -51,10 +51,15 @@ if len(diagrams) != 10:
     errors.append({'error':'expected ten maps','actual':len(diagrams)})
 adr_status = []
 for file in sorted((product_root / 'docs' / 'adr').glob('*.md')):
-    expected = 'accepted' if file.name == '0004-tauri-como-framework-desktop.md' else 'proposed'
-    if f'status: {expected}' not in file.read_text(encoding='utf-8-sig'):
-        errors.append({'file':str(file),'error':f'ADR status differs from recorded decision: {expected}'})
-    adr_status.append({'name':file.name,'expectedStatus':expected})
+    # ADR status metadata is optional. Validate a declared value without
+    # inventing a decision for documents that have no frontmatter status.
+    text = file.read_text(encoding='utf-8-sig')
+    frontmatter = re.match(r'\A---\n(.*?)\n---(?:\n|$)', text, re.S)
+    declared = re.search(r'^status:\s*(.*?)\s*$', frontmatter[1], re.M) if frontmatter else None
+    recorded = declared[1] if declared else None
+    if recorded is not None and recorded not in {'proposed', 'accepted', 'deprecated'} and not re.fullmatch(r'superseded by ADR-\d{4}', recorded):
+        errors.append({'file':str(file),'error':'invalid declared ADR status'})
+    adr_status.append({'name':file.name,'recordedStatus':recorded})
 acceptance = (base / 'FASES-E-VALIDACAO.md').read_text(encoding='utf-8-sig')
 criteria = re.findall(r'^\| (AC-\d{2}) \|', acceptance, re.M)
 if criteria != [f'AC-{i:02d}' for i in range(1,29)]:

@@ -1,7 +1,7 @@
 {
   "valid": true,
-  "markdownDocuments": 24,
-  "localLinks": 213,
+  "markdownDocuments": 27,
+  "localLinks": 215,
   "diagrams": [
     {
       "name": "01-visao-produto",
@@ -67,19 +67,31 @@
   "adrStatus": [
     {
       "name": "0001-autoridade-do-executor-local.md",
-      "expectedStatus": "proposed"
+      "recordedStatus": "proposed"
     },
     {
       "name": "0002-kali-dedicado-e-limites-de-isolamento.md",
-      "expectedStatus": "proposed"
+      "recordedStatus": "proposed"
     },
     {
       "name": "0003-evidencia-bruta-e-projecoes.md",
-      "expectedStatus": "proposed"
+      "recordedStatus": "proposed"
     },
     {
       "name": "0004-tauri-como-framework-desktop.md",
-      "expectedStatus": "accepted"
+      "recordedStatus": "accepted"
+    },
+    {
+      "name": "0005-entradas-explicitas-e-origem-no-escopo-combinado.md",
+      "recordedStatus": null
+    },
+    {
+      "name": "0006-encerramento-local-com-resultado-remoto-incerto.md",
+      "recordedStatus": "accepted"
+    },
+    {
+      "name": "0007-executor-integrado-e-repositorios-importados.md",
+      "recordedStatus": "accepted"
     }
   ],
   "approvedImages": [

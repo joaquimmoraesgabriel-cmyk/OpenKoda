@@ -228,6 +228,12 @@ pub fn evidence_view(store:&Store,s:&Snapshot,aid:&str,eid:&str,redactor:&dyn Da
 pub fn snapshot_view(store:&Store,s:&Snapshot,redactor:&dyn DataRedactor)->Result<SnapshotView,String>{
     let mut value=serde_json::to_value(s).map_err(|_|error("data_projection_failed"))?;
     for key in ["dataPolicies","dataPolicyRevisions","dataBindings","dataClassifications","credentialReferences","dataUseReceipts","providerSlots","providerModels","dataMutationReceipts","dataSubjectGenerations"]{value.as_object_mut().unwrap().remove(key);}
+    // Public SDK activity can contain source excerpts, including before a
+    // result Evidence exists. Apply the shared live policy gate to every copy
+    // before generic redaction; never mutate the canonical stored receipt.
+    for (assessment,original) in value["assessments"].as_array_mut().ok_or_else(||error("data_projection_failed"))?.iter_mut().zip(&s.assessments){
+        assessment["events"]=json!(original.events.iter().map(|event|crate::security_scan::event_view(store,s,original,event)).collect::<Result<Vec<_>,_>>()?);
+    }
     let mut value=project_value(value,redactor);
     // Only the validated project preference DTO can retain its three context
     // fields. Generic evidence/source contexts remain omitted by project_value.

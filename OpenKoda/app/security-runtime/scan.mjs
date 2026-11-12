@@ -50,7 +50,11 @@ export async function preparePaths(req) {
 }
 
 export function sdkConfig(req,pythonPath) {
-  const codexOverrides={model:req.model,model_provider:req.provider};
+  // Prefer native MXC when supported; the SDK retains its elevated fallback
+  // and credential read denials. Never downgrade to the unelevated backend.
+  // Analysis never requests more permissions than the SDK's existing profile.
+  // This does not narrow the filesystem reads that profile already permits.
+  const codexOverrides={model:req.model,model_provider:req.provider,approval_policy:'never',features:{prefer_mxc:true}};
   if(req.provider==='openrouter'){
     codexOverrides.model_providers={openrouter:{name:'OpenRouter',base_url:'https://openrouter.ai/api/v1',wire_api:'responses',env_key:'OPENROUTER_API_KEY'}};
   }
