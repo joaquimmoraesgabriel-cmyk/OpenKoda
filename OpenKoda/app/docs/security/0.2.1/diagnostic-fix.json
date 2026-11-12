@@ -1,0 +1,66 @@
+{
+  "schema": "openkoda.runtime-diagnostic-fix-public.v1",
+  "sourceCommit": "435f0bbb7b7704aadf2c69a8a35e22273f88adac",
+  "evidenceSha256": "92a15c93d08e20d334cbc1c9bd8383f6591d23aaa5a0126c5d4752753eb48c36",
+  "historicalFailure": {
+    "path": ".local/native-source-edition-9e6a01a4-d04d-478e-942e-67f365709b0d/result.json",
+    "sha256": "392e8d22e31a69f73d399595c9200d72085e1dc198279037a7fbd99968fb30bb",
+    "observation": "Native Codex probe returned exit0/killedfalse/stdout0 after16331ms; JSON reached Rust intact; no proved JobObject truncation.",
+    "retained": true
+  },
+  "control": {
+    "schema": "openkoda.execfile-timeout-control.v1",
+    "nodeVersion": "v24.19.0",
+    "experiment": "One offline synthetic Node child comparison; no Codex/SDK/version probe/API or personal data access.",
+    "sourceSha256": "d5bb2ef6f68d1c7b836af8e1b3008e657c3a4798a496fc4dbe17302cfbcaa255",
+    "results": [
+      {
+        "label": "normal",
+        "timeoutMs": 500,
+        "blockedMs": 0,
+        "spawnElapsedMs": 23,
+        "elapsedMs": 156,
+        "resolved": true,
+        "stdoutBytes": 22,
+        "stderrBytes": 0,
+        "versionMatched": true,
+        "childKilled": false,
+        "exitCode": 0,
+        "childConfirmedWrite": {
+          "bytesWritten": 22
+        }
+      },
+      {
+        "label": "blocked-event-loop",
+        "timeoutMs": 500,
+        "blockedMs": 1500,
+        "spawnElapsedMs": 12,
+        "elapsedMs": 1514,
+        "resolved": true,
+        "stdoutBytes": 0,
+        "stderrBytes": 0,
+        "versionMatched": false,
+        "childKilled": false,
+        "exitCode": 0,
+        "childConfirmedWrite": {
+          "bytesWritten": 22
+        }
+      }
+    ]
+  },
+  "contract": {
+    "red": "SDK evaluation overlapped three live probes",
+    "green": "No probes before SDK evaluation finishes",
+    "runtimeTestsPassed": 20
+  },
+  "change": "await SDK load before arming parallel version probes; unchanged ten-second probe budget, strict output, no retry",
+  "nativeResult": {
+    "passed": true,
+    "queryCount": 1,
+    "queryElapsedMs": 8243,
+    "apiRequests": 0,
+    "scanRequests": 0,
+    "binarySha256": "075acf46a895da9afa301422b00b446f00dd8153cd8d99371cc6e701905dc69d"
+  },
+  "causalLimit": "Synthetic control proves the timer output-loss mechanism; historical delay origin remains undetermined. Prior failures are retained."
+}

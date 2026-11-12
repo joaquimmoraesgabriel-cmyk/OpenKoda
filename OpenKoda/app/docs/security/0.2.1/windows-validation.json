@@ -1,0 +1,425 @@
+{
+  "schema": "openkoda.windows-validation-021.v1",
+  "sourceCommit": "435f0bbb7b7704aadf2c69a8a35e22273f88adac",
+  "generatedAt": "2026-11-12T19:25:43.889Z",
+  "serverRun": {
+    "id": 43285858394,
+    "url": "https://github.com/joaquimmoraesgabriel-cmyk/OpenKoda/actions/runs/43285858394",
+    "conclusion": "success",
+    "headSha": "435f0bbb7b7704aadf2c69a8a35e22273f88adac"
+  },
+  "servers": [
+    {
+      "image": "windows-2022",
+      "passed": true,
+      "stage": "completed",
+      "starts": [
+        {
+          "iteration": 1,
+          "view": "Permissões",
+          "projects": 0,
+          "assessments": 0,
+          "timeoutSeconds": 97,
+          "modelRequired": true,
+          "settingsReopened": false,
+          "transport": "Windows UI Automation"
+        },
+        {
+          "iteration": 2,
+          "view": "Permissões",
+          "projects": 0,
+          "assessments": 0,
+          "timeoutSeconds": 97,
+          "modelRequired": true,
+          "settingsReopened": true,
+          "transport": "Windows UI Automation"
+        }
+      ],
+      "version": "0.2.1",
+      "installerSha256": "ee27ac8801de5e03d2a738f61f4b1efbea15bd5d4e9860436ba52496bd910626",
+      "payloadSha256": "019dc0a91cd0cf921e403c5c90a9ed9ea79496b1044854fa90e02cb27a80803d",
+      "sourceSha256": "a8c271a6ce84f47596667ed524bc0cbf2e91d6d6b882dd2c177319f12a479abc",
+      "differingBytes": 3,
+      "securityRuntime": {
+        "schema": "openkoda.security-runtime-tree.v1",
+        "files": 11879,
+        "bytes": 768165874,
+        "sha256": "987c6ddb1ddd7a5d63044cfecf2e9c1c20bc360d75fe322b0dca29007e010cbd"
+      },
+      "sdkDiagnostic": {
+        "type": "check",
+        "available": true,
+        "sdkVersion": "0.10.0",
+        "nodeVersion": "24.22.2",
+        "pythonVersion": "3.13.17",
+        "gitVersion": "2.56.0.windows.4",
+        "codexVersion": "0.167.1",
+        "missing": [],
+        "diagnostics": {
+          "python": {
+            "attempts": [
+              {
+                "candidate": 1,
+                "category": "available",
+                "code": null,
+                "signal": null,
+                "elapsedMs": 182,
+                "stdoutBytes": 9,
+                "stderrBytes": 0,
+                "spawnElapsedMs": 9,
+                "childKilled": false,
+                "exitCode": 0
+              }
+            ],
+            "additionalAttempts": 0
+          },
+          "git": {
+            "attempts": [
+              {
+                "candidate": 1,
+                "category": "available",
+                "code": null,
+                "signal": null,
+                "elapsedMs": 60,
+                "stdoutBytes": 29,
+                "stderrBytes": 0,
+                "spawnElapsedMs": 2,
+                "childKilled": false,
+                "exitCode": 0
+              }
+            ],
+            "additionalAttempts": 0
+          },
+          "codex": {
+            "attempts": [
+              {
+                "candidate": 1,
+                "category": "available",
+                "code": null,
+                "signal": null,
+                "elapsedMs": 76,
+                "stdoutBytes": 18,
+                "stderrBytes": 0,
+                "spawnElapsedMs": 16,
+                "childKilled": false,
+                "exitCode": 0
+              }
+            ],
+            "additionalAttempts": 0
+          }
+        }
+      },
+      "sdkPrerequisiteGitMissing": false,
+      "projectReopened": false,
+      "settingsReopened": true,
+      "uninstalled": true,
+      "databasePreserved": true,
+      "generatedAt": "2026-11-12T19:17:18.1286841Z",
+      "receiptSha256": "d0401e559e22e271b8202dc9a14d52fe8ad813da50135454f232424f1d7e8a2f"
+    },
+    {
+      "image": "windows-2025",
+      "passed": true,
+      "stage": "completed",
+      "starts": [
+        {
+          "iteration": 1,
+          "view": "Permissões",
+          "projects": 0,
+          "assessments": 0,
+          "timeoutSeconds": 97,
+          "modelRequired": true,
+          "settingsReopened": false,
+          "transport": "Windows UI Automation"
+        },
+        {
+          "iteration": 2,
+          "view": "Permissões",
+          "projects": 0,
+          "assessments": 0,
+          "timeoutSeconds": 97,
+          "modelRequired": true,
+          "settingsReopened": true,
+          "transport": "Windows UI Automation"
+        }
+      ],
+      "version": "0.2.1",
+      "installerSha256": "d3eac68d0e4d167ff65eb950db579f39ba112aedc86bf5555df730b34b1e95de",
+      "payloadSha256": "f5f0d3900cdeb5f17eee649c8f105578924052b16dcaa75da479c954b96c1d16",
+      "sourceSha256": "1e69ac57693037527a3984411de41196865deff64d32b76b3ce36e06786ba079",
+      "differingBytes": 3,
+      "securityRuntime": {
+        "schema": "openkoda.security-runtime-tree.v1",
+        "files": 11879,
+        "bytes": 768165874,
+        "sha256": "987c6ddb1ddd7a5d63044cfecf2e9c1c20bc360d75fe322b0dca29007e010cbd"
+      },
+      "sdkDiagnostic": {
+        "type": "check",
+        "available": true,
+        "sdkVersion": "0.10.0",
+        "nodeVersion": "24.22.2",
+        "pythonVersion": "3.13.17",
+        "gitVersion": "2.56.0.windows.4",
+        "codexVersion": "0.167.1",
+        "missing": [],
+        "diagnostics": {
+          "python": {
+            "attempts": [
+              {
+                "candidate": 1,
+                "category": "available",
+                "code": null,
+                "signal": null,
+                "elapsedMs": 203,
+                "stdoutBytes": 9,
+                "stderrBytes": 0,
+                "spawnElapsedMs": 11,
+                "childKilled": false,
+                "exitCode": 0
+              }
+            ],
+            "additionalAttempts": 0
+          },
+          "git": {
+            "attempts": [
+              {
+                "candidate": 1,
+                "category": "available",
+                "code": null,
+                "signal": null,
+                "elapsedMs": 117,
+                "stdoutBytes": 29,
+                "stderrBytes": 0,
+                "spawnElapsedMs": 3,
+                "childKilled": false,
+                "exitCode": 0
+              }
+            ],
+            "additionalAttempts": 0
+          },
+          "codex": {
+            "attempts": [
+              {
+                "candidate": 1,
+                "category": "available",
+                "code": null,
+                "signal": null,
+                "elapsedMs": 113,
+                "stdoutBytes": 18,
+                "stderrBytes": 0,
+                "spawnElapsedMs": 49,
+                "childKilled": false,
+                "exitCode": 0
+              }
+            ],
+            "additionalAttempts": 0
+          }
+        }
+      },
+      "sdkPrerequisiteGitMissing": false,
+      "projectReopened": false,
+      "settingsReopened": true,
+      "uninstalled": true,
+      "databasePreserved": true,
+      "generatedAt": "2026-11-12T19:18:14.3770806Z",
+      "receiptSha256": "dc7a4d5d549d324257dd0032266be022ed4c617ca0ae8be4a6278d8dc3144517"
+    }
+  ],
+  "clientRun": {
+    "id": 43285858373,
+    "url": "https://github.com/joaquimmoraesgabriel-cmyk/OpenKoda/actions/runs/43285858373",
+    "conclusion": "success",
+    "headSha": "435f0bbb7b7704aadf2c69a8a35e22273f88adac"
+  },
+  "scope": "Fresh install, launch twice, persisted settings, uninstall preserving the database. No paid inference, existing-user upgrade or personal profile migration was performed by these clean-runner tests.",
+  "clientInstalledRelease": {
+    "passed": true,
+    "stage": "completed",
+    "starts": [
+      {
+        "iteration": 1,
+        "view": "Permissões",
+        "projects": 0,
+        "assessments": 0,
+        "timeoutSeconds": 97,
+        "modelRequired": true,
+        "settingsReopened": false,
+        "transport": "Windows UI Automation"
+      },
+      {
+        "iteration": 2,
+        "view": "Permissões",
+        "projects": 0,
+        "assessments": 0,
+        "timeoutSeconds": 97,
+        "modelRequired": true,
+        "settingsReopened": true,
+        "transport": "Windows UI Automation"
+      }
+    ],
+    "version": "0.2.1",
+    "installerSha256": "62f0aa7f8c50347c2af9e13df1b984ca1bad0af1e25554dc59fe0818ef800db3",
+    "payloadSha256": "c34edb4d345ad4b88f4fed946740f31f4ce884fba69ed98b4361b6c0f78bbfe5",
+    "sourceSha256": "5b0246e0848e971fa4481eeefc66952c20b73fa4ede94252971d715cd5b89f39",
+    "differingBytes": 3,
+    "securityRuntime": {
+      "schema": "openkoda.security-runtime-tree.v1",
+      "files": 11879,
+      "bytes": 768165874,
+      "sha256": "987c6ddb1ddd7a5d63044cfecf2e9c1c20bc360d75fe322b0dca29007e010cbd"
+    },
+    "sdkDiagnostic": {
+      "type": "check",
+      "available": true,
+      "sdkVersion": "0.10.0",
+      "nodeVersion": "24.22.2",
+      "pythonVersion": "3.13.17",
+      "gitVersion": "2.56.0.windows.4",
+      "codexVersion": "0.167.1",
+      "missing": [],
+      "diagnostics": {
+        "python": {
+          "attempts": [
+            {
+              "candidate": 1,
+              "category": "available",
+              "code": null,
+              "signal": null,
+              "elapsedMs": 623,
+              "stdoutBytes": 9,
+              "stderrBytes": 0,
+              "spawnElapsedMs": 42,
+              "childKilled": false,
+              "exitCode": 0
+            }
+          ],
+          "additionalAttempts": 0
+        },
+        "git": {
+          "attempts": [
+            {
+              "candidate": 1,
+              "category": "available",
+              "code": null,
+              "signal": null,
+              "elapsedMs": 178,
+              "stdoutBytes": 29,
+              "stderrBytes": 0,
+              "spawnElapsedMs": 23,
+              "childKilled": false,
+              "exitCode": 0
+            }
+          ],
+          "additionalAttempts": 0
+        },
+        "codex": {
+          "attempts": [
+            {
+              "candidate": 1,
+              "category": "available",
+              "code": null,
+              "signal": null,
+              "elapsedMs": 396,
+              "stdoutBytes": 18,
+              "stderrBytes": 0,
+              "spawnElapsedMs": 28,
+              "childKilled": false,
+              "exitCode": 0
+            }
+          ],
+          "additionalAttempts": 0
+        }
+      }
+    },
+    "sdkPrerequisiteGitMissing": false,
+    "projectReopened": false,
+    "settingsReopened": true,
+    "uninstalled": true,
+    "databasePreserved": true,
+    "generatedAt": "2026-11-12T19:18:25.6917034Z",
+    "receiptSha256": "11518a6f9d4c60d967e3ccb6fc6fb391560fbccd40b766480cfed7bad4993149"
+  },
+  "clientReceipt": {
+    "passed": true,
+    "stage": "completed",
+    "sourceCommit": "435f0bbb7b7704aadf2c69a8a35e22273f88adac",
+    "workflowRun": "43285858373",
+    "imageVersion": "20261101.203.1",
+    "webView2Observation": "pre-existing-runtime",
+    "windows": {
+      "caption": "Microsoft Windows 11 Enterprise",
+      "version": "10.0.26200",
+      "build": "26200",
+      "productType": 1,
+      "architecture": "Arm64"
+    },
+    "manifestSha256": "b8605b0841db009a0c9bda15df04bc241618671ff15acc35300b706cee4aa65f",
+    "version": "0.2.1",
+    "installerSha256": "62f0aa7f8c50347c2af9e13df1b984ca1bad0af1e25554dc59fe0818ef800db3",
+    "sourceExeSha256": "5b0246e0848e971fa4481eeefc66952c20b73fa4ede94252971d715cd5b89f39",
+    "installerPeMachine": "0x014C",
+    "appPeMachine": "0x8664",
+    "webView2Before": {
+      "observedAt": "2026-11-12T19:17:04.4281066Z",
+      "present": true,
+      "registrations": [
+        {
+          "hive": "LocalMachine",
+          "view": "Registry32",
+          "version": "156.0.4314.58",
+          "present": true
+        },
+        {
+          "hive": "LocalMachine",
+          "view": "Registry64",
+          "version": null,
+          "present": false
+        },
+        {
+          "hive": "CurrentUser",
+          "view": "Registry32",
+          "version": null,
+          "present": false
+        },
+        {
+          "hive": "CurrentUser",
+          "view": "Registry64",
+          "version": null,
+          "present": false
+        }
+      ]
+    },
+    "webView2After": {
+      "observedAt": "2026-11-12T19:18:25.6974864Z",
+      "present": true,
+      "registrations": [
+        {
+          "hive": "LocalMachine",
+          "view": "Registry32",
+          "version": "156.0.4314.58",
+          "present": true
+        },
+        {
+          "hive": "LocalMachine",
+          "view": "Registry64",
+          "version": null,
+          "present": false
+        },
+        {
+          "hive": "CurrentUser",
+          "view": "Registry32",
+          "version": null,
+          "present": false
+        },
+        {
+          "hive": "CurrentUser",
+          "view": "Registry64",
+          "version": null,
+          "present": false
+        }
+      ]
+    }
+  },
+  "clientReceiptSha256": "48aae1631baced2c6c9fe7f1d5229e96d68c889923e35119fc6e082246c2fa38"
+}

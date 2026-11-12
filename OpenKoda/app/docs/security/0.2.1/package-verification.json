@@ -1,0 +1,251 @@
+{
+  "schema": "openkoda.package-verification-021.v1",
+  "passed": true,
+  "sourceCommit": "435f0bbb7b7704aadf2c69a8a35e22273f88adac",
+  "generatedAt": "2026-11-12T19:38:57.163Z",
+  "origin": {
+    "kind": "GitHub Actions client artifact",
+    "runId": 43285858373,
+    "url": "https://github.com/joaquimmoraesgabriel-cmyk/OpenKoda/actions/runs/43285858373",
+    "manifestSha256": "b8605b0841db009a0c9bda15df04bc241618671ff15acc35300b706cee4aa65f",
+    "installedOn": "Windows 11 Arm64, x64 app"
+  },
+  "installer": {
+    "name": "OpenKoda_0.2.1_x64-setup.exe",
+    "bytes": 181573768,
+    "sha256": "62f0aa7f8c50347c2af9e13df1b984ca1bad0af1e25554dc59fe0818ef800db3",
+    "authenticode": "NotSigned"
+  },
+  "installedPayload": {
+    "verified": true,
+    "differingBytes": 3,
+    "sha256": "c34edb4d345ad4b88f4fed946740f31f4ce884fba69ed98b4361b6c0f78bbfe5",
+    "sourceSha256": "5b0246e0848e971fa4481eeefc66952c20b73fa4ede94252971d715cd5b89f39"
+  },
+  "embeddedFrontend": [
+    {
+      "file": "index.html",
+      "viteSha256": "a8e0b0940bb786f2678c1f406af6c7c0b9ad0ac6cbaec801679876af88c6e22c",
+      "embeddedUncompressedSha256": "44e83fcb0ebacb8537656e2c3d4307c5fbc5f367d30d3e796562b51799c876e0",
+      "compressedSha256": "103f88b599fb019fe9d700624439d410a6193d1d29f4f8401242da555aeb100a",
+      "compressedBytes": 237,
+      "exeOffset": 22573980,
+      "comparison": "Tauri HTML serialization (doctype case, empty crossorigin, inter-tag whitespace)"
+    },
+    {
+      "file": "assets\\groq-CR3fFsPZ.png",
+      "viteSha256": "cbc980164383f914a3ed9b6e11124ae8350232245720bfa115f34890aaaebaa3",
+      "embeddedUncompressedSha256": "cbc980164383f914a3ed9b6e11124ae8350232245720bfa115f34890aaaebaa3",
+      "compressedSha256": "2db5e0653cfae64c68934398603a023eea26cef9f4ce68aeba0f32da67052ee3",
+      "compressedBytes": 6882,
+      "exeOffset": 22574242,
+      "comparison": "byte-identical"
+    },
+    {
+      "file": "assets\\index-CMhVxyot.css",
+      "viteSha256": "3d88ba606684a6405563b615e41dfe828b7398f79ac180a0fe245c7c32bd5730",
+      "embeddedUncompressedSha256": "3d88ba606684a6405563b615e41dfe828b7398f79ac180a0fe245c7c32bd5730",
+      "compressedSha256": "243e76bea4a8f76ed5f646cd576e3afeb28479a5ba32cec9672a09c9671c4221",
+      "compressedBytes": 21403,
+      "exeOffset": 22552566,
+      "comparison": "byte-identical"
+    },
+    {
+      "file": "assets\\index-DzBULRBR.js",
+      "viteSha256": "bb3d9472304baf41c150cc3e64ad1dc063ae0199f51b5ac8968fe07b8b2bd84f",
+      "embeddedUncompressedSha256": "bb3d9472304baf41c150cc3e64ad1dc063ae0199f51b5ac8968fe07b8b2bd84f",
+      "compressedSha256": "230532ad2d555cfa26c5aefea53408a0f2b5943fb7e38b23713025e7612a7ee8",
+      "compressedBytes": 174384,
+      "exeOffset": 22581149,
+      "comparison": "byte-identical"
+    },
+    {
+      "file": "assets\\openrouter-DUxd9XH8.png",
+      "viteSha256": "e6ce76bf956ac68569a7b1456fe0310fb9cc22bc1bc0fd8defd5daae099480b8",
+      "embeddedUncompressedSha256": "e6ce76bf956ac68569a7b1456fe0310fb9cc22bc1bc0fd8defd5daae099480b8",
+      "compressedSha256": "32575569945c1bb1f2206134129619c8a964a7259390dc1a85a384e6d041a4c9",
+      "compressedBytes": 16129,
+      "exeOffset": 22755796,
+      "comparison": "byte-identical"
+    },
+    {
+      "file": "assets\\source-CI-TRgjy.svg",
+      "viteSha256": "30762965171bc6e2266b24b77ad29d267566af0ca9a619f91607a1ce415486cc",
+      "embeddedUncompressedSha256": "30762965171bc6e2266b24b77ad29d267566af0ca9a619f91607a1ce415486cc",
+      "compressedSha256": "c160b0f07d6570ec8c6c37326770a94a5996676ce2dbe18cba33814de40099c9",
+      "compressedBytes": 205,
+      "exeOffset": 22755560,
+      "comparison": "byte-identical"
+    }
+  ],
+  "icon": {
+    "sourceIcoSha256": "8166a92f19522e559abbff315982efaaf29d7caa7873ac017de36e7a11e9ccad",
+    "group": 32512,
+    "frames": [
+      {
+        "icoPlanes": 0,
+        "resourcePlanes": 1,
+        "icoBits": 32,
+        "resourceBits": 32,
+        "pixels": 16,
+        "id": 1,
+        "bytes": 546,
+        "sha256": "74ec1c2045e74bbe2b9304d9883fdaf74815ec2dcfb38e13831ccf42ee06431c"
+      },
+      {
+        "icoPlanes": 0,
+        "resourcePlanes": 1,
+        "icoBits": 32,
+        "resourceBits": 32,
+        "pixels": 24,
+        "id": 2,
+        "bytes": 816,
+        "sha256": "546467a415f649e4b67c75690387819b818f522ec9267ee4b7ff9e260174e21d"
+      },
+      {
+        "icoPlanes": 0,
+        "resourcePlanes": 1,
+        "icoBits": 32,
+        "resourceBits": 32,
+        "pixels": 32,
+        "id": 3,
+        "bytes": 1072,
+        "sha256": "12cb9ff8a3a1b6acd356ca468234f051d616fa24056fb3d9bf380f5d70e61be3"
+      },
+      {
+        "icoPlanes": 0,
+        "resourcePlanes": 1,
+        "icoBits": 32,
+        "resourceBits": 32,
+        "pixels": 48,
+        "id": 4,
+        "bytes": 1639,
+        "sha256": "6b7773fa87a3021f2d08fe127534a9933fdff9a6a24f37ae1cc35a806be598db"
+      },
+      {
+        "icoPlanes": 0,
+        "resourcePlanes": 1,
+        "icoBits": 32,
+        "resourceBits": 32,
+        "pixels": 64,
+        "id": 5,
+        "bytes": 2108,
+        "sha256": "cfdec1d9b4e43d5fa4761a8c91f9c1eb97dd5ba8c1678412b277940a29b56951"
+      },
+      {
+        "icoPlanes": 0,
+        "resourcePlanes": 1,
+        "icoBits": 32,
+        "resourceBits": 32,
+        "pixels": 256,
+        "id": 6,
+        "bytes": 4564,
+        "sha256": "eb216b7bccb59e696f0011750492943fdcaac90704f36905f1bde3c5b3891fcf"
+      }
+    ]
+  },
+  "bundledResources": {
+    "avisos/AVISOS.txt": "6a04d6e60ccff562536820c15f0d8d1e68c727c22b982289bd5f3c2150186c33",
+    "avisos/Prestige-UI-LICENSE.txt": "88967c2d0545da7ed89a4d33d58f3850f35beddcb6514c173170d228189519f9",
+    "avisos/Cindy-LICENSE.txt": "3ddf9be5c28fe27dad143a5dc76eea25222ad1dd68934a047064e56ed2fa40c5",
+    "avisos/Cindy-NOTICE.txt": "0f70b76e1fa169a6f680e80cee098774262f1b4c1eed8967d207cce7e85eb29d",
+    "avisos/COPYRIGHT-library.html": "5647be074c8edf7339fd863055923a8fc80bc5610a8d4661ec3b767b9d392c27",
+    "avisos/fontes-MPL.zip": "fc9f8ffb6b16d2f01a4cd295f983276ea4f71f4009bbd6d98305bbbce9f03b85",
+    "recuperacao/windows_release_recovery.py": "6ed8d57fc6397b1a3c45ef920a862fa1d6297d275689125757277d4a1f23703f",
+    "recuperacao/RECUPERACAO-WINDOWS.md": "7f8700f7e605253e7d49619f2254934ac6b153fab275ba7907a81ddc13ba1766"
+  },
+  "securityRuntime": {
+    "schema": "openkoda.security-runtime-tree.v1",
+    "files": 11879,
+    "bytes": 768165874,
+    "sha256": "987c6ddb1ddd7a5d63044cfecf2e9c1c20bc360d75fe322b0dca29007e010cbd"
+  },
+  "runtimeLicenses": {
+    "bin/LICENSE.txt": {
+      "bytes": 160555,
+      "sha256": "ed34dd8e3f0a78dbaf00d0444ce8e285b015b765379c2e17880455f70370f8e9"
+    },
+    "python/LICENSE.txt": {
+      "bytes": 33861,
+      "sha256": "62bec384df47b0328307db41455ff6ea2559e5546b394ac69148561b21703120"
+    },
+    "node_modules/@openai/codex-security/LICENSE": {
+      "bytes": 10926,
+      "sha256": "d17f227e4df5da1600391338865ce0f3055211760a36688f816941d58232d8dc"
+    }
+  },
+  "runtimeDiagnostic": {
+    "type": "check",
+    "available": true,
+    "sdkVersion": "0.10.0",
+    "nodeVersion": "24.22.2",
+    "pythonVersion": "3.13.17",
+    "gitVersion": "2.55.0.windows.5",
+    "codexVersion": "0.167.1",
+    "missing": [],
+    "diagnostics": {
+      "python": {
+        "attempts": [
+          {
+            "candidate": 1,
+            "category": "available",
+            "code": null,
+            "signal": null,
+            "elapsedMs": 2190,
+            "stdoutBytes": 9,
+            "stderrBytes": 0,
+            "spawnElapsedMs": 130,
+            "childKilled": false,
+            "exitCode": 0
+          }
+        ],
+        "additionalAttempts": 0
+      },
+      "git": {
+        "attempts": [
+          {
+            "candidate": 1,
+            "category": "available",
+            "code": null,
+            "signal": null,
+            "elapsedMs": 2190,
+            "stdoutBytes": 29,
+            "stderrBytes": 0,
+            "spawnElapsedMs": 63,
+            "childKilled": false,
+            "exitCode": 0
+          }
+        ],
+        "additionalAttempts": 0
+      },
+      "codex": {
+        "attempts": [
+          {
+            "candidate": 1,
+            "category": "available",
+            "code": null,
+            "signal": null,
+            "elapsedMs": 2280,
+            "stdoutBytes": 18,
+            "stderrBytes": 0,
+            "spawnElapsedMs": 1991,
+            "childKilled": false,
+            "exitCode": 0
+          }
+        ],
+        "additionalAttempts": 0
+      }
+    }
+  },
+  "staticInspection": {
+    "mode": "ExtractOnly",
+    "installerExecutedLocally": false,
+    "personalProfileOpened": false,
+    "paidScan": false,
+    "receiptSha256": "c67f6e82ba9a16a0fa2fdd65033adba2959c0bd99b8df0d6c125fec407538b49"
+  },
+  "limits": [
+    "Clean install/start/uninstall proof is from CI; the personal Windows profile was not opened for this release test.",
+    "An existing-user upgrade and a full paid SDK self-scan are not established by this receipt."
+  ]
+}

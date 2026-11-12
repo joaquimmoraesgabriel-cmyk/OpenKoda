@@ -1,0 +1,396 @@
+{
+  "schema": "openkoda.validation-021.v1",
+  "sourceCommit": "435f0bbb7b7704aadf2c69a8a35e22273f88adac",
+  "generatedAt": "2026-11-12T19:12:15.309Z",
+  "tests": {
+    "frontend": {
+      "logSha256": "4344bffd374e8c8d879bb1f82e771193ab2dc4eda014ba746bbc72779f7f7ba8",
+      "result": "passed",
+      "passed": 79,
+      "build": true
+    },
+    "edge": {
+      "logSha256": "d34e16752e22ad166ddd5c160bcca8ba34e1ce2338d9fbe8588abe1018738d21",
+      "result": "passed",
+      "passed": 101
+    },
+    "runtime": {
+      "logSha256": "092850c94c2b16fd6d296d5d2abeb298ea246bacfc13a0f89b2be292fa29dda7",
+      "result": "passed",
+      "passed": 20
+    },
+    "recovery": {
+      "logSha256": "ea636150d842b77c4243c047022cae0b77fadd72a767a5c57d7496328ef64d72",
+      "result": "passed",
+      "passed": 21
+    },
+    "rust": {
+      "logSha256": "a16d80b85b6586ae7c347024e9d8b8d895bf55568c7455b3601e8290ec7461d6",
+      "result": "passed",
+      "passed": 638,
+      "ignored": 3,
+      "ignoredReason": "Opt-in host/network tests; GitHub live opt-in separately passed. Retired Kali and Windows host opt-ins not rerun."
+    }
+  },
+  "nativeEdition": {
+    "passed": true,
+    "binarySha256": "075acf46a895da9afa301422b00b446f00dd8153cd8d99371cc6e701905dc69d",
+    "version": "0.2.1",
+    "checks": [
+      "Criação de projeto local exige modelo e omite operações aposentadas.",
+      "Guarda IPC recusa modalidades, motores e aliases sem alterar o domínio.",
+      "SDK disponível no host, perfil sintético sem credencial e nenhuma análise iniciada.",
+      "Comparação de duas conversas usa registros do SDK e a configuração conserva a pasta local.",
+      "Reabertura preserva projeto, conversa e fonte; URL técnica continua no workspace de código."
+    ],
+    "deniedRetiredCalls": 14,
+    "runtime": {
+      "available": true,
+      "codexVersion": "0.167.1",
+      "diagnostics": {
+        "codex": {
+          "additionalAttempts": 0,
+          "attempts": [
+            {
+              "candidate": 1,
+              "category": "available",
+              "childKilled": false,
+              "code": null,
+              "elapsedMs": 64,
+              "exitCode": 0,
+              "signal": null,
+              "spawnElapsedMs": 8,
+              "stderrBytes": 0,
+              "stdoutBytes": 18
+            }
+          ]
+        },
+        "git": {
+          "additionalAttempts": 0,
+          "attempts": [
+            {
+              "candidate": 1,
+              "category": "available",
+              "childKilled": false,
+              "code": null,
+              "elapsedMs": 61,
+              "exitCode": 0,
+              "signal": null,
+              "spawnElapsedMs": 7,
+              "stderrBytes": 0,
+              "stdoutBytes": 29
+            }
+          ]
+        },
+        "python": {
+          "additionalAttempts": 0,
+          "attempts": [
+            {
+              "candidate": 1,
+              "category": "available",
+              "childKilled": false,
+              "code": null,
+              "elapsedMs": 97,
+              "exitCode": 0,
+              "signal": null,
+              "spawnElapsedMs": 8,
+              "stderrBytes": 0,
+              "stdoutBytes": 8
+            }
+          ]
+        }
+      },
+      "gitVersion": "2.55.0.windows.5",
+      "missing": [],
+      "nodeVersion": "24.19.0",
+      "pythonVersion": "3.14.7",
+      "sdkVersion": "0.10.0",
+      "type": "check",
+      "provider": "openai",
+      "hasApiKey": false,
+      "reason": "Configure a chave deste provedor."
+    },
+    "sourceUnchanged": true,
+    "reopened": true,
+    "ownProcessesClosed": 2,
+    "credentialsConfigured": false,
+    "apiCalls": 0,
+    "scanCalls": 0,
+    "screenshots": [
+      {
+        "name": "01-projeto.png",
+        "sha256": "da8e944038d23dfeb88ac5b1b4e61711e4acd38a57c363d5dd38d104c13b24b6"
+      },
+      {
+        "name": "02-painel.png",
+        "sha256": "ef5436090817d46a50ae05f1a4949b66314ca823dae3b1767667aedb17de90c1"
+      }
+    ],
+    "screenshotsVisuallyInspected": true
+  },
+  "nativeDiagnostic": {
+    "passed": true,
+    "binarySha256": "075acf46a895da9afa301422b00b446f00dd8153cd8d99371cc6e701905dc69d",
+    "queryCount": 1,
+    "apiRequests": 0,
+    "scanRequests": 0,
+    "queryElapsedMs": 8243,
+    "runtimeEntryHashes": {
+      "cli.mjs": "a26cb985a6e4395f2a049b9740c1b407f02d54fd0ae2fe4e1441a18029f1b026",
+      "platform.mjs": "a3d725586354e6f4733d75f5315acda0308a0f2ba6ba1f2f0470d80aae2ad565",
+      "public-activity.mjs": "b2a669e46b5b0787a2c5bcfefd96e1c203a2b4792283d7ee0252f11b38d9982b",
+      "scan.mjs": "eb371f612d39642d125f68e6deaa0616cc8126a849226b09d60d7990c90eecea",
+      "worker.mjs": "e9ff20345a25e7db4723feb890b25be90e523c6a32a20844f9bfb093c68beeaf"
+    },
+    "runtime": {
+      "available": true,
+      "codexVersion": "0.167.1",
+      "diagnostics": {
+        "codex": {
+          "additionalAttempts": 0,
+          "attempts": [
+            {
+              "candidate": 1,
+              "category": "available",
+              "childKilled": false,
+              "code": null,
+              "elapsedMs": 2154,
+              "exitCode": 0,
+              "signal": null,
+              "spawnElapsedMs": 1909,
+              "stderrBytes": 0,
+              "stdoutBytes": 18
+            }
+          ]
+        },
+        "git": {
+          "additionalAttempts": 0,
+          "attempts": [
+            {
+              "candidate": 1,
+              "category": "available",
+              "childKilled": false,
+              "code": null,
+              "elapsedMs": 2169,
+              "exitCode": 0,
+              "signal": null,
+              "spawnElapsedMs": 17,
+              "stderrBytes": 0,
+              "stdoutBytes": 29
+            }
+          ]
+        },
+        "python": {
+          "additionalAttempts": 0,
+          "attempts": [
+            {
+              "candidate": 1,
+              "category": "available",
+              "childKilled": false,
+              "code": null,
+              "elapsedMs": 2052,
+              "exitCode": 0,
+              "signal": null,
+              "spawnElapsedMs": 116,
+              "stderrBytes": 0,
+              "stdoutBytes": 8
+            }
+          ]
+        }
+      },
+      "gitVersion": "2.55.0.windows.5",
+      "missing": [],
+      "nodeVersion": "24.19.0",
+      "pythonVersion": "3.14.7",
+      "sdkVersion": "0.10.0",
+      "type": "check"
+    }
+  },
+  "nativeChat": {
+    "passed": true,
+    "version": "0.2.1",
+    "testedBinarySha256": "0b794c30f7a1144478d6cad856bad3bf1d520ae7158b3225324a4c4ea4ab1fe4",
+    "checks": [
+      "Explicit fixture reopened with three contexts, original failed OpenAI request and single accepted user turn; neither key retained.",
+      "OpenRouter activated through UI from its real catalog: openai/gpt-4.1-nano",
+      "Enter 2: composer cleared; one durable user turn, one request and one answer on openai/gpt-4.1-nano",
+      "Enter 3: composer cleared; one durable user turn, one request and one answer on openai/gpt-4.1-nano",
+      "OpenAI activated through UI from its real catalog: gpt-4o-mini",
+      "Two independent real OpenRouter chats completed once each; final UI switch to OpenAI persisted without resending the failed OpenAI request.",
+      "Reopening preserved three contexts, advanced settings, three durable user turns and two answers; no security scan or source mutation."
+    ],
+    "requests": [
+      {
+        "model": "openai/gpt-4.1-nano",
+        "status": "completed",
+        "inputTokens": 626,
+        "outputTokens": 5,
+        "composerClearedBeforeCompletion": true
+      },
+      {
+        "model": "openai/gpt-4.1-nano",
+        "status": "completed",
+        "inputTokens": 673,
+        "outputTokens": 5,
+        "composerClearedBeforeCompletion": true
+      }
+    ],
+    "originalOpenAiRefusal": {
+      "model": "gpt-4o-mini",
+      "status": "failed",
+      "httpStatus": 429,
+      "message": "Limite ou saldo da API atingido.",
+      "userTurns": 1,
+      "composerClearedOnAcceptance": true,
+      "retried": false
+    },
+    "reopened": {
+      "userTurns": 3,
+      "assistantReplies": 2,
+      "uniqueRequests": 3,
+      "originalAssessmentUnchanged": true
+    },
+    "credentialsRemoved": {
+      "openai": true,
+      "openrouter": true
+    },
+    "sourceUnchanged": true,
+    "paidScan": false,
+    "limitation": "Provider chat proof on the recorded interim .2.1 binary; subsequent capability/privacy fixes covered by final regression tests. No successful OpenAI completion or full .2.1 SDK scan is claimed."
+  },
+  "githubImport": {
+    "passed": true,
+    "test": "github_repository::tests::public_github_import_is_idempotent_and_ready_source_survives_reopen",
+    "repository": "https://github.com/octocat/Hello-World",
+    "realNetworkDownload": true,
+    "paidInference": false,
+    "credentialsUsed": false,
+    "checks": [
+      "Download público real confirmado pelo arquivo README",
+      "Repetição da chave devolveu o mesmo identificador e somente uma pasta gerida",
+      "Revisão e caminho preservados após reabrir o serviço"
+    ],
+    "testSeconds": 2.19,
+    "logSha256": "107b584b11776573aeac660ea5713c02594fbc25c27766aeb2e1e23e1c141586",
+    "moduleSha256": "3079100e9d4d5d2d315576dc37c1fd947cb3f712380886cfc0940aaeee7bac82",
+    "generatedAt": "2026-11-12T16:10:03.9914163Z"
+  },
+  "routerScanPreflight": {
+    "model": "openai/gpt-6-luna",
+    "provider": "openrouter",
+    "maximumUsd": 5,
+    "blockedAsExpected": true,
+    "failure": {
+      "type": "error",
+      "code": "pricing_unavailable",
+      "message": "O SDK não conseguiu verificar o custo deste modelo."
+    },
+    "fetchAttempts": 0,
+    "operation": "official SDK public offline preflight; no credentials supplied; no scan started"
+  },
+  "nativeColdFailure": {
+    "passed": false,
+    "binarySha256": "da8db026889f2bf8e0b9e4b5848f3fd0cf6829ded1f5beb63f05289c7caa80a2",
+    "stage": "security.status runtime --version prerequisite",
+    "providerCall": false,
+    "credentialPresent": false,
+    "runtime": {
+      "available": false,
+      "codexVersion": null,
+      "diagnostics": {
+        "codex": {
+          "additionalAttempts": 0,
+          "attempts": [
+            {
+              "candidate": 1,
+              "category": "output_format",
+              "childKilled": false,
+              "code": null,
+              "elapsedMs": 16331,
+              "exitCode": 0,
+              "signal": null,
+              "spawnElapsedMs": 821,
+              "stderrBytes": 0,
+              "stdoutBytes": 0
+            }
+          ]
+        },
+        "git": {
+          "additionalAttempts": 0,
+          "attempts": [
+            {
+              "candidate": 1,
+              "category": "available",
+              "childKilled": false,
+              "code": null,
+              "elapsedMs": 51,
+              "exitCode": 0,
+              "signal": null,
+              "spawnElapsedMs": 7,
+              "stderrBytes": 0,
+              "stdoutBytes": 29
+            }
+          ]
+        },
+        "python": {
+          "additionalAttempts": 0,
+          "attempts": [
+            {
+              "candidate": 1,
+              "category": "available",
+              "childKilled": false,
+              "code": null,
+              "elapsedMs": 872,
+              "exitCode": 0,
+              "signal": null,
+              "spawnElapsedMs": 40,
+              "stderrBytes": 0,
+              "stdoutBytes": 8
+            }
+          ]
+        }
+      },
+      "gitVersion": "2.55.0.windows.5",
+      "missing": [
+        "codex"
+      ],
+      "nodeVersion": "24.19.0",
+      "pythonVersion": "3.14.7",
+      "sdkVersion": "0.10.0",
+      "type": "check",
+      "provider": "openai",
+      "hasApiKey": false,
+      "reason": "Confira os componentes do runtime OpenKoda."
+    },
+    "originalReceiptSha256": "392e8d22e31a69f73d399595c9200d72085e1dc198279037a7fbd99968fb30bb",
+    "limitation": "Historical observed failure is retained, including exit0, zero stdout and killedfalse; later successful queries do not erase this failure."
+  },
+  "officialDeepScan": {
+    "id": "ffa0165a-75cc-4ea3-a225-a1110435ef55",
+    "status": "blocked",
+    "reviewedFiles": 0,
+    "snapshotCommit": "4d69a5d24f9ae1a344f163b80f15035797fb3b6b",
+    "error": "ShellExecuteExW setup helper 1223 / node_repl timeouts",
+    "coverageArtifactInconsistency": "Completeness flag conflicts with zero reviewed files and no surfaces; not used as a pass."
+  },
+  "wholeApplicationScan": {
+    "status": "not-completed",
+    "cause": "OpenAI HTTP429; Router SDK pricing unavailable with cap",
+    "manualReviewSeparate": true
+  },
+  "localReadIsolation": "SDK root-read; repository-only OS isolation is not implemented",
+  "publicReleaseApproved": false,
+  "finalArtifacts": {
+    "installer": {
+      "name": "OpenKoda_0.2.1_x64-setup.exe",
+      "bytes": 181573768,
+      "sha256": "62f0aa7f8c50347c2af9e13df1b984ca1bad0af1e25554dc59fe0818ef800db3",
+      "authenticode": "NotSigned"
+    },
+    "sourceCommit": "435f0bbb7b7704aadf2c69a8a35e22273f88adac",
+    "packageReceipt": "package-verification.json",
+    "packageReceiptSha256": "1932b207efe23fb356c0b288731df7bd83640f1d516890b6324346e2428c5720",
+    "windowsReceipt": "windows-validation.json",
+    "windowsReceiptSha256": "c9ebc2c5b608f1f9e017b8436657fc579731b49886f0b0d5c6cb757e282dc906"
+  }
+}
