@@ -1,0 +1,919 @@
+{
+  "format": "openflowkit.scene",
+  "schemaVersion": 1,
+  "id": "d4b4eb1f-ad25-4842-bb45-97e1f66da4ed",
+  "name": "Referências de interação",
+  "createdAt": "2026-11-12T01:36:30.132Z",
+  "updatedAt": "2026-11-12T01:36:30.132Z",
+  "pages": [
+    {
+      "id": "d4b4eb1f-ad25-4842-bb45-97e1f66da4ed:page-1",
+      "name": "Page 1",
+      "diagramKind": "flowchart",
+      "layers": [
+        {
+          "id": "default",
+          "name": "Default",
+          "visible": true,
+          "locked": false
+        }
+      ],
+      "nodes": [
+        {
+          "id": "dsl-108138q",
+          "kind": "frame",
+          "parentId": null,
+          "layerId": "default",
+          "zIndex": 0,
+          "transform": {
+            "translation": {
+              "x": 160,
+              "y": 80
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 1509,
+            "height": 484
+          },
+          "content": {
+            "label": ""
+          },
+          "appearance": {},
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "family": "flowchart",
+              "version": 1,
+              "source": "flowchart down\nicons: off\na = Cindy e Codex\nb = Projetos e conversas\nc = Conversa aberta\nd = Preferências\ne = Selecionar conversa ou abrir uma nova\nf = \"Usuário à direita, resposta com leitura contínua\"\ng = Campo de mensagem e ações próximas\nh = Selecionar modelo e voltar ao campo\ni = \"Enviar, acompanhar atividade e interromper\"\nj = Categorias fixas e detalhe com rolagem\nk = \"Grupos com títulos, divisórias e ações locais\"\na -> b\na -> c\na -> d\nb -> e\nc -> f\nc -> g\ng -> h\ng -> i\nd -> j\nj -> k\n",
+              "hash": "36hdve",
+              "direction": "down",
+              "appearance": {
+                "palette": "paper"
+              },
+              "icons": "off"
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "a",
+          "kind": "process",
+          "parentId": "dsl-108138q",
+          "layerId": "default",
+          "zIndex": 1,
+          "transform": {
+            "translation": {
+              "x": 1223,
+              "y": 28
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 130,
+            "height": 52
+          },
+          "content": {
+            "label": "Cindy e Codex",
+            "shape": "rectangle"
+          },
+          "appearance": {
+            "fill": "#fdfbf7",
+            "stroke": "#51504e",
+            "textColor": "#282625"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "a",
+              "line": 3,
+              "appearance": {
+                "palette": "paper"
+              }
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "b",
+          "kind": "process",
+          "parentId": "dsl-108138q",
+          "layerId": "default",
+          "zIndex": 2,
+          "transform": {
+            "translation": {
+              "x": 88,
+              "y": 144
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 193,
+            "height": 52
+          },
+          "content": {
+            "label": "Projetos e conversas",
+            "shape": "rectangle"
+          },
+          "appearance": {
+            "fill": "#fdfbf7",
+            "stroke": "#51504e",
+            "textColor": "#282625"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "b",
+              "line": 4,
+              "appearance": {
+                "palette": "paper"
+              }
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "c",
+          "kind": "process",
+          "parentId": "dsl-108138q",
+          "layerId": "default",
+          "zIndex": 3,
+          "transform": {
+            "translation": {
+              "x": 801,
+              "y": 144
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 154,
+            "height": 52
+          },
+          "content": {
+            "label": "Conversa aberta",
+            "shape": "rectangle"
+          },
+          "appearance": {
+            "fill": "#fdfbf7",
+            "stroke": "#51504e",
+            "textColor": "#282625"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "c",
+              "line": 5,
+              "appearance": {
+                "palette": "paper"
+              }
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "d",
+          "kind": "process",
+          "parentId": "dsl-108138q",
+          "layerId": "default",
+          "zIndex": 4,
+          "transform": {
+            "translation": {
+              "x": 1256,
+              "y": 144
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 129,
+            "height": 52
+          },
+          "content": {
+            "label": "Preferências",
+            "shape": "rectangle"
+          },
+          "appearance": {
+            "fill": "#fdfbf7",
+            "stroke": "#51504e",
+            "textColor": "#282625"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "d",
+              "line": 6,
+              "appearance": {
+                "palette": "paper"
+              }
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "e",
+          "kind": "process",
+          "parentId": "dsl-108138q",
+          "layerId": "default",
+          "zIndex": 5,
+          "transform": {
+            "translation": {
+              "x": 28,
+              "y": 260
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 312,
+            "height": 52
+          },
+          "content": {
+            "label": "Selecionar conversa ou abrir uma nova",
+            "shape": "rectangle"
+          },
+          "appearance": {
+            "fill": "#fdfbf7",
+            "stroke": "#51504e",
+            "textColor": "#282625"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "e",
+              "line": 7,
+              "appearance": {
+                "palette": "paper"
+              }
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "f",
+          "kind": "process",
+          "parentId": "dsl-108138q",
+          "layerId": "default",
+          "zIndex": 6,
+          "transform": {
+            "translation": {
+              "x": 388,
+              "y": 260
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 320,
+            "height": 66
+          },
+          "content": {
+            "label": "Usuário à direita, resposta com leitura contínua",
+            "shape": "rectangle",
+            "sizingPolicy": {
+              "version": 1,
+              "mode": "fixed",
+              "minSize": {
+                "width": 24,
+                "height": 24
+              },
+              "maxSize": {
+                "width": 1600,
+                "height": 1200
+              },
+              "overflow": "wrap",
+              "clipContent": false,
+              "maxLines": 4
+            }
+          },
+          "appearance": {
+            "fill": "#fdfbf7",
+            "stroke": "#51504e",
+            "textColor": "#282625"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "f",
+              "line": 8,
+              "appearance": {
+                "palette": "paper"
+              }
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "g",
+          "kind": "process",
+          "parentId": "dsl-108138q",
+          "layerId": "default",
+          "zIndex": 7,
+          "transform": {
+            "translation": {
+              "x": 756,
+              "y": 269
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 295,
+            "height": 52
+          },
+          "content": {
+            "label": "Campo de mensagem e ações próximas",
+            "shape": "rectangle"
+          },
+          "appearance": {
+            "fill": "#fdfbf7",
+            "stroke": "#51504e",
+            "textColor": "#282625"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "g",
+              "line": 9,
+              "appearance": {
+                "palette": "paper"
+              }
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "h",
+          "kind": "process",
+          "parentId": "dsl-108138q",
+          "layerId": "default",
+          "zIndex": 8,
+          "transform": {
+            "translation": {
+              "x": 453,
+              "y": 390
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 292,
+            "height": 52
+          },
+          "content": {
+            "label": "Selecionar modelo e voltar ao campo",
+            "shape": "rectangle"
+          },
+          "appearance": {
+            "fill": "#fdfbf7",
+            "stroke": "#51504e",
+            "textColor": "#282625"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "h",
+              "line": 10,
+              "appearance": {
+                "palette": "paper"
+              }
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "i",
+          "kind": "process",
+          "parentId": "dsl-108138q",
+          "layerId": "default",
+          "zIndex": 9,
+          "transform": {
+            "translation": {
+              "x": 793,
+              "y": 390
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 320,
+            "height": 66
+          },
+          "content": {
+            "label": "Enviar, acompanhar atividade e interromper",
+            "shape": "rectangle",
+            "sizingPolicy": {
+              "version": 1,
+              "mode": "fixed",
+              "minSize": {
+                "width": 24,
+                "height": 24
+              },
+              "maxSize": {
+                "width": 1600,
+                "height": 1200
+              },
+              "overflow": "wrap",
+              "clipContent": false,
+              "maxLines": 4
+            }
+          },
+          "appearance": {
+            "fill": "#fdfbf7",
+            "stroke": "#51504e",
+            "textColor": "#282625"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "i",
+              "line": 11,
+              "appearance": {
+                "palette": "paper"
+              }
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "j",
+          "kind": "process",
+          "parentId": "dsl-108138q",
+          "layerId": "default",
+          "zIndex": 10,
+          "transform": {
+            "translation": {
+              "x": 1162,
+              "y": 267
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 317,
+            "height": 52
+          },
+          "content": {
+            "label": "Categorias fixas e detalhe com rolagem",
+            "shape": "rectangle"
+          },
+          "appearance": {
+            "fill": "#fdfbf7",
+            "stroke": "#51504e",
+            "textColor": "#282625"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "j",
+              "line": 12,
+              "appearance": {
+                "palette": "paper"
+              }
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "k",
+          "kind": "process",
+          "parentId": "dsl-108138q",
+          "layerId": "default",
+          "zIndex": 11,
+          "transform": {
+            "translation": {
+              "x": 1161,
+              "y": 390
+            },
+            "rotationRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "size": {
+            "width": 320,
+            "height": 66
+          },
+          "content": {
+            "label": "Grupos com títulos, divisórias e ações locais",
+            "shape": "rectangle",
+            "sizingPolicy": {
+              "version": 1,
+              "mode": "fixed",
+              "minSize": {
+                "width": 24,
+                "height": 24
+              },
+              "maxSize": {
+                "width": 1600,
+                "height": 1200
+              },
+              "overflow": "wrap",
+              "clipContent": false,
+              "maxLines": 4
+            }
+          },
+          "appearance": {
+            "fill": "#fdfbf7",
+            "stroke": "#51504e",
+            "textColor": "#282625"
+          },
+          "ports": [],
+          "metadata": {
+            "dsl": {
+              "id": "k",
+              "line": 13,
+              "appearance": {
+                "palette": "paper"
+              }
+            }
+          },
+          "extensions": {}
+        }
+      ],
+      "connectors": [
+        {
+          "id": "edge:a->b:1",
+          "source": {
+            "nodeId": "a",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "b",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 14,
+              "appearance": {
+                "palette": "paper"
+              }
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:a->c:1",
+          "source": {
+            "nodeId": "a",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "c",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 15,
+              "appearance": {
+                "palette": "paper"
+              }
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:a->d:1",
+          "source": {
+            "nodeId": "a",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "d",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 16,
+              "appearance": {
+                "palette": "paper"
+              }
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:b->e:1",
+          "source": {
+            "nodeId": "b",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "e",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 17,
+              "appearance": {
+                "palette": "paper"
+              }
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:c->f:1",
+          "source": {
+            "nodeId": "c",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "f",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 18,
+              "appearance": {
+                "palette": "paper"
+              }
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:c->g:1",
+          "source": {
+            "nodeId": "c",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "g",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 19,
+              "appearance": {
+                "palette": "paper"
+              }
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:g->h:1",
+          "source": {
+            "nodeId": "g",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "h",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 20,
+              "appearance": {
+                "palette": "paper"
+              }
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:g->i:1",
+          "source": {
+            "nodeId": "g",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "i",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 21,
+              "appearance": {
+                "palette": "paper"
+              }
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:d->j:1",
+          "source": {
+            "nodeId": "d",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "j",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 22,
+              "appearance": {
+                "palette": "paper"
+              }
+            }
+          },
+          "extensions": {}
+        },
+        {
+          "id": "edge:j->k:1",
+          "source": {
+            "nodeId": "j",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "target": {
+            "nodeId": "k",
+            "portId": null,
+            "anchor": null,
+            "point": null
+          },
+          "route": {
+            "kind": "orthogonal",
+            "ownership": "automatic"
+          },
+          "waypoints": [],
+          "labels": [],
+          "appearance": {
+            "markerEnd": "arrow"
+          },
+          "semantics": {},
+          "metadata": {
+            "dsl": {
+              "line": 23,
+              "appearance": {
+                "palette": "paper"
+              }
+            }
+          },
+          "extensions": {}
+        }
+      ],
+      "metadata": {},
+      "extensions": {}
+    }
+  ],
+  "metadata": {},
+  "extensions": {}
+}
