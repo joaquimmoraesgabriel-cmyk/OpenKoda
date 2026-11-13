@@ -36,19 +36,21 @@ for (const [route,[name,body]] of Object.entries(pages)) {
  await mkdir(directory,{recursive:true});
  const layout=route.startsWith('conta')?'account-page':route==='produto'?'product inner':route==='precos'?'pricing inner':route?'document inner':'home';
  const html=`<!doctype html><html lang="pt-BR"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="referrer" content="no-referrer"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; style-src 'self'; img-src 'self'; connect-src 'self' https://ynjcyvnrfxsrijrwpaye.supabase.co https://challenges.cloudflare.com; object-src 'none'; base-uri 'none'; form-action 'self'"><title>${name} | OpenKoda</title><link rel="stylesheet" href="/style.css"><body><a class="skip" href="#main">Pular para o conteúdo</a><header class="site-header"><div class="header-inner">${brand}${menu(route)}</div></header><main id="main" tabindex="-1" class="${layout}">${body}</main><footer class="site-footer"><div class="footer-inner"><div class="footer-brand">${brand}<small>Koda · Brasil</small></div><nav aria-label="Informações legais"><a href="/privacidade/">Privacidade</a><a href="/termos/">Termos</a><a href="/reembolso/">Reembolso</a><a href="/suboperadores/">Fornecedores</a><button id="cookies" type="button">Cookies</button></nav></div></footer><aside id="cookie-box" hidden aria-label="Cookies e armazenamento"><p>Usamos armazenamento essencial para sua sessão e preferências. Não usamos cookies de publicidade.</p><button type="button" id="accept-essential">Usar apenas essenciais</button></aside><script type="module" src="/site.js"></script>${route.startsWith('conta')?'<script type="module" src="/account.js"></script>':''}</body></html>`;
- await writeFile(directory+'/index.html',html);
+ await writeFile(directory+'/index.html',html.replace('<title>', '<link rel="icon" type="image/svg+xml" href="/favicon.svg"><title>'));
 }
 
 // Serve the same reviewed files through a Worker so security headers also
 // protect direct visits to the OAuth callback and account forms.
 const files = [...Object.keys(pages).map(route=>(route?route+'/':'')+'index.html'),
- 'style.css','account.js','site.js','cloud.js','painel.png'];
+ 'style.css','account.js','site.js','cloud.js','painel.png','favicon.svg'];
+await writeFile(output+'favicon.svg',mark.replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" ').replace('currentColor', '#171719'));
 const assets = {};
 for (const file of files) {
  const type = file.endsWith('.html')?'text/html; charset=utf-8':file.endsWith('.css')?'text/css; charset=utf-8':
-  file.endsWith('.png')?'image/png':'text/javascript; charset=utf-8';
+  file.endsWith('.png')?'image/png':file.endsWith('.svg')?'image/svg+xml':'text/javascript; charset=utf-8';
  assets['/'+file] = {type,body:(await readFile(output+file)).toString(file.endsWith('.png')?'base64':'utf8')};
 }
+assets['/favicon.ico'] = assets['/favicon.svg'];
 const handler = await readFile(new URL('./worker.mjs',import.meta.url),'utf8');
 await mkdir(output+'server',{recursive:true});
 await mkdir(output+'.openai',{recursive:true});

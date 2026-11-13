@@ -59,18 +59,25 @@ export async function sessionBridge(request,send=fetch){
  headers.set('Content-Type','application/json');headers.set('Cache-Control','private, no-store, max-age=0');headers.set('Vary','Origin, Cookie');
  const reply=(data,status=200)=>new Response(JSON.stringify(data),{status,headers});
  async function upstream(path,method,data,bearer){
-  const opts={method,redirect:'error',cache:'no-store',headers:{apikey:publishableKey, ...(data?{'content-type':'application/json'}:{}), ...(bearer?{Authorization:'Bearer '+bearer}:{})},signal:AbortSignal.timeout(15000)};
+  // workerd supports manual/follow redirects. Reject each redirect before its
+  // Location can receive a bearer, password, verifier or refresh token.
+  const controller=new AbortController();
+  const opts={method,redirect:'manual',headers:{apikey:publishableKey,'Cache-Control':'no-store','Pragma':'no-cache', ...(data?{'content-type':'application/json'}:{}), ...(bearer?{Authorization:'Bearer '+bearer}:{})},signal:controller.signal};
   if(data)opts.body=JSON.stringify(data);
-  const res=await send(projectOrigin+path,opts);
-  if(!res.ok){
-   if(path==='/auth/v1/token?grant_type=pkce'&&res.status===400){
-    const failure=await res.json().catch(()=>({}));
-    if(failure.error_code==='bad_code_verifier'||failure.code==='bad_code_verifier')throw new SiteError(400,'bad_code_verifier');
+  const deadline=setTimeout(()=>controller.abort(),15000);
+  try{
+   const res=await send(projectOrigin+path,opts);
+   if(res.status>=300&&res.status<400)throw new SiteError(502,'upstream_redirect');
+   if(!res.ok){
+    if(path==='/auth/v1/token?grant_type=pkce'&&res.status===400){
+     const failure=await res.json().catch(()=>({}));
+     if(failure.error_code==='bad_code_verifier'||failure.code==='bad_code_verifier')throw new SiteError(400,'bad_code_verifier');
+    }
+    throw new SiteError([400,401,403,404,409,422,429].includes(res.status)?res.status:503,'service_refused');
    }
-   throw new SiteError([400,401,403,404,409,422,429].includes(res.status)?res.status:503,'service_refused');
-  }
-  if(res.status===204)return {};
-  const text=await res.text();return text?JSON.parse(text):{};
+   if(res.status===204)return {};
+   const text=await res.text();return text?JSON.parse(text):{};
+  }finally{clearTimeout(deadline);}
  }
  function save(result){
   const {access_token,refresh_token,expires_in}=result;

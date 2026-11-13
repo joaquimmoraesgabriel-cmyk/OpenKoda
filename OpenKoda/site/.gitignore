@@ -2,3 +2,4 @@
 dist/server/
 dist/.openai/
 dist/**/*.html
+dist/favicon.svg

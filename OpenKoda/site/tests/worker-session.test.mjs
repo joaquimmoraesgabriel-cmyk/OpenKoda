@@ -15,7 +15,8 @@ const pass={email:user.email,password:'fixture-password',gotrue_meta_security:{c
 function fixture(upstream){
  const calls=[];
  const run=(action,body,headers,method)=>sessionBridge(request(action,body,headers,method),async(raw,init)=>{
-   const url=new URL(raw);assert.equal(url.origin,auth);assert.equal(init.redirect,'error');assert.equal(init.cache,'no-store');
+   const url=new URL(raw);assert.equal(url.origin,auth);assert.equal(init.redirect,'manual');assert.ok(!('cache' in init));
+   assert.equal(init.headers['Cache-Control'],'no-store');assert.equal(init.headers.Pragma,'no-cache');assert.ok(init.signal instanceof AbortSignal);
    assert.ok(init.headers.apikey.startsWith('sb_publishable_'));
    const call={url,method:init.method,body:init.body?JSON.parse(init.body):{},bearer:init.headers.Authorization};
    calls.push(call);return upstream(call);
@@ -58,6 +59,18 @@ test('no arbitrary upstream actions, redirects or credentials can be supplied',a
  assert.equal((await f.run('exchange',{auth_code:'fake',code_verifier:'override'})).status,400);
  assert.equal((await f.run('password',{...pass,body:'x'.repeat(20000)})).status,413);
  assert.equal(f.calls.length,0);
+});
+test('workerd manual redirects are rejected without a second request, and a missing PKCE transaction preserves the upstream status',async()=>{
+ for(const redirect of [301,302,303,307,308]){
+  const f=fixture(()=>new Response(null,{status:redirect,headers:{Location:'https://other.example.invalid/steal'}}));
+  const res=await f.run('password',pass);
+  assert.equal(res.status,502);assert.deepEqual(await res.json(),{code:'upstream_redirect'});
+  assert.equal(f.calls.length,1);assert.deepEqual(res.headers.getSetCookie(),[]);
+ }
+ const f=fixture(()=>Response.json({error_code:'flow_state_not_found'},{status:404}));
+ const attempt=await f.run('google',{});
+ const res=await f.run('exchange',{auth_code:'unknown-test-code'},{cookie:pairs(attempt)});
+ assert.equal(res.status,404);assert.deepEqual(await res.json(),{code:'service_refused'});
 });
 test('PKCE binds email signup and recovery to the original same callback and selects the matching flow',async()=>{
  const challenges={};
