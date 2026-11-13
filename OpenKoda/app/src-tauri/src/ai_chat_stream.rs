@@ -8,6 +8,7 @@ const PUBLIC_BYTES: usize = 128 * 1024;
 #[derive(Default)]
 pub(in crate::ai) struct Progress {
     connected: Option<Instant>,
+    pub(super) queue_position: Option<u32>,
     text: String,
     pub(in crate::ai) generation_id: Option<String>,
 }

@@ -353,6 +353,34 @@ mod tests {
         fn request_count(&self)->i64{self.ai.db.lock().unwrap().query_row("SELECT COUNT(*) FROM requests",[],|r|r.get(0)).unwrap()}
     }
     #[test]
+    fn chat_output_limit_keeps_only_visible_authorized_text_without_replay(){
+        for (reason,text,retained) in [("length","partial answer",true),("max_output_tokens","",false),("content_filter","filtered text",false)]{
+            let mut response=answer(text,12,24).unwrap();
+            response["status"]=json!("incomplete");
+            response["incomplete_details"]=json!({"reason":reason});
+            let f=Fixture::new(vec![Ok(response)]);f.enable();
+            let mut raw=f.ask_input();
+            raw["maxOutputTokensPerRequest"]=json!(24);
+            let mut input=f.ai.test_data_input(&f.store,"ask",raw);
+            input.as_object_mut().unwrap().remove("maxOutputTokensPerRequest");
+            let quote=f.preview("ask",input.clone()).unwrap();
+            assert_eq!(quote["review"]["maxOutputTokens"],24);
+            assert_eq!(f.ask(input.clone(),Some(&quote)).is_ok(),retained);
+            let state=f.ai.handle("ai.history",json!({"assessmentId":f.assessment}),&f.store).unwrap();
+            assert_eq!(state["requests"][0]["status"],"incomplete");
+            assert_eq!(state["requests"][0]["outputTokens"],24);
+            let messages=state["messages"].as_array().unwrap();
+            assert_eq!(messages.len(),if retained{2}else{1});
+            if reason!="content_filter"{
+                assert_eq!(messages.last().unwrap()["outputLimitTokens"],24);
+                assert_eq!(messages.last().unwrap()["outputLimited"],true);
+            }else{assert!(messages[0].get("outputLimited").is_none());}
+            if retained{assert_eq!(messages[1]["text"],text);}
+            assert!(f.ask(input,Some(&quote)).is_err());
+            assert_eq!(f.fake.calls.load(Ordering::SeqCst),1);
+        }
+    }
+    #[test]
     fn unreadable_provider_credential_does_not_block_scope_revocation(){
         let f=Fixture::new(vec![]);crate::scope::admit(&f.store,&f.assessment,AI_METHOD,None,"fixture.preparation").unwrap();
         f.ai.db.lock().unwrap().execute("UPDATE vault SET cipher=?1 WHERE id=1",[b"invalid-synthetic-dpapi".as_slice()]).unwrap();

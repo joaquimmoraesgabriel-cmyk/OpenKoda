@@ -427,6 +427,13 @@ impl AiService {
                 let mut q=db.prepare("SELECT id,model,status,created,input_tokens,output_tokens,details,endpoint FROM requests WHERE assessment=?1 ORDER BY rowid DESC LIMIT 100").map_err(failure)?;
                 let requests=q.query_map([&input.assessment_id],|r|{
                     let details:String=r.get(6)?;let body:Value=serde_json::from_str(&details).unwrap_or(Value::Null);
+                    if r.get::<_,String>(2)?=="incomplete" && is_output_limit_reason(&body["incomplete"]["reason"]) {
+                        let last_id=body["chatMessageIds"].as_array().and_then(|ids|ids.last());
+                        if let Some(message)=messages.iter_mut().find(|message|Some(&message["id"])==last_id){
+                            message["outputLimited"]=json!(true);
+                            message["outputLimitTokens"]=body["maxOutputTokens"].clone();
+                        }
+                    }
                     Ok(json!({"id":r.get::<_,String>(0)?,"endpoint":r.get::<_,String>(7)?,"model":r.get::<_,String>(1)?,"status":r.get::<_,String>(2)?,"createdAt":r.get::<_,String>(3)?,"inputTokens":r.get::<_,Option<i64>>(4)?,"outputTokens":r.get::<_,Option<i64>>(5)?,"unknownAcknowledged":request_unknown_acknowledged(&details),"resolution":body.get("resolution"),"operationProposal":body.get("operationProposal"),"budget":body.get("budget"),"scopeRef":body.get("scopeRef"),"contextTargetRefs":body.get("contextTargetRefs"),"dataReviewRef":body.get("dataReviewRef"),"dataUseReceiptRef":body.get("dataUseReceiptRef"),"dataPolicyRef":body.get("dataPolicyRef"),"dataBinding":body.get("dataBinding"),"providerCredentialRef":body.get("providerCredentialRef"),"chatMessageIds":body.get("chatMessageIds"),"dataReceiptStatus":if body.get("dataUseReceiptRef").is_some(){"recorded"}else{"legacy_no_data_policy_receipt"}}))
                 }).map_err(failure)?.collect::<Result<Vec<_>,_>>().map_err(failure)?;
                 Ok(json!({"assessmentId":input.assessment_id,"messages":messages,"requests":requests,"limit":100,"historySentToProvider":false}))
@@ -631,6 +638,7 @@ impl AiService {
             initial_details["scopeRef"]=json!(reference);
             if !targets.is_empty(){initial_details["contextTargetRefs"]=json!(targets);}
         }
+        initial_details["maxOutputTokens"]=json!(max_output_tokens);
         let mut spec=budget::Spec::for_provider(provider,operation,assessment,model,revision,prompt,instructions,max_output_tokens)?;
         if let Some(data)=&data{
             let index=data.admitted_context.map(|(_,i)|i).unwrap_or(0);
@@ -698,7 +706,12 @@ impl AiService {
         let result=self.commit_response(&id,assessment,key,history_message,interrupted_generation.as_deref(),raw_result);
         if let (Some((store,_,_)),Some(receipt))=(authority,receipt.as_ref()){
             let status:String=self.db.lock().map_err(failure)?.query_row("SELECT status FROM requests WHERE id=?1",[&id],|r|r.get(0)).map_err(failure)?;
-            let outcome=match status.as_str(){"completed"=>crate::data_policy::DataUseOutcome::Completed,"unknown"|"pending"=>crate::data_policy::DataUseOutcome::Unknown,_=>crate::data_policy::DataUseOutcome::Failed};
+            let outcome=match status.as_str(){
+                "completed"=>crate::data_policy::DataUseOutcome::Completed,
+                "incomplete" if result.is_ok()=>crate::data_policy::DataUseOutcome::Completed,
+                "unknown"|"pending"=>crate::data_policy::DataUseOutcome::Unknown,
+                _=>crate::data_policy::DataUseOutcome::Failed
+            };
             self.data_policy.finish(store,receipt,outcome,vec![])?;
         }
         result.map(|mut result|{result["requestId"]=json!(id);if let Some(receipt)=receipt{result["dataUseReceiptRef"]=json!(receipt);}result})
@@ -729,12 +742,15 @@ impl AiService {
         let provider_incomplete=raw_result.as_ref().ok().is_some_and(|v|v["status"]=="incomplete");
         let provider_not_terminal=raw_result.as_ref().ok().is_some_and(|v|!matches!(v["status"].as_str(),Some("completed"|"incomplete"|"failed"|"cancelled")));
         let transport_unknown=raw_result.as_ref().err().is_some_and(|e:&String|e.starts_with("Falha de conexão")||e.starts_with("Resposta"));
-        let result=raw_result.and_then(|body|parse_completion(body,key)).and_then(|mut answer|{
+        let output_limited=history_message.is_some() && raw_result.as_ref().is_ok_and(output_limit_reached);
+        let result=raw_result.and_then(|body|{
+            if output_limited {completion_text(&body,key)} else {parse_completion(body,key)}
+        }).and_then(|mut answer|{
             let keys=self.all_keys()?;
             if let Some(text)=answer["text"].as_str(){answer["text"]=json!(Self::redact_keys(text,&keys));}
             Ok(answer)
         });
-        let status=if result.is_ok(){"completed"}else if provider_incomplete{"incomplete"}else if transport_unknown||provider_not_terminal{"unknown"}else{"failed"};
+        let status=if provider_incomplete{"incomplete"}else if result.is_ok(){"completed"}else if transport_unknown||provider_not_terminal{"unknown"}else{"failed"};
         let mut db=self.db.lock().map_err(failure)?;
         let tx=db.transaction().map_err(failure)?;
         let original:String=tx.query_row("SELECT details FROM requests WHERE id=?1",[id],|row|row.get(0)).map_err(failure)?;
@@ -796,12 +812,23 @@ fn read_bounded_response(mut response:reqwest::blocking::Response,limit:u64)->Re
 }
 fn parse_completion(body:Value,key:&str)->Result<Value,String> {
     if body["status"]!="completed" {return Err("A resposta ficou incompleta ou foi interrompida. Nenhuma conclusão foi registrada.".into());}
+    completion_text(&body,key)
+}
+fn output_limit_reached(body:&Value)->bool{
+    body["status"]=="incomplete" && is_output_limit_reason(&body["incomplete_details"]["reason"])
+}
+fn is_output_limit_reason(reason:&Value)->bool{
+    matches!(reason.as_str(),Some("length"|"max_tokens"|"max_output_tokens"))
+}
+fn completion_text(body:&Value,key:&str)->Result<Value,String>{
     let mut output=String::new();
     for item in body["output"].as_array().ok_or("Resposta sem conteúdo.")? {
         if item["type"]=="message" { if let Some(content)=item["content"].as_array() {for block in content {if block["type"]=="output_text" {if let Some(text)=block["text"].as_str() {output.push_str(text);output.push('\n');}}}} }
     }
-    if output.trim().is_empty() {return Err("O modelo não retornou texto utilizável. Nenhuma ferramenta foi executada.".into());}
-    Ok(json!({"text":redact(output.trim(),Some(key)),"usage":body["usage"],"responseId":body["id"],"model":body["model"],"toolsExecuted":false}))
+    if output.trim().is_empty() {
+        return Err(if output_limit_reached(body){"O modelo atingiu o limite de saída antes de produzir texto visível."}else{"O modelo não retornou texto utilizável. Nenhuma ferramenta foi executada."}.into());
+    }
+    Ok(json!({"text":redact(output.trim(),Some(key)),"usage":body["usage"],"responseId":body["id"],"model":body["model"],"status":body["status"],"toolsExecuted":false}))
 }
 
 /// Conservative derivative redaction. Raw evidence remains intact in the assessment store.

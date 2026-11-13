@@ -50,6 +50,7 @@ mod capture_access_tests;
 use std::sync::Arc;
 use tauri::Manager;
 mod commercial;
+mod commercial_queue;
 use core::{Request, Store};
 
 struct Services { close_gate: Arc<close_guard::CloseGate>, security:security_scan::Service, github:github_repository::Service, ai: ai::AiService, environment: Arc<environment::EnvironmentManager>, executor: executor::Executor, recovery:recovery::RecoveryService, kali:kali_bridge::KaliBridge, remediation:remediation::RemediationService, activation:activation::ActivationService, retention:retention::RetentionService, project_purge:project_purge::ProjectPurgeService, data_policy:Arc<data_policy::DataPolicyService>, workflow:workflow::WorkflowService, supervisor:work_supervisor::WorkSupervisor, work_wakeup:work_runtime::WakeGate, environment_gate: std::sync::RwLock<()> }

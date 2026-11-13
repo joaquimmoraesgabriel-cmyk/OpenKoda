@@ -48,7 +48,7 @@ impl ChatControl {
         }else{false};
         let current=current.as_deref();
         let progress=current.map(|live|live.progress.lock().map_err(failure)).transpose()?;
-        Ok(json!({"processingMs":progress.as_ref().and_then(|p|p.elapsed_ms()),
+        Ok(json!({"processingMs":progress.as_ref().and_then(|p|p.elapsed_ms()),"queuePosition":progress.as_ref().and_then(|p|p.queue_position),
             "partialText":progress.as_ref().filter(|_|show_text).map(|p|p.visible()),"requestId":current.map(|live|&live.request),"stopping":current.is_some_and(|live|live.token.load(Ordering::Acquire)),
             "messageId":current.and_then(|live|live.message_id.as_ref()),"dataReview":current.and_then(|live|live.review.as_ref()).map(|review|json!({"id":review.id,"digest":review.digest}))}))
     }
@@ -71,14 +71,18 @@ pub(super) fn http_chat(provider:ProviderId,model:&str,key:&str,prompt:&str,inst
     if matches!(provider,ProviderId::OpenRouter|ProviderId::DeepSeek|ProviderId::Gemini|ProviderId::Xai) {
         body["stream_options"]=json!({"include_usage":true});
     }
-    interruptible_response(builder.json(&body),provider,stop,progress)
+    interruptible_response(builder.json(&body),provider,stop,progress,None)
 }
 
-fn interruptible_response(task:reqwest::RequestBuilder,provider:ProviderId,stop:&AtomicBool,progress:Arc<Mutex<Progress>>)->Result<Value,String>{
+fn interruptible_response(task:reqwest::RequestBuilder,provider:ProviderId,stop:&AtomicBool,progress:Arc<Mutex<Progress>>,managed_id:Option<String>)->Result<Value,String>{
     let (tx,rx)=sync_channel(1);
     let join=tauri::async_runtime::spawn(async move{
         let result=async{
-            let mut response=task.send().await.map_err(network_error)?;
+            let mut response=if let Some(id)=managed_id {
+                crate::commercial_queue::send(task,&id,|position|{
+                    if let Ok(mut state)=progress.lock(){state.queue_position=position;}
+                }).await?
+            } else {task.send().await.map_err(network_error)?};
             let status=response.status().as_u16();
             if !(200..300).contains(&status){return Err(match status{401=>"O provedor recusou a credencial.",403=>"A credencial não tem acesso ao recurso.",429=>"Limite ou saldo da API atingido.",_=>"O provedor recusou a solicitação. Confira se o modelo aceita os anexos."}.to_owned());}
             progress.lock().map_err(failure)?.connected();
@@ -113,7 +117,7 @@ pub(super) fn commercial_chat(id:&str,model:&str,key:&str,prompt:&str,instructio
     let client=reqwest::Client::builder().no_proxy().https_only(true).redirect(reqwest::redirect::Policy::none())
         .timeout(Duration::from_secs(90)).connect_timeout(Duration::from_secs(15)).build().map_err(network_error)?;
     let task=client.post(crate::commercial::EDGE).header("apikey",crate::commercial::PUBLISHABLE).bearer_auth(key).json(&body);
-    interruptible_response(task,ProviderId::OpenKoda,stop,progress)
+    interruptible_response(task,ProviderId::OpenKoda,stop,progress,Some(id.to_owned()))
 }
 
 fn commercial_body(id:&str,model:&str,prompt:&str,instructions:&str,maximum:u32,reasoning:Option<&str>)->Result<Value,String>{
@@ -212,7 +216,7 @@ mod tests {
         live.admit(None).unwrap();
         let stopping=live.token.clone();
         let request=reqwest::Client::builder().no_proxy().build().unwrap().get(format!("http://{addr}/fixture"));
-        let caller=thread::spawn(move||interruptible_response(request,ProviderId::OpenAI,&stopping,Arc::new(Mutex::new(Progress::default()))));
+        let caller=thread::spawn(move||interruptible_response(request,ProviderId::OpenAI,&stopping,Arc::new(Mutex::new(Progress::default())),None));
         seen.recv_timeout(Duration::from_secs(5)).unwrap();
         assert!(control.inspect(json!({"assessmentId":aid,"requestId":model::id()}),true).is_err());
         assert!(!live.token.load(Ordering::Acquire));

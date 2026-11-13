@@ -95,6 +95,7 @@ impl ProviderId {
                 })
             });
             return Ok(json!({"id":body["id"],"model":body["model"],"status":status,
+                "incomplete_details":if status=="incomplete"{json!({"reason":reason})}else{Value::Null},
                 "output":[{"type":"message","content":content}],
                 "usage":{"input_tokens":input_tokens,"output_tokens":usage["output_tokens"]}}));
         }

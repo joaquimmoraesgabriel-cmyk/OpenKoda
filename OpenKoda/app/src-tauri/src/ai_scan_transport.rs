@@ -352,7 +352,9 @@ impl ScanTransport for HttpScan {
         let expected_request=request_id.to_owned();
         let task = tauri::async_runtime::spawn(async move {
             let result=async{
-                let mut response=request.send().await.map_err(network_error)?;
+                let mut response=if provider==ProviderId::OpenKoda {
+                    crate::commercial_queue::send(request,&expected_request,|_|{}).await?
+                }else{request.send().await.map_err(network_error)?};
                 if !response.status().is_success(){return Err(match response.status().as_u16(){
                     401|403=>"O provedor recusou a credencial ou o acesso ao modelo.",402|429=>"Saldo ou limite de requisições atingido no provedor.",
                     400|404|422=>"O provedor recusou o modelo, a entrada ou o limite de saída selecionado.",

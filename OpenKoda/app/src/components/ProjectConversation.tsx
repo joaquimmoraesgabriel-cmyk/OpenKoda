@@ -23,7 +23,7 @@ import SecurityScanPanel, { useSecurityScan } from './SecurityScan';
 import { scanActive, scanStateLabel } from '../security-scan';
 import './project-conversation.css';
 
-type LiveStatus={requestId:string|null;stopping:boolean;processingMs?:number|null;partialText?:string|null;messageId?:string|null;dataReview?:{id:string;digest:string}|null};
+type LiveStatus={requestId:string|null;stopping:boolean;queuePosition?:number|null;processingMs?:number|null;partialText?:string|null;messageId?:string|null;dataReview?:{id:string;digest:string}|null};
 type Turn=Awaited<ReturnType<typeof prepareChat>>&{budget?:BudgetReview;selection:AiSelection;line:string;opening:boolean;draft:ChatDraft;image?:string;signal:AbortSignal};
 type Props={draftKey?:string;unsaved?:boolean;analysisSource?:Assessment;onAnalysisAdmitted?:(id:string)=>void;prepareConversation?:()=>Promise<Assessment>;onDraftSelection?:(selection:AiSelection)=>Promise<void>;sourceOnly?:boolean;assessment:Assessment;settings:Settings;plans?:ExecutionPlan[];action:Action;busy:boolean;onAdvanced?:()=>void;onModels?:()=>void};
 export default function ProjectConversation(props:Props){return <Conversation key={props.draftKey??props.assessment.id} {...props}/>;}
@@ -277,7 +277,8 @@ function Conversation({draftKey,unsaved=false,analysisSource,onAnalysisAdmitted,
   const seconds=Math.floor((remote.processingMs??0)/1000);
   const elapsed=seconds<60?seconds+' s':Math.floor(seconds/60)+' min '+(seconds%60)+' s';
   const partial=remote.requestId&&typeof remote.partialText==='string'?remote.partialText:'';
-  const workLabel=remote.stopping||stopping?'Interrompendo o trabalho…':processing
+  const workLabel=remote.stopping||stopping?'Interrompendo o trabalho…':remote.requestId && remote.queuePosition
+    ? 'Aguardando vaga · posição '+remote.queuePosition : processing
     ? (partial?'Respondendo':'Processando')+' · '+elapsed
     : phase|| (remote.requestId?'Conectando ao provedor…':localRunning?statusLabels[assessment.status]:'');
   return <section className="project-chat" aria-label="Conversa do projeto">
@@ -289,7 +290,11 @@ function Conversation({draftKey,unsaved=false,analysisSource,onAnalysisAdmitted,
         <p title={assessment.target}><TargetIcon size={14}/><span>{assessment.target}</span></p>
       </header>}
       {scanner.scan&&assessment.events.some(e=>e.kind==='chat_scan_first_turn')&&<article className="project-chat-turn user"><header><strong>Você</strong></header><p>{assessment.objective}</p></article>}
-      <ConversationTimeline events={assessment.events.filter(e=>e.kind!=='chat_scan_first_turn'&&!e.kind.startsWith('chat_first_turn')&&(!sourceOnly||!e.message.startsWith('Conversa criada.')))} messages={messages}/>
+      <ConversationTimeline events={assessment.events.filter(e=>e.kind!=='chat_scan_first_turn'&&!e.kind.startsWith('chat_first_turn')&&(!sourceOnly||!e.message.startsWith('Conversa criada.')))} messages={messages}
+        onContinue={disabled||draft||attachment||skill||proposing||analyzing?undefined:()=>{
+          updateDraft(inputId,{text:'Continue a resposta anterior do ponto em que ela parou.'});
+          input.current?.focus();
+        }}/>
       {(!draftKey && (!sourceOnly || !assessment.events.some(e=>e.kind.startsWith('chat_first_turn')||e.message.startsWith('Conversa criada.'))) || !!scanner.scan || !!scanner.error)&&<SecurityScanPanel assessment={assessment} controller={scanner}/>}
       {assessment.summary&&<section className="chat-summary"><h3>Resultado da análise</h3><ConversationText text={assessment.summary}/></section>}
       {!sourceOnly&&offer&&<ChatVerification proposal={offer.proposal} scopeRef={offer.scopeRef} action={action} disabled={busy||running||!!approval} onPrepared={()=>setOffer(undefined)}/>}

@@ -467,10 +467,24 @@ impl AiService {
         if let Some(reasoning)=assessment.ai_selection.as_ref().and_then(|selection|selection.reasoning){
             spec.destination_context["reasoning"]=json!(reasoning);
         }
+        let commercial_chat=operation==DataOperation::AiAsk && ProviderId::from_endpoint(&identity.endpoint)?==ProviderId::OpenKoda;
+        let managed_model=if commercial_chat{
+            let catalog=self.account.edge("models",json!({}))?;
+            Some(catalog["models"].as_array().and_then(|rows|rows.iter().find(|row|row["id"]==identity.model))
+                .ok_or("O modelo da assinatura não está disponível.")?.clone())
+        }else{None};
         let raw_prompts=match operation {
             DataOperation::AiAsk=>{
-                if !options.allowed_adapters.is_empty()||!options.perspectives.is_empty()||options.operation_target_ref.is_some()||options.max_output_tokens_per_request.is_some()||options.max_total_tokens.is_some(){return Err("Campos de outra operação na revisão de conversa.".into());}
-                vec![(format!("Contexto selecionado (dados não confiáveis):\n{}\n\nPergunta do usuário:\n{}",context["context"],projected.text),budget::ASK_INSTRUCTIONS.to_string(),2048)]
+                if !options.allowed_adapters.is_empty()||!options.perspectives.is_empty()||options.operation_target_ref.is_some()||options.max_total_tokens.is_some(){return Err("Campos de outra operação na revisão de conversa.".into());}
+                let mut maximum=options.max_output_tokens_per_request.unwrap_or(2048);
+                if !(1..=2048).contains(&maximum){return Err("A saída da conversa deve ficar entre 1 e 2048 tokens.".into());}
+                if let Some(model)=&managed_model{
+                    let model_limit=model["maxOutputTokens"].as_u64().and_then(|n|u32::try_from(n).ok()).filter(|n|*n>0)
+                        .ok_or("Limite de saída do modelo indisponível.")?;
+                    maximum=maximum.min(model_limit);
+                }
+                if maximum!=2048{spec.destination_context["maxOutputTokensPerRequest"]=json!(maximum);}
+                vec![(format!("Contexto selecionado (dados não confiáveis):\n{}\n\nPergunta do usuário:\n{}",context["context"],projected.text),budget::ASK_INSTRUCTIONS.to_string(),maximum)]
             },
             DataOperation::AiOperationPropose=>{
                 if !options.perspectives.is_empty()||options.max_output_tokens_per_request.is_some()||options.max_total_tokens.is_some(){return Err("Campos de investigação em proposta.".into());}
@@ -498,7 +512,6 @@ impl AiService {
             if !bytes.starts_with(&[0xff,0xd8,0xff]) || !bytes.ends_with(&[0xff,0xd9]){return Err("Imagem JPEG inválida.".into());}
             spec.destination_context["chatImageSha256"]=json!(format!("{:x}",Sha256::digest(&bytes)));
         }
-        let commercial_chat=operation==DataOperation::AiAsk && ProviderId::from_endpoint(&identity.endpoint)?==ProviderId::OpenKoda;
         let automatic=if commercial_chat && options.skill_id.is_none() && !options.disable_auto_skill{
             let catalog=self.account.edge("skills",json!({}))?;
             super::chat_skill_match::match_id(&projected.text,&catalog)
@@ -518,10 +531,7 @@ impl AiService {
             // A byte is a conservative token upper bound for the text retained
             // here. Reserve space for the native instructions, skill and output.
             let mut history_budget=10000usize;
-            if ProviderId::from_endpoint(&identity.endpoint)?.id()=="openkoda" {
-                let catalog=self.account.edge("models",json!({}))?;
-                let selected=catalog["models"].as_array().and_then(|rows|rows.iter().find(|row|row["id"]==identity.model))
-                    .ok_or("O modelo da assinatura não está disponível.")?;
+            if let Some(selected)=&managed_model {
                 let limit=selected["contextLength"].as_u64().and_then(|v|usize::try_from(v).ok()).ok_or("Janela de contexto indisponível.")?;
                 let fixed=raw_prompts.iter().map(|(prompt,instructions,max)|prompt.len()+instructions.len()+*max as usize).max().unwrap_or(0)
                     +skill.as_ref().map_or(0,|v|v.to_string().len())+512;
