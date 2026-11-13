@@ -45,7 +45,7 @@ async function desktop(page:Page,subscribed=false){
       }
     }}});
   },{snapshot,subscribed});
-  await page.goto('/');
+  await page.goto('/',{waitUntil:'commit'});
 }
 test('cadastro protegido abre o site e a conta pode entrar e sair sem alterar o provedor pessoal',async({page})=>{
   await desktop(page);
