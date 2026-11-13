@@ -94,7 +94,22 @@ function Find-WindowControl($App,$Type,[string]$Name,[switch]$Prefix,[switch]$In
 }
 function Invoke-WindowButton($App,[string]$Name,[switch]$Prefix) {
     $element = Find-WindowControl $App ([System.Windows.Automation.ControlType]::Button) $Name -Prefix:$Prefix
-    $element.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+    $pattern = $null
+    if ($element.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern,[ref]$pattern)) {
+        $pattern.Invoke()
+    } elseif ($element.TryGetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern,[ref]$pattern)) {
+        # WebView2 exposes buttons with aria-pressed as toggle buttons.
+        $pattern.Toggle()
+    } elseif ($element.TryGetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern,[ref]$pattern)) {
+        if ($pattern.Current.ExpandCollapseState -eq [System.Windows.Automation.ExpandCollapseState]::Expanded) {
+            $pattern.Collapse()
+        } else {
+            $pattern.Expand()
+        }
+    } else {
+        $supported = @($element.GetSupportedPatterns() | ForEach-Object ProgrammaticName) -join ', '
+        throw "Cannot activate button '$Name'; available UI Automation patterns: $supported."
+    }
 }
 function Read-ProjectFixture([string]$Profile) {
     $reader = @'
@@ -136,6 +151,7 @@ function Test-InstalledSourceWindow($App,[int]$Iteration,[string]$DataRoot,[stri
         Invoke-WindowButton $App 'Histórico de uso'
         $null = Find-WindowControl $App $button 'Atualizar histórico'
         Invoke-WindowButton $App 'Análises'
+        $null = Find-WindowControl $App $button 'Atualizar orçamento e preços'
         Invoke-WindowButton $App 'Gerenciar limites e preços'
         $null = Find-WindowControl $App $button 'Fechar limites e preços'
         Invoke-WindowButton $App 'Histórico'
