@@ -59,7 +59,7 @@ test('o assistente restringe a pasta selecionada e mantém o mesmo pedido ao ten
   await expect.poll(async()=>(await submissions(page)).length).toBe(2);
   const [first,second]=await submissions(page);
   expect(first).toEqual(second);
-  expect(first).toMatchObject({root:'D:/Fixture/Sample',title:'Análise inicial do código',kind:'code',relativeTarget:'src/index.ts',minutes:null,useRipgrep:false});
+  expect(first).toMatchObject({root:'D:/Fixture/Sample',title:'Verificar possíveis riscos de segurança no código selecionado.',kind:'code',relativeTarget:'src/index.ts',minutes:null,useRipgrep:false});
   expect(first.objective).toContain('Rotas administrativas');
 });
 

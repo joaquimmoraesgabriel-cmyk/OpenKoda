@@ -1,6 +1,8 @@
-# Análise de código do OpenKoda
+# Runtime do SDK distribuído com o OpenKoda
 
-O processo nativo chama este helper para analisar código com o SDK oficial `@openai/codex-security` 0.10.0. O lockfile fixa as dependências, incluindo Codex 0.167.1. O projeto usa a API `CodexSecurity.run` no modo Standard. [SDK oficial](https://github.com/openai/codex-security/blob/main/sdk/typescript/docs/sdk.md)
+Na 0.2.2, o aplicativo captura os arquivos autorizados em memória e envia os trechos ao provedor pelo núcleo Rust. A metodologia incorporada, sua origem e a licença estão em [methodology](methodology/README.md).
+
+As seções seguintes documentam o helper usado pelas versões 0.2.0 e 0.2.1 e ainda incluído na distribuição. Esse helper usa `CodexSecurity.run` no modo Standard do SDK `@openai/codex-security` 0.10.0. O lockfile fixa as dependências, incluindo Codex 0.167.1. [SDK oficial](https://github.com/openai/codex-security/blob/main/sdk/typescript/docs/sdk.md)
 
 ## Executar localmente
 

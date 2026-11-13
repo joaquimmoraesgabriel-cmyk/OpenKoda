@@ -31,7 +31,6 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   const runningRequests = useRef(new Set<string>());
-  const [runningCount,setRunningCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -50,7 +49,11 @@ export default function App() {
   useEffect(() => {
     const update = () => { void refresh().catch(cause => setError(errorMessage(cause))); };
     window.addEventListener('openkoda:security-scan-updated', update);
-    return () => window.removeEventListener('openkoda:security-scan-updated', update);
+    window.addEventListener('openkoda:chat-admitted', update);
+    return () => {
+      window.removeEventListener('openkoda:security-scan-updated', update);
+      window.removeEventListener('openkoda:chat-admitted', update);
+    };
   }, [refresh]);
   const load = useCallback(async () => {
     setLoading(true); setError('');
@@ -60,14 +63,14 @@ export default function App() {
   }, [refresh,refreshPurge]);
   useEffect(() => { void load(); }, [load]);
   useEffect(() => {
-    const active = runningCount>0 || snapshot?.assessments.some(a=>['preparing','running','canceling','pausing','queued'].includes(a.status));
+    const active = snapshot?.assessments.some(a=>['preparing','running','canceling','pausing','queued'].includes(a.status));
     if(!active)return;
     let disposed=false;
     let timer:ReturnType<typeof setTimeout>;
     async function poll(){try{await refresh();}catch(e){if(!disposed)setError(errorMessage(e));}finally{if(!disposed)timer=setTimeout(()=>void poll(),1000);}}
     timer=setTimeout(()=>void poll(),1000);
     return()=>{disposed=true;clearTimeout(timer);};
-  },[runningCount,snapshot?.assessments.some(a=>['preparing','running','canceling','pausing','queued'].includes(a.status)),refresh]);
+  },[snapshot?.assessments.some(a=>['preparing','running','canceling','pausing','queued'].includes(a.status)),refresh]);
   useApplyAppearance(snapshot?.settings.theme);
   useEffect(() => {
     if (previousPage.current === pageKey) return;
@@ -84,10 +87,10 @@ export default function App() {
     if(name==='ai.ask') {
       const id=name+':'+String(payload.id??payload.assessmentId);
       if(runningRequests.current.has(id))throw new Error('Esta execução já está em andamento.');
-      runningRequests.current.add(id);setRunningCount(runningRequests.current.size);setError('');setNotice('');
+      runningRequests.current.add(id);setError('');setNotice('');
       try{const result=await request<T>(name,payload);await refresh();return result;}
       catch(e){await refresh().catch(()=>{});setError(errorMessage(e));throw e;}
-      finally{runningRequests.current.delete(id);setRunningCount(runningRequests.current.size);scopeChanged();}
+      finally{runningRequests.current.delete(id);scopeChanged();}
     }
     if (busyRef.current) throw new Error('Aguarde a ação em andamento.');
     busyRef.current = true; setBusy(true); setError(''); setNotice('');

@@ -4,7 +4,10 @@ use super::*;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{sync_channel, RecvTimeoutError};
 
-struct ActiveChat { assessment:String, request:String, review:Option<crate::data_policy::DataReviewRef>, accepted:bool, message_id:Option<String>, token:Arc<AtomicBool> }
+#[path="ai_chat_stream.rs"]
+mod stream;
+pub(super) use stream::Progress;
+struct ActiveChat { policy:Option<((u64,i64),bool)>, progress: Arc<Mutex<Progress>>, assessment:String, request:String, review:Option<crate::data_policy::DataReviewRef>, accepted:bool, message_id:Option<String>, token:Arc<AtomicBool> }
 #[derive(Default)]
 pub(super) struct ChatControl(Mutex<Option<ActiveChat>>);
 impl ChatControl {
@@ -12,27 +15,45 @@ impl ChatControl {
         let token=Arc::new(AtomicBool::new(false));
         let mut state=self.0.lock().map_err(failure)?;
         if state.is_some() {return Err("Já existe uma conversa em execução.".into());}
-        *state=Some(ActiveChat{assessment:assessment.into(),request:request.into(),review:review.cloned(),accepted:false,message_id:None,token:token.clone()});
-        Ok(LiveChat{control:self,token})
+        let progress=Arc::new(Mutex::new(Progress::default()));
+        *state=Some(ActiveChat{policy:None,progress:progress.clone(),assessment:assessment.into(),request:request.into(),review:review.cloned(),accepted:false,message_id:None,token:token.clone()});
+        Ok(LiveChat{control:self,token,progress})
     }
-    pub fn inspect(&self, payload:Value, stop:bool)->Result<Value,String> {
+    pub fn inspect_with_policy(&self,payload:Value,stop:bool,store:&Store)->Result<Value,String>{
+        self.status(payload,stop,Some(store))
+    }
+    #[cfg(test)]
+    fn inspect(&self,payload:Value,stop:bool)->Result<Value,String>{self.status(payload,stop,None)}
+    fn status(&self, payload:Value, stop:bool, store:Option<&Store>)->Result<Value,String> {
         #[derive(Deserialize)]
         #[serde(rename_all="camelCase",deny_unknown_fields)]
         struct Input {assessment_id:String, request_id:Option<String>}
         let input:Input=decode(payload)?;
         crate::core::valid_id(&input.assessment_id)?;
-        let state=self.0.lock().map_err(failure)?;
-        let current=state.as_ref().filter(|live|live.assessment==input.assessment_id&&live.accepted);
+        let mut state=self.0.lock().map_err(failure)?;
+        let mut current=state.as_mut().filter(|live|live.assessment==input.assessment_id&&live.accepted);
         if stop{
-            let live=current.ok_or("A resposta já terminou.")?;
+            let live=current.as_ref().ok_or("A resposta já terminou.")?;
             if Some(&live.request)!=input.request_id.as_ref(){return Err("A solicitação ativa mudou.".into());}
             live.token.store(true,Ordering::Release);
         }
-        Ok(json!({"requestId":current.map(|live|&live.request),"stopping":current.is_some_and(|live|live.token.load(Ordering::Acquire)),
+        let show_text=if let (Some(live),Some(store))=(current.as_mut(),store){
+            if stop {false} else {
+                let checked=store.cached_chat_policy(live.policy,|s|{
+                    let receipt=s.data_use_receipts.iter().find(|r|r.assessment_id.as_ref()==Some(&live.assessment)&&r.effect.id==live.request);
+                    receipt.is_some()&&crate::data_host::local_chat_allowed(s,&live.assessment,receipt)
+                })?;
+                live.policy=Some(checked);checked.1
+            }
+        }else{false};
+        let current=current.as_deref();
+        let progress=current.map(|live|live.progress.lock().map_err(failure)).transpose()?;
+        Ok(json!({"processingMs":progress.as_ref().and_then(|p|p.elapsed_ms()),
+            "partialText":progress.as_ref().filter(|_|show_text).map(|p|p.visible()),"requestId":current.map(|live|&live.request),"stopping":current.is_some_and(|live|live.token.load(Ordering::Acquire)),
             "messageId":current.and_then(|live|live.message_id.as_ref()),"dataReview":current.and_then(|live|live.review.as_ref()).map(|review|json!({"id":review.id,"digest":review.digest}))}))
     }
 }
-pub(super) struct LiveChat<'a>{control:&'a ChatControl,pub token:Arc<AtomicBool>}
+pub(super) struct LiveChat<'a>{control:&'a ChatControl,pub token:Arc<AtomicBool>,pub progress:Arc<Mutex<Progress>>}
 impl LiveChat<'_>{pub fn admit(&self,message_id:Option<String>)->Result<(),String>{
     let mut state=self.control.0.lock().map_err(failure)?;
     let live=state.as_mut().ok_or("Conversa indisponível.")?;
@@ -41,26 +62,37 @@ impl LiveChat<'_>{pub fn admit(&self,message_id:Option<String>)->Result<(),Strin
 }}
 impl Drop for LiveChat<'_>{fn drop(&mut self){if let Ok(mut state)=self.control.0.lock(){state.take();}}}
 
-pub(super) fn http_chat(provider:ProviderId,model:&str,key:&str,prompt:&str,instructions:&str,maximum:u32,stop:&AtomicBool)->Result<Value,String>{
+pub(super) fn http_chat(provider:ProviderId,model:&str,key:&str,prompt:&str,instructions:&str,maximum:u32,stop:&AtomicBool,progress:Arc<Mutex<Progress>>)->Result<Value,String>{
     let client=reqwest::Client::builder().https_only(true).redirect(reqwest::redirect::Policy::none()).no_proxy().timeout(Duration::from_secs(90)).connect_timeout(Duration::from_secs(15)).build().map_err(network_error)?;
     let builder=client.post(provider.inference_url());
     let builder=if provider==ProviderId::Anthropic{builder.header("x-api-key",key).header("anthropic-version","2023-06-01")}else{builder.bearer_auth(key)};
-    let body=chat_body(provider,model,prompt,instructions,maximum)?;
-    interruptible_response(builder.json(&body),provider,stop)
+    let mut body=chat_body(provider,model,prompt,instructions,maximum)?;
+    body["stream"]=json!(true);
+    if matches!(provider,ProviderId::OpenRouter|ProviderId::DeepSeek|ProviderId::Gemini|ProviderId::Xai) {
+        body["stream_options"]=json!({"include_usage":true});
+    }
+    interruptible_response(builder.json(&body),provider,stop,progress)
 }
 
-fn interruptible_response(task:reqwest::RequestBuilder,provider:ProviderId,stop:&AtomicBool)->Result<Value,String>{
+fn interruptible_response(task:reqwest::RequestBuilder,provider:ProviderId,stop:&AtomicBool,progress:Arc<Mutex<Progress>>)->Result<Value,String>{
     let (tx,rx)=sync_channel(1);
     let join=tauri::async_runtime::spawn(async move{
         let result=async{
             let mut response=task.send().await.map_err(network_error)?;
             let status=response.status().as_u16();
             if !(200..300).contains(&status){return Err(match status{401=>"O provedor recusou a credencial.",403=>"A credencial não tem acesso ao recurso.",429=>"Limite ou saldo da API atingido.",_=>"O provedor recusou a solicitação. Confira se o modelo aceita os anexos."}.to_owned());}
+            progress.lock().map_err(failure)?.connected();
+            let is_sse=response.headers().get(reqwest::header::CONTENT_TYPE).and_then(|v|v.to_str().ok())
+                .is_some_and(|v|v.split(';').next().unwrap_or("").trim().eq_ignore_ascii_case("text/event-stream"));
+            let mut events=stream::Stream::new(provider,progress);
+            let mut received=0usize;
             let mut bytes=Vec::new();
             while let Some(chunk)=response.chunk().await.map_err(network_error)?{
-                if bytes.len()+chunk.len()>MAX_RESPONSE as usize{return Err("Resposta excedeu o limite de tamanho.".into());}
-                bytes.extend_from_slice(&chunk);
+                received+=chunk.len();
+                if received>MAX_RESPONSE as usize{return Err("Resposta excedeu o limite de tamanho.".into());}
+                if is_sse {events.push(&chunk).map_err(|_|"Resposta interrompida durante a transmissão. O consumo é incerto.")?;} else {bytes.extend_from_slice(&chunk); }
             }
+            if is_sse {return events.finish().map_err(|_|"Resposta interrompida sem confirmação final do provedor. O consumo é incerto.".into());}
             provider.normalize(serde_json::from_slice(&bytes).map_err(|_|"Resposta do provedor não é JSON válido.")?)
         }.await;
         let _=tx.send(result);
@@ -138,7 +170,7 @@ mod tests {
         live.admit(None).unwrap();
         let stopping=live.token.clone();
         let request=reqwest::Client::builder().no_proxy().build().unwrap().get(format!("http://{addr}/fixture"));
-        let caller=thread::spawn(move||interruptible_response(request,ProviderId::OpenAI,&stopping));
+        let caller=thread::spawn(move||interruptible_response(request,ProviderId::OpenAI,&stopping,Arc::new(Mutex::new(Progress::default()))));
         seen.recv_timeout(Duration::from_secs(5)).unwrap();
         assert!(control.inspect(json!({"assessmentId":aid,"requestId":model::id()}),true).is_err());
         assert!(!live.token.load(Ordering::Acquire));

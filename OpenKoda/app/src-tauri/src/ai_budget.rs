@@ -131,7 +131,7 @@ impl Ledger {
         for mut c in existing {
             // A human allocation before the first policy is still a debit.
             // Adopt quantified receipts without changing their amounts/rates.
-            let sdk_hold=c.resolution.as_ref().is_some_and(|r|r["kind"]=="security_sdk_cap");
+            let sdk_hold=c.resolution.as_ref().is_some_and(|r|matches!(r["kind"].as_str(),Some("security_sdk_cap"|"security_review_cap")));
             if first_epoch&&c.epoch_id.is_none()&&(c.priced.is_some()||c.assumed.is_some()||sdk_hold){c.epoch_id=m.epoch_id.clone();c.excluded=false;save_charge(&tx,&c)?;}
             if input.enabled&&c.price.is_none()&&c.priced.is_none()&&c.assumed.is_none()&&!sdk_hold{c.excluded=true;save_charge(&tx,&c)?;}
         }
@@ -166,23 +166,47 @@ impl Ledger {
         let charge=Charge{id:id.into(),scope,epoch_id:m.epoch_id,policy_revision:p.as_ref().map(|p|p.revision.clone()),model:spec.model.clone(),endpoint:spec.endpoint.clone(),created_at:model::now(),state:"reserved".into(),reserved,priced:None,assumed:None,price,input_tokens:None,output_tokens:None,review_id,slot,excluded:false,resolution:None,dispatched_at:None};
         tx.execute("INSERT INTO budget_charges VALUES(?1,?2,?3,?4)",params![charge.id,charge.scope,charge.state,serde_json::to_string(&charge).map_err(err)?]).map_err(err)?;tx.commit().map_err(err)?;Ok(charge_public(&charge))
     }
-    // The SDK manages an unknown number of model calls. Reserve its explicit
-    // USD limit directly rather than estimating a fictitious token count.
+    pub(super) fn priced_scan_models(&self, provider:ProviderId)->Result<HashSet<String>,String>{
+        let db=self.lock()?;
+        Ok(policy(&db)?.into_iter().flat_map(|p|p.prices).filter(|p|p.fields.provider.unwrap_or(ProviderId::OpenAI)==provider)
+            .map(|p|p.fields.model).collect())
+    }
+    pub(super) fn scan_rates(&self, provider:ProviderId, model:&str)->Result<Option<ScanRates>,String>{
+        let db=self.lock()?;
+        let Some(policy)=policy(&db)? else{return Ok(None)};
+        policy.prices.iter().find(|p|p.fields.provider.unwrap_or(ProviderId::OpenAI)==provider && p.fields.model==model)
+            .map(|p|Ok(ScanRates{input:money(&p.fields.input_usd_per_million)?,output:money(&p.fields.output_usd_per_million)?})).transpose()
+    }
+    // Reserve the whole scan once. Each batch checks the remaining cap before dispatch.
     pub(super) fn reserve_security(&self,id:&str,assessment:&str,provider:ProviderId,model:&str,cap:u64)->Result<(),String>{
         let mut db=self.lock()?;
         let tx=db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate).map_err(err)?;
         let m=meta(&tx)?;let p=policy(&tx)?;let current=charges(&tx)?;let scope=scope(&m,assessment);
         if current.iter().filter(|c|c.scope==scope&&c.state!="not_dispatched").count()>=100{return Err("Limite de operações de IA desta avaliação atingido.".into());}
         if let Some(p)=p.as_ref().filter(|p|p.enabled){admit(&current,&m,p,&scope,cap)?;}
-        let charge=Charge{id:id.into(),scope,epoch_id:m.epoch_id,policy_revision:p.map(|p|p.revision),model:model.into(),endpoint:provider.endpoint().into(),created_at:model::now(),state:"reserved".into(),reserved:Some(cap),priced:None,assumed:None,price:None,input_tokens:None,output_tokens:None,review_id:None,slot:0,excluded:false,resolution:Some(json!({"kind":"security_sdk_cap"})),dispatched_at:None};
+        let charge=Charge{id:id.into(),scope,epoch_id:m.epoch_id,policy_revision:p.map(|p|p.revision),model:model.into(),endpoint:provider.endpoint().into(),created_at:model::now(),state:"reserved".into(),reserved:Some(cap),priced:None,assumed:None,price:None,input_tokens:None,output_tokens:None,review_id:None,slot:0,excluded:false,resolution:Some(json!({"kind":"security_review_cap","requests":0,"partialRequests":0})),dispatched_at:None};
         tx.execute("INSERT INTO budget_charges VALUES(?1,?2,?3,?4)",params![charge.id,charge.scope,charge.state,serde_json::to_string(&charge).map_err(err)?]).map_err(err)?;
         tx.commit().map_err(err)
     }
+    pub(super) fn security_usage(&self,id:&str,requests:u64,partial:u64,input:u64,output:u64)->Result<(),String>{
+        self.transition(id,|c|{
+            let r=c.resolution.as_mut().filter(|r|r["kind"]=="security_review_cap").ok_or_else(||err("scan usage"))?;
+            if c.state=="reserved" && requests==1 && partial==1 {
+                c.state="dispatched".into();
+                c.dispatched_at=Some(model::now());
+            }
+            if c.state!="dispatched" || partial>requests{return Err(err("scan usage state"))}
+            r["requests"]=json!(requests);r["partialRequests"]=json!(partial);
+            c.input_tokens=(requests>partial).then_some(input);c.output_tokens=(requests>partial).then_some(output);
+            Ok(())
+        }).map(|_|())
+    }
     pub(super) fn security_settle(&self,id:&str,estimate:Option<u64>)->Result<(),String>{
         self.transition(id,|c|{
-            if c.state!="dispatched"||c.resolution.as_ref().is_none_or(|r|r["kind"]!="security_sdk_cap"){return Err(err("SDK settlement"));}
+            if c.state!="dispatched"||c.resolution.as_ref().is_none_or(|r|r["kind"]!="security_review_cap"){return Err(err("scan settlement"));}
             if let Some(amount)=estimate{
-                c.state="assumed".into();c.assumed=Some(amount);c.resolution=Some(json!({"kind":"security_sdk_estimate","billingAmountKnown":false}));
+                c.state="assumed".into();c.assumed=Some(amount);
+                let r=c.resolution.as_mut().unwrap();r["kind"]=json!("security_review_usage");r["billingAmountKnown"]=json!(false);
             }else{c.state="unknown".into();}
             Ok(())
         }).map(|_|())
@@ -226,7 +250,13 @@ impl Ledger {
     fn resolve(&self,input:Resolve,redact:&dyn Fn(&str)->String)->Result<Value,String>{
         core_id(&input.charge_id)?;let amount=money(&input.assumed_charge_usd)?;let note=redact(&clean_text(&input.note,2000,"Justificativa")?);if !input.acknowledge_unknown_charge||amount==0{return Err("Reconheça cobrança desconhecida e informe débito conservador positivo.".into());}
         let epoch={let db=self.lock()?;meta(&db)?.epoch_id};
-        self.transition(&input.charge_id,|c|{if c.state!="unknown"||amount<c.reserved.unwrap_or(1){return Err("O registro deve estar desconhecido e o débito não pode ser menor que a reserva.".into());}c.state="assumed".into();c.assumed=Some(amount);c.excluded=false;if c.epoch_id.is_none(){c.epoch_id=epoch;}c.resolution=Some(json!({"note":note,"author":"local-user","createdAt":model::now(),"usageRemainsUnknown":true,"acknowledgeUnknownCharge":true}));Ok(())})
+        self.transition(&input.charge_id,|c|{if c.state!="unknown"||amount<c.reserved.unwrap_or(1){return Err("O registro deve estar desconhecido e o débito não pode ser menor que a reserva.".into());}c.state="assumed".into();c.assumed=Some(amount);c.excluded=false;if c.epoch_id.is_none(){c.epoch_id=epoch;}let mut resolved=json!({"note":note,"author":"local-user","createdAt":model::now(),"usageRemainsUnknown":true,"acknowledgeUnknownCharge":true});
+            if let Some(progress)=c.resolution.as_ref().filter(|r| r["kind"]=="security_review_cap") {
+                resolved["kind"]=json!("security_review_usage");
+                resolved["requests"]=progress["requests"].clone();
+                resolved["partialRequests"]=progress["partialRequests"].clone();
+            }
+            c.resolution=Some(resolved);Ok(())})
     }
 }
 
@@ -255,7 +285,21 @@ impl AiService {
     fn legacy_requests(&self)->Result<Vec<String>,String>{let db=self.db.lock().map_err(failure)?;let mut q=db.prepare("SELECT id FROM requests WHERE json_type(details,'$.budget') IS NULL ORDER BY id").map_err(failure)?;let rows=q.query_map([],|r|r.get(0)).map_err(failure)?.collect::<Result<Vec<_>,_>>().map_err(failure)?;Ok(rows)}
     pub(super) fn budget_handle(&self,action:&str,payload:Value,store:&Store)->Result<Value,String>{match action{
         "ai.budget.status"=>{let input:Status=decode(payload)?;if let Some(id)=&input.assessment_id{check_assessment(store,id)?;}self.budget.status(input.assessment_id.as_deref(),&self.legacy_requests()?)},
-        "ai.budget.history"=>{empty(&payload)?;let db=self.db.lock().map_err(failure)?;history::read(&db)},
+        "ai.budget.history" => {
+            empty(&payload)?;
+            let mut result = {
+                let db = self.db.lock().map_err(failure)?;
+                history::read(&db)?
+            };
+            let state = store.snapshot()?;
+            let scans = state.assessments.iter().flat_map(|assessment| {
+                assessment.events.iter().filter_map(move |event| {
+                    Some((event.security_scan.as_ref()?.id(), assessment.id.as_str()))
+                })
+            }).collect();
+            history::append_scans(&mut result, &self.budget, &scans);
+            Ok(result)
+        },
         "ai.budget.configure"=>{let input:Configure=decode(payload)?;self.with_local_redactor(|redactor|self.budget.configure(input,&self.legacy_requests()?,redactor))?;self.budget.status(None,&self.legacy_requests()?)},
         "ai.budget.resolveUnknown"=>{let input:Resolve=decode(payload)?;self.with_local_redactor(|redactor|self.budget.resolve(input,redactor))},
         "ai.budget.preview"=>{

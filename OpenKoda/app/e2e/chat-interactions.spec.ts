@@ -8,6 +8,11 @@ type Bridge = {
   turns: Turn[];
   calls: { action: string; payload: Record<string, unknown> }[];
   running: boolean;
+  activeAssessment?:string;
+  processingMs?:number;
+  partialText?:string;
+  scanAdmitted?:boolean;
+  sensitiveSource?:boolean;
   activeReview?: {id:string;digest:string};
   acceptedMessage?: string;
   rejectBeforeSend?: boolean;
@@ -39,12 +44,35 @@ async function installChat(page: Page, turns: Turn[] = [], running = false) {
       if (!args.request) return {};
       const { action, payload } = args.request;
       bridge.calls.push(args.request);
-      if (action === 'snapshot') return snapshot;
+      if (action === 'project.newConversation') {
+        const already=snapshot.assessments.find(a=>a.id==='new-thread');
+        if(already)return already;
+        const item={...snapshot.assessments[0],id:'new-thread',title:String(payload.title),objective:String(payload.analysisObjective??''),status:'draft' as const,
+          events:payload.analysisObjective?[{id:'first-scan',kind:'chat_scan_first_turn',at:snapshot.projects[0].createdAt,message:'Preparação da análise.'}]:[]};
+        snapshot.assessments.push(item);
+        scope.statuses[item.id]={...scope.statuses.A,assessmentId:item.id,revision:{...scope.statuses.A.revision,assessmentId:item.id}};
+        return item;
+      }
+      if (action === 'snapshot') return {...snapshot,assessments:snapshot.assessments.filter(a=>a.id!=='new-thread'||bridge.scanAdmitted||bridge.activeAssessment===a.id&&bridge.acceptedMessage)};
+      if(action==='project.options.get')return {options:{advancedEnabled:true,additionalContextEnabled:false,context:['','',''],minutes:null,maxCostUsd:0.03,title:''}};
+      if(action==='security.status')return {available:true,provider:'openai',model:'modelo-original',hasApiKey:true,requiresSensitiveConfirmation:!!bridge.sensitiveSource};
+      if(action==='security.scan.start'||action==='security.scan.get'){
+        const id=String(payload.assessmentId);
+        if(action==='security.scan.start')bridge.scanAdmitted=true;
+        if(!bridge.sensitiveSource||id==='new-thread'&&!bridge.scanAdmitted)return {scan:null};
+        const at='2026-11-12T12:00:00Z';
+        return {scan:{id:'scan-'+id,assessmentId:id,selectedPaths:['src/api.rs'],model:'modelo-original',provider:'openai',createdAt:at,updatedAt:at,
+          status:'completed',stage:'completed',maxCostUsd:0.03,message:'Análise concluída.',
+          events:[{stage:'source_query',message:'Leitura de src/api.rs',at}],error:null,
+          result:{report:'Revisão da API.',scanId:null,findings:[],coverage:{scope:['src/api.rs'],excludedPaths:[],additionalExclusions:0,findingsTotal:0,reportTruncated:false},cost:null}}};
+      }
       if (action === 'assessment.scopeStatus') return scope.status(payload.assessmentId);
       if (action === 'ai.context') return { digest: 'packet-a', bytes: 120, context: { assessmentId: payload.assessmentId } };
       if (action === 'ai.budget.status') return { enabled: false, degraded: false };
       if (action === 'ai.ask') {
         if(bridge.rejectBeforeSend)throw new Error('O escopo foi revogado antes do envio.');
+        bridge.activeAssessment=String(payload.assessmentId);
+        if(bridge.activeAssessment==='new-thread')snapshot.assessments.find(a=>a.id==='new-thread')!.title=String(payload.message);
         bridge.running = true;
         bridge.activeReview = bridge.pretendOtherReview?{id:'other-window-review',digest:'unrelated-digest'}:payload.dataReview as {id:string;digest:string};
         bridge.acceptedMessage = 'message-' + bridge.calls.filter(c=>c.action==='ai.ask').length;
@@ -57,8 +85,13 @@ async function installChat(page: Page, turns: Turn[] = [], running = false) {
         return {};
       }
       if (action === 'environment.status') return { tools: [], status: 'unavailable', message: 'Teste' };
-      if (action === 'ai.history') return { messages: payload.assessmentId === 'A' ? bridge.turns : [], requests:payload.assessmentId==='A'&&bridge.acceptedMessage?[{id:'turn-A',dataReviewRef:bridge.activeReview,chatMessageIds:[bridge.acceptedMessage]}]:[] };
-      if (action === 'ai.chat.status') return { requestId: bridge.running && payload.assessmentId === 'A' ? 'turn-A' : null, stopping: false, messageId:bridge.running?bridge.acceptedMessage:null,dataReview:bridge.running?bridge.activeReview:null };
+      if (action === 'project.renameConversation') {
+        const chat=snapshot.assessments.find(a=>a.id===payload.assessmentId)!;
+        chat.title=String(payload.title);
+        return {id:chat.id};
+      }
+      if (action === 'ai.history') return { messages: payload.assessmentId === (bridge.activeAssessment??'A') ? bridge.turns : [], requests:payload.assessmentId===(bridge.activeAssessment??'A')&&bridge.acceptedMessage?[{id:'turn-A',dataReviewRef:bridge.activeReview,chatMessageIds:[bridge.acceptedMessage]}]:[] };
+      if (action === 'ai.chat.status') return { requestId: bridge.running && payload.assessmentId === (bridge.activeAssessment??'A') ? 'turn-A' : null, processingMs:bridge.processingMs,partialText:bridge.partialText, stopping: false, messageId:bridge.running?bridge.acceptedMessage:null,dataReview:bridge.running?bridge.activeReview:null };
       if (action === 'ai.chat.stop') bridge.running = false;
       if (action === 'ai.status') return {
         provider: payload.provider, hasApiKey: ['openai', 'openrouter'].includes(String(payload.provider)),
@@ -241,7 +274,7 @@ test('Ctrl + Enter escolhido continua enviando e os menus trocam em um clique', 
   const attachment = chat.getByRole('menuitem', { name: 'Anexar foto ou arquivo' });
   await expect(attachment).toBeFocused();
   await page.keyboard.press('ArrowDown');
-  await expect(attachment).toBeFocused();
+  await expect(chat.getByRole('menuitem',{name:'Analisar código do projeto'})).toBeFocused();
   await expect(chat.getByRole('menuitemcheckbox', { name: 'Pedir verificação' })).toHaveCount(0);
   await chat.getByRole('button', { name: 'Modo de aprovação' }).click();
   await expect(chat.getByRole('menu', { name: 'Adicionar à mensagem' })).toBeHidden();
@@ -325,9 +358,10 @@ test('atividade, resposta formatada e rolagem independente enquanto o provedor t
   await expect(log.locator('pre code')).toContainText('<img');
   expect(await log.locator('img').count()).toBe(0);
   const top = await log.evaluate(el => el.scrollTop);
-  await page.evaluate(() => window.__conversationTest.turns.push({
-    id: 'new', createdAt: '2026-01-03T12:00:00Z', role: 'assistant', text: 'Nova resposta recebida',
-  }));
+  await page.evaluate(() => {
+    window.__conversationTest.processingMs=2400;
+    window.__conversationTest.partialText='Nova resposta recebida';
+  });
   await expect(log.getByText('Nova resposta recebida')).toBeAttached();
   expect(Math.abs(await log.evaluate(el => el.scrollTop) - top)).toBeLessThan(3);
   await jump.click();
@@ -338,4 +372,101 @@ test('atividade, resposta formatada e rolagem independente enquanto o provedor t
   expect(await page.evaluate(() => window.__conversationTest.calls.filter(c => c.action === 'ai.chat.stop'))).toEqual([
     { action: 'ai.chat.stop', payload: { assessmentId: 'A', requestId: 'turn-A' } },
   ]);
+});
+
+
+test('o novo chat só entra na lista após a primeira mensagem aceita e exibe o fluxo parcial', async ({page})=>{
+  await installChat(page);
+  const tree=page.getByRole('complementary',{name:'Projetos e conversas'});
+  const create=tree.getByRole('button',{name:'Criar nova conversa em Laboratório'});
+  await create.click();
+  const chat=page.getByRole('region',{name:'Conversa do projeto'});
+  await expect(chat.locator('.project-chat-transcript')).toBeEmpty();
+  await expect(tree.locator('.tree-chat')).toHaveCount(2);
+  expect(await page.evaluate(()=>window.__conversationTest.calls.filter(c=>c.action==='project.newConversation').length)).toBe(0);
+  const input=chat.getByRole('textbox',{name:'Mensagem da conversa'});
+  const question='Verificar acesso ao painel administrativo';
+  await input.fill(question);
+  await input.press('Enter');
+  await expect(tree.getByRole('button',{name:question})).toBeVisible();
+  await expect(input).toHaveValue('');
+  await page.evaluate(()=>{window.__conversationTest.processingMs=2130;});
+  await expect(chat.getByText('Processando · 2 s')).toBeVisible();
+  await page.evaluate(()=>{window.__conversationTest.partialText='Estou revisando';});
+  await expect(chat.getByLabel('Resposta em andamento')).toHaveText(/Estou revisando/);
+  await page.evaluate(()=>{window.__conversationTest.partialText='Estou revisando o painel.';});
+  await expect(chat.getByLabel('Resposta em andamento')).toContainText('o painel.');
+  await page.evaluate(()=>{
+    window.__conversationTest.turns.push({id:'reply',role:'assistant',text:'Estou revisando o painel.',createdAt:'2026-11-12T12:01:00Z'});
+    window.dispatchEvent(new Event('fixture:reply'));
+  });
+  await expect(chat.getByLabel('Resposta em andamento')).toHaveCount(0);
+  await expect(chat.getByText('Estou revisando o painel.',{exact:true})).toHaveCount(1);
+  await page.getByRole('button',{name:'Renomear conversa'}).click();
+  const title=page.getByRole('textbox',{name:'Título da conversa'});
+  await title.fill('Acesso administrativo');
+  await title.press('Enter');
+  await expect(tree.getByRole('button',{name:'Acesso administrativo',exact:true})).toBeVisible();
+  expect(await page.evaluate(()=>window.__conversationTest.calls.filter(c=>c.action==='ai.ask').length)).toBe(1);
+});
+
+
+for(const fresh of [false,true]){
+  test('o compositor autoriza a fonte sensível e publica a análise uma vez '+(fresh?'no chat vazio':'a partir da conversa existente'),async({page})=>{
+    await installChat(page);
+    await page.evaluate(()=>{window.__conversationTest.sensitiveSource=true;});
+    const tree=page.getByRole('complementary',{name:'Projetos e conversas'});
+    if(fresh)await tree.getByRole('button',{name:'Criar nova conversa em Laboratório'}).click();
+    const chat=page.getByRole('region',{name:'Conversa do projeto'});
+    const objective='Revisar os controles de autorização da API';
+    await chat.getByRole('textbox',{name:'Mensagem da conversa'}).fill(objective);
+    await chat.getByRole('button',{name:'Adicionar à mensagem'}).click();
+    await chat.getByRole('menuitem',{name:'Analisar código do projeto'}).click();
+    const form=chat.getByRole('form',{name:'Analisar código do projeto'});
+    await expect(form.getByRole('textbox',{name:'Objetivo da análise'})).toHaveValue(objective);
+    await expect(form).toContainText('Limite de US$ 0,03');
+    if(!fresh)await expect(form).toContainText('A análise abre uma nova conversa');
+    const start=form.getByRole('button',{name:'Iniciar análise de código'});
+    await start.click();
+    const consent=form.getByRole('checkbox',{name:/fonte sensível/});
+    await expect(consent).toBeVisible();
+    await expect(tree.locator('.tree-chat')).toHaveCount(2);
+    expect(await page.evaluate(()=>window.__conversationTest.calls.filter(c=>c.action==='security.scan.start'))).toHaveLength(0);
+    await consent.check();await start.click();
+    await expect(tree.getByRole('button',{name:objective,exact:true})).toBeVisible();
+    const scan=chat.getByRole('region',{name:'Análise de segurança'});
+    await scan.getByText(/Atividade da análise/).click();
+    await expect(scan.getByText('Leitura de src/api.rs')).toBeVisible();
+    const calls=await page.evaluate(()=>window.__conversationTest.calls);
+    expect(calls.filter(c=>c.action==='security.scan.start').map(c=>c.payload)).toEqual([expect.objectContaining({
+      assessmentId:'new-thread',acknowledgeSensitive:true,maxCostUsd:0.03,target:['src/api.rs'],
+    })]);
+    const creations=calls.filter(c=>c.action==='project.newConversation').map(c=>c.payload);
+    expect(new Set(creations.map(c=>c.idempotencyKey)).size).toBe(1);
+    expect(creations[0]).toMatchObject({sourceAssessmentId:'A',analysisObjective:objective,aiSelection:{provider:'openai',model:'modelo-original'}});
+    expect(calls.filter(c=>c.action==='ai.ask')).toHaveLength(0);
+  });
+}
+
+test('uma resposta longa acompanha o final e preserva a posição ao subir para ler', async ({page})=>{
+  await installChat(page,[],true);
+  const log=page.getByRole('region',{name:'Histórico da conversa'});
+  await page.evaluate(()=>{
+    window.__conversationTest.processingMs=1800;
+    window.__conversationTest.partialText='Início da resposta para leitura.';
+  });
+  const reply=log.getByLabel('Resposta em andamento');
+  await expect(reply).toBeVisible();
+  await page.evaluate(()=>{window.__conversationTest.partialText+='\n\n'+Array.from({length:170},(_,i)=>'Parágrafo '+i).join('\n\n');});
+  const jump=page.getByRole('button',{name:'Voltar à mensagem mais recente'});
+  await expect(reply).toContainText('Parágrafo 169');
+  const endDistance=()=>log.evaluate(el=>el.scrollHeight-el.scrollTop-el.clientHeight);
+  await expect.poll(endDistance).toBeLessThan(4);
+  await log.evaluate(el=>{el.scrollTop=150;});
+  await expect(jump).toBeVisible();
+  await page.evaluate(()=>{window.__conversationTest.partialText+='\n\nÚltimo trecho.';});
+  await expect(reply).toContainText('Último trecho.');
+  expect(await log.evaluate(el=>el.scrollTop)).toBe(150);
+  await jump.click();
+  await expect.poll(endDistance).toBeLessThan(4);
 });

@@ -8,7 +8,7 @@ import { errorMessage, shortDate, type Assessment } from '../types';
 import { ConversationText } from './ConversationText';
 import './SecurityScan.css';
 
-export function useSecurityScan(assessment:Assessment) {
+export function useSecurityScan(assessment:Assessment, enabled=true) {
   const [scan,setScan]=useState<SecurityScan|null>(null);
   const [recordKnown,setRecordKnown]=useState(false);
   const [status,setStatus]=useState<SecurityStatus>();
@@ -16,14 +16,14 @@ export function useSecurityScan(assessment:Assessment) {
   const [busy,setBusy]=useState(false);
   const [revision,reload]=useState(0);
   const working=useRef(false);
-  const key=useRef<string|undefined>(undefined);
+  const key=useRef<{previous:string|undefined;id:string}|undefined>(undefined);
   const mounted=useRef(true);
   const generation=useRef(0);
   const lastNotification=useRef('');
   const assessmentRef=useRef(assessment);
   assessmentRef.current=assessment;
   const id=assessment.id;
-  const local=assessment.kind==='code'||assessment.kind==='files';
+  const local=enabled&&(assessment.kind==='code'||assessment.kind==='files');
   const selection=assessment.aiSelection;
   useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;};},[]);
   useEffect(()=>{
@@ -70,11 +70,11 @@ export function useSecurityScan(assessment:Assessment) {
     finally{working.current=false;if(mounted.current)setBusy(false);}
   }
   const start=(maxCostUsd:number|undefined,acknowledgeSensitive:boolean)=>mutate(async()=>{
-    if(!recordKnown||scan)throw new Error('Consulte o registro da análise antes de iniciar.');
+    if(!recordKnown||scan&&scanActive(scan.status))throw new Error('Consulte o registro da análise antes de iniciar.');
     if(!selection||!supportsSecurityModel(selection))throw new Error(codeAnalysisProviderNotice);
-    key.current??=crypto.randomUUID();
+    if(!key.current||key.current.previous!==scan?.id)key.current={previous:scan?.id,id:crypto.randomUUID()};
     const limit=maxCostUsd??effectiveScanLimit(await loadProjectOptions(assessment.projectId));
-    return startSecurityScan({projectId:assessment.projectId,assessmentId:id,selection,idempotencyKey:key.current,prompt:assessment.objective,maxCostUsd:limit,acknowledgeSensitive});
+    return startSecurityScan({projectId:assessment.projectId,assessmentId:id,selection,idempotencyKey:key.current.id,retryOf:scan?.id,prompt:assessment.objective,maxCostUsd:limit,acknowledgeSensitive});
   });
   const cancel=()=>mutate(async()=>{
     const updated=readScan(await request('security.scan.cancel',{assessmentId:id}),id);
@@ -101,6 +101,7 @@ function Report({result}:{result:ScanResult}){
     <details><summary>Cobertura da análise</summary>
       {!!coverage.limitations?.length&&<><h4>Limites informados pelo motor</h4><ul>{coverage.limitations.map((text,i)=><li key={i}>{analysisDisplayText(text)}</li>)}</ul></>}
       <p>Escopo informado pelo motor</p>{coverage.scope.length?<ul>{coverage.scope.map((p,i)=><li key={i}><code>{p}</code></li>)}</ul>:<p>Sem caminhos detalhados.</p>}
+      {!!coverage.reviewedRanges?.length&&<details><summary>Trechos revisados ({coverage.reviewedRanges.length})</summary><ul>{coverage.reviewedRanges.map(range=><li key={range}><code>{range}</code></li>)}</ul></details>}
       <p>Caminhos excluídos</p>{coverage.excludedPaths.length?<ul>{coverage.excludedPaths.map((p,i)=><li key={i}><code>{p}</code></li>)}</ul>:<p>Sem caminhos detalhados.</p>}
       {coverage.additionalExclusions>0&&<p>Outras exclusões registradas: {coverage.additionalExclusions}.</p>}
     </details>
@@ -146,6 +147,10 @@ export default function SecurityScanPanel({assessment,controller}:{assessment:As
     {scan.result&&<Report result={scan.result}/>}
     {scan.error&&<p role="alert">{analysisDisplayText(scan.error)}</p>}
     {scanActive(scan.status)&&<button className="button" disabled={busy||scan.status==='cancelling'} onClick={()=>void controller.cancel()}>Cancelar análise de segurança</button>}
+    {!scanActive(scan.status)&&Array.isArray(scan.selectedPaths)&&scan.status!=='completed'&&status?.available&&selection&&supportsSecurityModel(selection)&&<div>
+      {status.requiresSensitiveConfirmation&&<label><input type="checkbox" checked={acknowledged} onChange={e=>setSensitiveConsent(e.target.checked?review:'')}/>Autorizo enviar a fonte sensível a {providers[selection.provider].name} nesta nova análise.</label>}
+      <button className="button" disabled={busy||!controller.recordKnown||!!status.requiresSensitiveConfirmation&&!acknowledged} onClick={()=>void controller.start(undefined,acknowledged)}>Iniciar nova análise com {providers[selection.provider].name}</button>
+    </div>}
     {error&&<div role="alert">{analysisDisplayText(error)} <button className="text-button" onClick={controller.refresh}>Consultar estado novamente</button></div>}
   </section>;
 }

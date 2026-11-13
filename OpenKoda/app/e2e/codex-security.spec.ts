@@ -52,8 +52,9 @@ async function newProject(page:Page,scenario:Scenario='available',configuredProv
       if(action==='snapshot')return state;
       if(action==='ai.status'){
         const requested=String(payload.provider??provider);
-        return {provider:requested,hasApiKey:['openai','openrouter',provider].includes(requested),enabledModels:['fixture/modelo-seguro']};
+        return {provider:requested,hasApiKey:['openai','openrouter',provider].includes(requested),enabledModels:['fixture/modelo-seguro','fixture/image-only']};
       }
+      if(action==='ai.models')return {models:payload.forAnalysis?['fixture/modelo-seguro','fixture/inativo']:['fixture/modelo-seguro','fixture/image-only']};
       if(action==='ai.selection.save'){
         state.assessments[0].aiSelection=payload.aiSelection as typeof state.assessments[number]['aiSelection'];
         return state.assessments[0];
@@ -125,28 +126,27 @@ async function calls(page:Page,action:string){
 }
 const stage=(page:Page,value:string)=>page.evaluate(detail=>window.dispatchEvent(new CustomEvent('fixture:stage',{detail})),value);
 
-const providerSupportNotice='A análise de código usa OpenAI nesta versão. Os demais provedores continuam disponíveis nas conversas.';
-const analysisFileNotice='Os comandos da análise podem ler outros arquivos acessíveis à sua conta Windows. Use apenas código em que você confia nesta versão local.';
-
+const analysisFileNotice='O provedor recebe trechos do código selecionado. As buscas e leituras consultam uma cópia do escopo autorizado, sem executar comandos.';
+test('o seletor de análise oferece somente modelos compatíveis e ativos para a chave',async({page})=>{
+  await newProject(page);
+  await page.getByRole('button',{name:/Escolher modelo/}).click();
+  const chooser=page.getByRole('dialog',{name:'Escolher provedor e modelo'});
+  const router=chooser.getByRole('heading',{name:'OpenRouter',exact:true}).locator('..');
+  await expect(router.getByRole('button',{name:'fixture/modelo-seguro'})).toBeVisible();
+  await expect(router.getByRole('button')).toHaveCount(1);
+  expect((await calls(page,'ai.models')).every(call=>call.payload.forAnalysis===true)).toBe(true);
+});
 for(const provider of ['openrouter','anthropic'] as const){
-  test(`${provider} não inicia importação nem cria um projeto de análise de código`,async({page})=>{
+  test(`${provider} inicia a análise com o modelo configurado`,async({page})=>{
     const create=await newProject(page,'available',provider);
-    await expect(page.getByText(providerSupportNotice,{exact:true})).toBeVisible();
-    await expect(create).toBeDisabled();
-    await page.getByRole('button',{name:'GitHub',exact:true}).click();
-    await page.getByLabel('Link do repositório no GitHub').fill('https://github.com/fixture/remote-fixture');
-    await expect(create).toBeDisabled();
-    // The form handler must also refuse implicit/programmatic submits.
-    await create.evaluate(button=>(button as HTMLButtonElement).form?.requestSubmit());
-    for(const action of ['github.repository.import','project.launch','security.scan.start'])expect(await calls(page,action)).toEqual([]);
-    await page.getByRole('button',{name:'Escolher modelo · fixture/modelo-seguro'}).click();
-    const chooser=page.getByRole('dialog',{name:'Escolher provedor e modelo'});
-    await expect(chooser.getByRole('button',{name:'OpenRouter',exact:true})).toBeVisible();
-    await chooser.getByRole('heading',{name:'OpenAI',exact:true}).locator('..').getByRole('button',{name:'fixture/modelo-seguro',exact:true}).click();
     await expect(create).toBeEnabled();
+    await create.click();
+    const panel=page.getByRole('region',{name:'Análise de segurança'});
+    await expect(panel.getByRole('status')).toHaveText('Iniciando');
+    expect((await calls(page,'project.launch'))[0].payload.aiSelection).toEqual({provider,model:'fixture/modelo-seguro'});
+    expect(await calls(page,'security.scan.start')).toHaveLength(1);
   });
 }
-
 test('o aviso de leitura aparece antes de criar e antes de iniciar uma análise existente',async({page})=>{
   const create=await newProject(page,'unavailable');
   await expect(page.getByText(analysisFileNotice,{exact:true})).toBeVisible();

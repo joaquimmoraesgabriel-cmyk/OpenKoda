@@ -12,12 +12,38 @@ use std::path::Path;
 const ACTION: &str = "project.launch";
 const NEW_CHAT: &str = "project.newConversation";
 
+pub(crate) fn rename_conversation(store: &Store, payload: Value) -> Result<Value, String> {
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct Rename { assessment_id: String, title: String }
+    let input: Rename = serde_json::from_value(payload).map_err(|_| "Título da conversa inválido.")?;
+    core::valid_id(&input.assessment_id)?;
+    let title = core::text(&input.title, "Título", 160, true)?;
+    store.mutate(|s| {
+        let chat = s.assessments.iter_mut().find(|a| a.id == input.assessment_id).ok_or("Conversa indisponível.")?;
+        if !s.projects.iter().any(|p| p.id == chat.project_id && !p.archived) {
+            return Err("Projeto indisponível.".into());
+        }
+        chat.title = title;
+        if let Some(marker) = chat.events.iter_mut().find(|e| e.kind == "chat_first_turn") {
+            marker.kind = "chat_first_turn_named".into();
+        }
+        Ok(json!({"id":chat.id}))
+    })
+}
+
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct NewConversation {
     project_id: String,
     source_assessment_id: Option<String>,
     title: String,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    first_turn: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    analysis_objective: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    ai_selection: Option<AiSelection>,
     idempotency_key: String,
 }
 
@@ -41,8 +67,8 @@ pub(crate) fn new_conversation(store: &Store, payload: Value) -> Result<Value,St
         }
         let project=s.projects.iter().find(|p|p.id==input.project_id&&!p.archived).ok_or("Projeto indisponível.")?;
         let preferences=crate::project_options::current(project);preferences.validate()?;
-        let objective=preferences.objective("Revisar este projeto em conversa.")?;
-        let title=if preferences.advanced_enabled&&!preferences.title.trim().is_empty(){preferences.title.trim().to_string()}else{title};
+        let objective=preferences.objective(input.analysis_objective.as_deref().unwrap_or("Revisar este projeto em conversa."))?;
+        let title=if !input.first_turn && preferences.advanced_enabled&&!preferences.title.trim().is_empty(){preferences.title.trim().to_string()}else{title};
         let source=match &input.source_assessment_id {
             Some(id)=>Some(s.assessments.iter().find(|a|a.id==*id&&a.project_id==project.id)
                 .ok_or("A conversa de origem não pertence a este projeto.")?),
@@ -59,9 +85,15 @@ pub(crate) fn new_conversation(store: &Store, payload: Value) -> Result<Value,St
                 None=>None,
             }
         } else {None};
-        let ai=source.and_then(|a|a.ai_selection.clone());
+        let ai=input.ai_selection.clone().or_else(||source.and_then(|a|a.ai_selection.clone()));
+        let conversation_source=original.map(|r|scope::ConversationSource {
+            scope:scope::reference(r),
+            scan_id:source.and_then(|a|a.events.iter().rev().find_map(|e|e.security_scan.as_ref())).map(|r|r.id().to_owned()),
+            policy:s.data_bindings.iter().find(|b|b.assessment_id==r.assessment_id).map(|b|b.policy_ref.clone()),
+        });
+        if let Some(selection)=&ai {selection.validate()?;}
         let window=if project.analysis_options.is_some(){ScopeWindow{starts_at:None,ends_at:preferences.deadline()}}else{original.map(|r|r.body.window.clone()).unwrap_or(ScopeWindow{starts_at:None,ends_at:None})};
-        let result=if let Some(set)=original.and_then(|r|r.body.target_set.as_ref()) {
+        let mut result=if let Some(set)=original.and_then(|r|r.body.target_set.as_ref()) {
             let mut selection=targets::selection_from_set(set);
             selection.common_methods.clear();
             for entry in &mut selection.entries {
@@ -85,8 +117,13 @@ pub(crate) fn new_conversation(store: &Store, payload: Value) -> Result<Value,St
             scope::scope_result(s,&aid)?
         };
         let created=s.assessments.iter_mut().find(|a|a.id==aid).ok_or("Conversa indisponível.")?;
-        created.events=vec![model::event("Conversa criada. Toda nova verificação exige plano próprio.","info")];
+        created.events=if input.analysis_objective.is_some() {
+            vec![model::event("Preparação da análise solicitada na conversa.", "chat_scan_first_turn")]
+        } else if input.first_turn {
+            vec![model::event("Preparação da primeira mensagem.", "chat_first_turn")]
+        } else {vec![model::event("Conversa criada. Toda nova verificação exige plano próprio.","info")]};
         let response=json!(created);
+        result.conversation_source=conversation_source;
         scope::receipt(s,NEW_CHAT,&aid,&input.idempotency_key,&digest,result);
         Ok(response)
     })

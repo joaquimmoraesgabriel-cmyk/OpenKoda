@@ -87,6 +87,56 @@ mod tests {
     }
 
     #[test]
+    fn publishing_and_streaming_follow_admission_redaction_and_live_policy_revocation(){
+        let mut f=Fixture::new();
+        let pid=f.store.snapshot().unwrap().assessments[0].project_id.clone();
+        let create=json!({"projectId":pid,"sourceAssessmentId":f.aid,"title":"Nova conversa","firstTurn":true,"idempotencyKey":model::id()});
+        let conversation=f.store.handle(crate::core::Request{action:"project.newConversation".into(),payload:create.clone()}).unwrap();
+        f.aid=conversation["id"].as_str().unwrap().to_owned();
+        assert_eq!(f.store.handle(crate::core::Request{action:"project.newConversation".into(),payload:create}).unwrap()["id"],f.aid);
+        let project=|action:&str,raw:Value|crate::data_host::project_response(action,raw,&f.store,&f.ai.data_redactor()).unwrap();
+        let snapshot=||project("snapshot",json!({"settings":{"hasApiKey":true}}));
+        let title=||snapshot()["assessments"].as_array().unwrap().iter().find(|a|a["id"]==f.aid).map(|a|a["title"].clone());
+        assert!(title().is_none());
+        let ask=f.input();
+        let question=ask["message"].clone();
+        let reply=f.ai.handle("ai.ask",ask,&f.store).unwrap();
+        let rid=reply["requestId"].as_str().unwrap();
+        assert_eq!(title(),Some(question));
+        let rename=|title:&str|f.store.handle(crate::core::Request{action:"project.renameConversation".into(),payload:json!({"assessmentId":f.aid,"title":title})});
+        assert!(rename("  ").is_err());
+        rename("Revisão da autorização").unwrap();
+        assert_eq!(title(),Some(json!("Revisão da autorização")));
+        let history=||f.ai.handle("ai.history",json!({"assessmentId":f.aid}),&f.store).unwrap();
+        let mut raw=history();
+        raw["requests"]=json!([]); // Independent pagination must not weaken message policy.
+        raw["messages"][1]["text"]=json!(format!("{} {}", "longo ".repeat(800),KEY));
+        let text=project("ai.history",raw.clone())["messages"][1]["text"].as_str().unwrap().to_owned();
+        assert!(text.len()>2048&&text.contains("[REDACTED]")&&!text.contains(KEY));
+
+        let control=chat::ChatControl::default();
+        let live=control.start(&f.aid,rid,None).unwrap();
+        live.admit(None).unwrap();
+        let status=||{
+            let view=control.inspect_with_policy(json!({"assessmentId":f.aid}),false,&f.store).unwrap();
+            project("ai.chat.status",view)["partialText"].clone()
+        };
+        live.progress.lock().unwrap().append("Revisando synthetic-data-policy").unwrap();
+        assert_eq!(status(),"Revisando");
+        live.progress.lock().unwrap().append("-key-not-real-555 próxima").unwrap();
+        assert_eq!(status(),"Revisando [REDACTED]");
+        let pid=f.store.snapshot().unwrap().assessments[0].project_id.clone();
+        let before=f.ai.data_policy.handle("data.policy.status",json!({"projectId":pid}),&f.store,&f.ai.data_redactor(),&CanonicalOnly,None).unwrap();
+        f.ai.data_policy.handle("data.policy.revoke",json!({"projectId":pid,"expectedStateDigest":before["stateDigest"],"idempotencyKey":model::id(),"acknowledgeRevocation":true}),&f.store,&f.ai.data_redactor(),&CanonicalOnly,None).unwrap();
+        assert!(status().is_null());
+        assert_eq!(title(),Some(json!("Conversa")));
+        let hidden=project("ai.history",raw);
+        assert!(hidden["messages"].as_array().unwrap().iter().all(|m|m["text"].as_str().unwrap().starts_with("[Mensagem oculta")));
+        assert!(project("ai.ask",reply)["text"].as_str().unwrap().starts_with("[Mensagem oculta"));
+        assert_eq!(f.fake.calls.load(Ordering::SeqCst),1);
+    }
+
+    #[test]
     fn chat_history_requires_matching_receipts_and_reopening_never_resends(){
         let f=Fixture::new();
         let credential=f.ai.test_data_authority(&f.store,&f.aid);

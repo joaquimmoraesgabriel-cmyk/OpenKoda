@@ -127,6 +127,14 @@ impl Store {
         Ok(state)
     }
 
+    // The profile has a single writing connection. total_changes also advances
+    // on rollback (a harmless cache miss); data_version covers other connections.
+    pub(crate) fn cached_chat_policy(&self, previous:Option<((u64,i64),bool)>, decide:impl FnOnce(&Snapshot)->bool)->Result<((u64,i64),bool),String>{
+        let conn=self.connection.lock().map_err(|_|"Armazenamento indisponível.".to_owned())?;
+        let version=(conn.total_changes(),conn.pragma_query_value(None,"data_version",|row|row.get::<_,i64>(0)).map_err(db_error)?);
+        if let Some(cached)=previous.filter(|(stamp,_)|*stamp==version){return Ok(cached);}
+        Ok((version,decide(&Self::read(&conn)?)))
+    }
     pub fn snapshot(&self) -> Result<Snapshot, String> {
         let conn = self.connection.lock().map_err(|_| "Armazenamento indisponível.".to_string())?;
         Self::read(&conn)
@@ -208,6 +216,7 @@ impl Store {
             "project.create" => self.create_project(decode(request.payload)?),
             "project.launch" => crate::scope::project_launch::create(self, request.payload),
             "project.newConversation" => crate::scope::project_launch::new_conversation(self, request.payload),
+            "project.renameConversation" => crate::scope::project_launch::rename_conversation(self, request.payload),
             "project.archive" => self.archive_project(decode(request.payload)?),
             "assessment.create" => self.create_assessment(request.payload),
             "evidence.import" => self.import_evidence(decode(request.payload)?),
@@ -591,7 +600,7 @@ pub fn validate_snapshot(s:&Snapshot)->Result<(),String>{
             valid_id(&e.id)?; timestamp(&e.at)?;
             if !event_ids.insert(&e.id) { return Err("Evento duplicado no armazenamento.".into()); }
             text(&e.message,"Evento",16384,true)?;
-            if !["info","warning","error","success"].contains(&e.kind.as_str()) { return Err("Tipo de evento desconhecido.".into()); }
+            if !["info","warning","error","success","chat_first_turn","chat_first_turn_named","chat_scan_first_turn"].contains(&e.kind.as_str()) { return Err("Tipo de evento desconhecido.".into()); }
         }
     }
     ids.clear();

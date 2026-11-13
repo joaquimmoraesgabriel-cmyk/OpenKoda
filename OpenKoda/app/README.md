@@ -1,22 +1,24 @@
 # OpenKoda desktop
 
-**0.2.1 — análise de código de pasta local ou repositório público do GitHub.** O OpenKoda cria o projeto, inicia a análise e reúne a conversa, a atividade pública e o relatório. Esta é uma versão local para testes. O instalador passou por instalação, duas aberturas e desinstalação nos runners Windows; a análise automatizada completa da 0.2.1 no próprio código ainda não foi concluída. [Estado da versão](docs/RETOMADA-0.2.1.md) · [Implementação e testes](IMPLEMENTACAO.md) · [Validação e limites](docs/security/0.2.1/VALIDACAO.md) · [Interface](docs/interface/README.md)
+**0.2.2 — revisão estática de código de uma pasta ou repositório público do GitHub.** O OpenKoda inicia a revisão com o provedor e o modelo escolhidos. A conversa reúne o progresso, os candidatos encontrados e os trechos que sustentam cada um. [Implementação e testes](IMPLEMENTACAO.md) · [Validação anterior da 0.2.1](docs/security/0.2.1/VALIDACAO.md)
 
 ## Usar
 
 1. Abra **Configurações → IA e modelos → Adicionar provedor**. Salve a chave, consulte o catálogo, selecione os modelos e clique em **Ativar provedor**. A credencial fica no cofre DPAPI do Windows.
 2. No Início, clique em **Criar projeto**. Escolha **Pasta local** e use **Escolher pasta**, ou escolha **GitHub** e cole o link de um repositório público. O OpenKoda usa o nome da pasta ou do repositório para o projeto.
-3. Escolha **Todo o código** ou **Uma pasta ou arquivo**, selecione um modelo OpenAI e descreva o que quer verificar. O caminho específico deve ficar dentro do projeto. **Contexto adicional** permite informar vetores de ataque, áreas de foco e contexto de segurança.
+3. Escolha **Todo o código** ou **Uma pasta ou arquivo**, selecione um modelo de texto ativo e descreva o que quer verificar. O caminho específico deve ficar dentro do projeto. **Contexto adicional** permite informar vetores de ataque, áreas de foco e contexto de segurança.
 4. Em **Opções avançadas**, ajuste o título, o prazo para iniciar operações e, se quiser, ative **Personalizar limite de custo**. Sem personalização, a análise usa o teto estimado padrão de **US$ 5**. Uma chamada em andamento pode ultrapassar esse valor; ele não garante a fatura do provedor.
 5. Revise os avisos de leitura e envio. **Criar projeto** baixa a cópia, quando necessário, e inicia a análise. Acompanhe as atualizações e abra **Cobertura da análise** ou **Relatório da análise**. O cancelamento fica disponível durante a execução. Reabrir o aplicativo consulta o registro salvo e não inicia outra análise automaticamente.
 
-**A análise de código usa OpenAI nesta versão. Os demais provedores continuam disponíveis nas conversas.** O catálogo compartilhado permite trocar provedor e modelo no compositor. O SDK fixado não consegue verificar o preço dos IDs OpenRouter usados no preflight com limite de custo; o OpenKoda recusa essa análise antes de baixar ou criar o projeto. Não há troca silenciosa de modelo nem remoção do teto para contornar a recusa.
+**Provedores.** OpenAI, OpenRouter, Anthropic, Google Gemini, Groq, DeepSeek e xAI usam a credencial cadastrada para o provedor selecionado. A análise precisa de um modelo de texto capaz de devolver resultados estruturados. Para um modelo direto sem tarifa conhecida, cadastre os preços em **Configurações → Histórico de uso → Análises → Gerenciar limites e preços**. O OpenRouter fornece o preço pelo catálogo.
 
-**Os comandos da análise podem ler outros arquivos acessíveis à sua conta Windows. Use apenas código em que você confia nesta versão local.** A seleção de pasta, arquivo ou repositório orienta o trabalho, mas não estabelece isolamento de leitura por projeto no sistema operacional. Consulte os [limites do executor local](docs/RETOMADA-0.2.1.md#limites-do-executor-local) antes de analisar código de terceiros.
+**Isolamento.** O leitor do Windows captura texto dentro do alvo selecionado. Ignora links, pontos de reanálise, pastas de credenciais e binários. O modelo recebe trechos dessa cópia em memória. A revisão é estática e não executa comandos nem o código do repositório. A cobertura do relatório identifica as exclusões e os lotes examinados. O executor de comandos do SDK usado na 0.2.1 está fora deste fluxo.
 
 ## Conversas e opções do projeto
 
-Enter envia e Shift + Enter insere uma linha; a preferência Ctrl + Enter continua disponível em **Geral**. O campo é limpo quando a mensagem é admitida pelo aplicativo. Uma recusa anterior à admissão mantém o rascunho. O botão **+** adiciona anexos e o compositor reúne seleção de modelo e cancelamento. A atividade mostra fases, operações e mensagens públicas recebidas do executor, respeitando a política de dados; não exibe raciocínio privado.
+O **+** ao lado do projeto abre um rascunho. A primeira mensagem admitida dá nome à conversa e a inclui na barra lateral. Enter envia e Shift + Enter insere uma linha. A preferência Ctrl + Enter continua disponível em **Geral**. O campo é liberado após a admissão. O texto público da resposta aparece conforme chega e a leitura continua na posição escolhida ao rolar para cima.
+
+Para mudar o título, use **Renomear conversa**. Para revisar os arquivos, escreva o objetivo e escolha **Adicionar à mensagem → Analisar código do projeto**. Em uma conversa existente, a análise abre outra conversa e conserva a seleção de arquivos e as autorizações da origem. O relatório registra as leituras e buscas feitas sobre a cópia autorizada.
 
 O botão **Projeto** reúne **Visão geral** e **Configurações**, com tabelas de conversas, execuções, achados e uso, busca, ordenação e paginação. **Mostrar ao lado da conversa** mantém o chat disponível. Navegação principal, lista de projetos, categorias de configurações e conteúdo têm rolagem independente.
 
@@ -28,13 +30,13 @@ Repetir uma solicitação de criação ou consultar um download recupera a inten
 
 Esta edição trabalha com código. O link do GitHub fornece uma cópia local com origem e revisão registradas. Análises de rede, Web/API por URL e operações Kali/WSL permanecem retiradas da interface e bloqueadas na entrada nativa. Filas antigas não são retomadas automaticamente. Módulos e formatos históricos permanecem para leitura, recuperação e regressões delimitadas; sua presença não libera essas operações.
 
-O relatório informa a cobertura efetiva. Uma análise concluída ou sem achados não comprova leitura de todos os arquivos nem ausência de vulnerabilidades. Resultados importados entram como candidatos vinculados ao relatório e não como validações humanas automáticas. O OpenKoda não aplica correções do scanner nesta edição. A estimativa de custo da análise é registrada separadamente das conversas; tokens ou valores não informados continuam desconhecidos.
+O relatório informa a cobertura efetiva e registra possíveis vulnerabilidades como candidatos para validação. Em **Configurações → Histórico de uso**, **Histórico** mostra os tokens informados e **Análises** reúne os registros de custo e os controles de orçamento. Medições incompletas permanecem identificadas.
 
 Os dados ficam em `%USERPROFILE%\.openkoda`. Backups SQLite preservam os relatórios incorporados, mas não incluem credenciais, cópias de repositórios importados nem a árvore de trabalho em `security-scans/`. Esses materiais também ficam fora da exclusão lógica do projeto. Para voltar à 0.1.18, use um backup anterior à abertura do perfil nas edições 0.2.x; não conte com compatibilidade reversa do banco atualizado.
 
 ## Desenvolvimento e validação
 
-Pré-requisitos Windows x64: Node 24, Python 3.11+, Git para Windows, Rust 1.90+ com MSVC, ferramentas C++ do Visual Studio e WebView2. O runtime distribuído inclui Node, Python e Codex; Git para Windows continua sendo um requisito local verificado pelo diagnóstico.
+O desenvolvimento para Windows x64 usa Node 24, Python 3.11+, Git para Windows, Rust 1.90+ com MSVC, ferramentas C++ do Visual Studio e WebView2. O importador de repositórios públicos usa Git para Windows. A distribuição ainda inclui os componentes do runtime da versão anterior.
 
 ```powershell
 npm ci
@@ -49,7 +51,7 @@ pwsh -NoProfile -File scripts/check-foundation.ps1
 pwsh -NoProfile -File scripts/package-windows.ps1
 ```
 
-A integração usa o SDK oficial `@openai/codex-security` 0.10.0, com lockfile independente em `security-runtime/`. A preparação restaura as dependências fixadas e o empacotamento inclui os avisos de licença. Os binários portáteis e `node_modules` não são versionados. [Motor e protocolo](security-runtime/README.md).
+A análise na 0.2.2 usa o leitor e o transporte de IA do núcleo Rust. A distribuição também inclui o runtime do SDK `@openai/codex-security` 0.10.0 com lockfile próprio. A preparação restaura as dependências fixadas e o empacotamento inclui os avisos de licença. [Runtime e protocolo das versões anteriores](security-runtime/README.md).
 
 A 0.2.1 passou em 79 testes unitários de interface, 101 casos Edge, 638 testes Rust e 20 testes offline do runtime. Três testes opt-in de host/rede ficaram separados; a importação GitHub real passou em seu ensaio próprio. O executável nativo final preservou duas conversas após reabertura e recusou 14 rotas antigas. Instalação, duas aberturas, persistência de configurações e desinstalação passaram em Windows Server 2022, Server 2025 e Windows 11 Arm com o aplicativo x64. Os recibos identificam cada binário e o pacote entregue. O ensaio real encontrou recusa OpenAI por limite/saldo; duas respostas reais OpenRouter foram verificadas nas conversas. Isso não substitui uma análise completa de segurança da versão. O MCP Deep também ficou bloqueado antes de ler arquivos; a revisão manual do código possui inventário separado. Consulte a [matriz da 0.2.1](docs/RETOMADA-0.2.1.md) para distinguir essas provas.
 

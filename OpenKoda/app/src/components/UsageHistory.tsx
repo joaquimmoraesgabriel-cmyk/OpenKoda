@@ -80,6 +80,7 @@ function Ranking({title,label,groups,names,colors,onOpen}:{
 export default function UsageHistory({assessments=[],onOpenAssessment}: {assessments?:Assessment[];onOpenAssessment?:(id:string)=>void}) {
   const [rows,setRows]=useState<UsageRow[]>();
   const [error,setError]=useState('');
+  const [scanHistoryUnavailable,setScanHistoryUnavailable]=useState(false);
   const [refresh,setRefresh]=useState(0);
   const [pending,setPending]=useState(false);
   const [range,setRange]=useState('all');
@@ -89,9 +90,9 @@ export default function UsageHistory({assessments=[],onOpenAssessment}: {assessm
     if(!native)return;
     let current=true;
     setPending(true);setError('');
-    void request<{rows:UsageRow[]}>('ai.budget.history').then(result=>{
+    void request<{rows:UsageRow[];scanHistoryUnavailable?:boolean}>('ai.budget.history').then(result=>{
       if(!Array.isArray(result?.rows))throw new Error('Histórico de tokens indisponível.');
-      if(current)setRows(result.rows);
+      if(current){setRows(result.rows);setScanHistoryUnavailable(result.scanHistoryUnavailable===true);}
     }).catch(cause=>{if(current)setError(errorMessage(cause));}).finally(()=>{if(current)setPending(false);});
     return ()=>{current=false;};
   },[refresh]);
@@ -124,6 +125,7 @@ export default function UsageHistory({assessments=[],onOpenAssessment}: {assessm
         <label>Modelo<select value={selectedModel} onChange={event=>setModel(event.target.value)}><option value="">Todos os modelos</option>{[...models].sort((a,b)=>a[1].localeCompare(b[1])).map(([id,name])=><option key={id} value={id}>{name}</option>)}</select></label>
         <button type="button" className="button" disabled={pending} onClick={()=>setRefresh(n=>n+1)}><RefreshCw size={14}/>Atualizar histórico</button>
       </div>
+      {scanHistoryUnavailable && <p role="status" className="notice warning">Os dados de consumo das análises de código estão temporariamente indisponíveis.</p>}
       {error && <p role="alert" className="notice warning">{error}</p>}
       {pending && <p role="status" className="uh-muted">Consultando o histórico…</p>}
       {rows && <><dl className="uh-stats">
@@ -134,7 +136,7 @@ export default function UsageHistory({assessments=[],onOpenAssessment}: {assessm
         <div><dt>Sequência atual</dt><dd>{streak.current} <small>{streak.current===1?'dia':'dias'}</small></dd><span>Recorde de {streak.longest}</span></div>
       </dl>
       {summary.partial>0 && <p className="uh-muted">{summary.partial===1?'1 chamada com contagem de tokens incompleta':number.format(summary.partial)+' chamadas com contagens de tokens incompletas'} no período.</p>}
-      <details className="uh-counting"><summary>Como os tokens são contados</summary><p>Os totais somam os valores de entrada e saída informados. O traço indica ausência de medição. O histórico conserva respostas com contagem parcial. A taxa de acerto de cache está indisponível neste registro.</p></details>
+      <details className="uh-counting"><summary>Como os tokens são contados</summary><p>Os totais somam os valores de entrada e saída informados. O traço indica ausência de medição. O histórico conserva respostas com contagem parcial. Análises antigas sem contagem por chamada aparecem nos registros de custo da aba Análises. A taxa de acerto de cache está indisponível neste registro.</p></details>
       {!rows.length && <p className="uh-card uh-empty"><CalendarDays size={20}/>O histórico começa quando uma chamada de IA é registrada.</p>}
       {!!rows.length && <><ActivityCalendar today={today} days={daily} selected={chosenDate || (range==='today'?today:'')} onSelect={setRange}/>
         <section className="uh-card"><div className="uh-card-heading"><h3>Tokens por dia</h3><span>Últimos 30 dias</span></div>

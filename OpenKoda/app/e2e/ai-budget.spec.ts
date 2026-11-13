@@ -99,9 +99,10 @@ async function flow(page:Page,operation='ask'):Promise<{panel:Locator;send:Locat
 async function reviewCost(panel:Locator){await panel.getByRole('button',{name:'Revisar estimativa de custo',exact:true}).click();await panel.getByRole('checkbox',{name:budgetAck,exact:true}).check();}
 async function settings(page:Page, section: 'Visão geral'|'Análises'|'Política de orçamento' = 'Política de orçamento') {
   await page.getByRole('button',{name:'Configurações',exact:true}).click();
-  await page.getByRole('button',{name:'Uso e orçamento',exact:true}).click();
+  await page.getByRole('button',{name:'Histórico de uso',exact:true}).click();
   const panel = page.locator('.ai-budget-settings');
-  await panel.getByRole('button',{name:section,exact:true}).click();
+  await panel.getByRole('button',{name:'Análises',exact:true}).click();
+  if (section === 'Política de orçamento') await panel.getByRole('button',{name:'Gerenciar limites e preços'}).click();
   return panel;
 }
 
@@ -118,7 +119,7 @@ for(const mode of ['missing-price','insufficient','expired'])test(`revisão ${mo
 });
 
 test('registro indisponível com saldos null falha fechado e não presume zero', { tag: '@source-edition' }, async ({page})=>{
-  await fixture(page,'degraded');const {panel,send}=await flow(page,'test');await expect(panel.locator('.ai-budget-review')).toContainText('registro de orçamento requer atenção');await expect(send).toBeDisabled();const config=await settings(page,'Visão geral');await expect(config).toContainText('Não informado');await config.getByRole('button',{name:'Política de orçamento',exact:true}).click();await expect(config.getByRole('button',{name:'Revisar política de orçamento',exact:true})).toBeDisabled();expect(await calls(page,'ai.ask')).toEqual([]);
+  await fixture(page,'degraded');const {panel,send}=await flow(page,'test');await expect(panel.locator('.ai-budget-review')).toContainText('registro de orçamento requer atenção');await expect(send).toBeDisabled();const config=await settings(page,'Visão geral');await expect(config).toContainText('Não informado');await config.getByRole('button',{name:'Gerenciar limites e preços',exact:true}).click();await expect(config.getByRole('button',{name:'Revisar política de orçamento',exact:true})).toBeDisabled();expect(await calls(page,'ai.ask')).toEqual([]);
 });
 
 test('configuração começa sem preços ou tetos e exige revisão de estimativa e legado', { tag: '@source-edition' }, async ({page})=>{
@@ -130,7 +131,7 @@ test('custo desconhecido exige débito conservador maior que reserva e não vira
 });
 
 test('desativar política exige confirmação adicional e não reinicia débitos', { tag: '@source-edition' }, async ({page})=>{
-  await fixture(page);const panel=await settings(page);await panel.getByRole('checkbox',{name:'Ativar controle monetário local para próximas chamadas.',exact:true}).uncheck();await panel.getByRole('button',{name:'Revisar política de orçamento',exact:true}).click();await panel.getByRole('checkbox',{name:'Entendo que estes preços são manuais e as estimativas locais não são fatura nem garantia de cobrança máxima.',exact:true}).check();await panel.getByRole('checkbox',{name:'Revisei o legado e reconheço que custos anteriores sem preço não entram no saldo deste período.',exact:true}).check();await expect(panel.getByRole('button',{name:'Salvar política revisada',exact:true})).toBeDisabled();await panel.getByRole('checkbox',{name:'Autorizo desativar o controle monetário para novas chamadas, mantendo débitos e reservas já registrados.',exact:true}).check();await panel.getByRole('button',{name:'Salvar política revisada',exact:true}).click();await expect(panel.getByRole('status')).toContainText('preservados');await panel.getByRole('button',{name:'Visão geral',exact:true}).click();await expect(panel).toContainText('USD 0,25');expect((await calls(page,'ai.budget.configure'))[0].payload.acknowledgeUnbounded).toBe(true);
+  await fixture(page);const panel=await settings(page);await panel.getByRole('checkbox',{name:'Ativar controle monetário local para próximas chamadas.',exact:true}).uncheck();await panel.getByRole('button',{name:'Revisar política de orçamento',exact:true}).click();await panel.getByRole('checkbox',{name:'Entendo que estes preços são manuais e as estimativas locais não são fatura nem garantia de cobrança máxima.',exact:true}).check();await panel.getByRole('checkbox',{name:'Revisei o legado e reconheço que custos anteriores sem preço não entram no saldo deste período.',exact:true}).check();await expect(panel.getByRole('button',{name:'Salvar política revisada',exact:true})).toBeDisabled();await panel.getByRole('checkbox',{name:'Autorizo desativar o controle monetário para novas chamadas, mantendo débitos e reservas já registrados.',exact:true}).check();await panel.getByRole('button',{name:'Salvar política revisada',exact:true}).click();await expect(panel.getByRole('status')).toContainText('preservados');await panel.getByRole('button',{name:'Fechar limites e preços'}).click();await expect(panel).toContainText('USD 0,25');expect((await calls(page,'ai.budget.configure'))[0].payload.acknowledgeUnbounded).toBe(true);
 });
 
 test('política desativada preserva contrato legado sem inserir preço ou revisão fictícia',async({page})=>{
@@ -150,7 +151,7 @@ test('análises separam tokens informados, saldos e detalhes da chamada', { tag:
   const panel = await settings(page,'Visão geral');
   await expect(panel.getByRole('progressbar',{name:'Percentual comprometido do limite'})).toHaveAttribute('aria-valuetext','2,5% comprometido');
   await expect(panel.getByText('USD 9,75',{exact:true})).toBeVisible();
-  await panel.getByRole('button',{name:'Ver análises'}).click();
+  await expect(panel.getByRole('button',{name:'Análises',exact:true})).toHaveAttribute('aria-pressed','true');
   const models = panel.getByRole('combobox',{name:'Modelo no histórico'});
   await expect(panel.locator('.chart-totals')).toHaveText('Entrada23Saída4');
   await models.selectOption({label:'Groq · fixture-model'});
@@ -172,7 +173,7 @@ test('análises separam tokens informados, saldos e detalhes da chamada', { tag:
 test('histórico do perfil inclui datas antigas e permite filtrar pelo calendário e abrir a avaliação', { tag: '@source-edition' }, async ({page})=>{
   await fixture(page,'analytics');
   const budget=await settings(page,'Visão geral');
-  await budget.getByRole('button',{name:'Abrir histórico de tokens'}).click();
+  await budget.getByRole('button',{name:'Histórico',exact:true}).click();
   const history=page.getByRole('region',{name:'Conteúdo de Histórico de uso'});
   const total=history.locator('.uh-stats > div').filter({hasText:'Tokens no período'}).locator('dd');
   await expect(total).toHaveText('770');
@@ -190,7 +191,8 @@ test('histórico do perfil inclui datas antigas e permite filtrar pelo calendár
   await page.setViewportSize({width:512,height:480});
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1)).toBe(true);
   await history.getByRole('button',{name:'Avaliação com orçamento sintético'}).click();
-  await expect(page.getByRole('heading',{name:'Avaliação com orçamento sintético',exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'Projeto de orçamento',exact:true})).toBeVisible();
+  await expect(page.locator('.desk-location').getByText('Avaliação com orçamento sintético',{exact:true})).toBeVisible();
   expect(await calls(page,'ai.ask')).toHaveLength(0);
 });
 

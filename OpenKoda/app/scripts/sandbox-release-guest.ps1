@@ -109,7 +109,7 @@ print(json.dumps({'projects': [{k: p[k] for k in ('name','id','target','kind')} 
     if ($LASTEXITCODE -ne 0) { throw 'Could not read the installed fixture database.' }
     $raw | ConvertFrom-Json
 }
-function Test-InstalledSourceWindow($App,[int]$Iteration,[string]$DataRoot,[string]$Target,[int]$ExpectedTimeout) {
+function Test-InstalledSourceWindow($App,[int]$Iteration,[string]$DataRoot,[string]$Target,[int]$ExpectedTimeout,[bool]$CheckUnifiedUsage) {
     Add-Type -AssemblyName UIAutomationClient
     Add-Type -AssemblyName UIAutomationTypes
     $button = [System.Windows.Automation.ControlType]::Button
@@ -132,6 +132,15 @@ function Test-InstalledSourceWindow($App,[int]$Iteration,[string]$DataRoot,[stri
     if ($submit.Current.IsEnabled) { throw 'The source scan could start without a configured model.' }
 
     Invoke-WindowButton $App 'Configurações'
+    if ($CheckUnifiedUsage) {
+        Invoke-WindowButton $App 'Histórico de uso'
+        $null = Find-WindowControl $App $button 'Atualizar histórico'
+        Invoke-WindowButton $App 'Análises'
+        Invoke-WindowButton $App 'Gerenciar limites e preços'
+        $null = Find-WindowControl $App $button 'Fechar limites e preços'
+        Invoke-WindowButton $App 'Histórico'
+        $null = Find-WindowControl $App $button 'Atualizar histórico'
+    }
     Invoke-WindowButton $App 'Permissões'
     $control = Find-WindowControl $App ([System.Windows.Automation.ControlType]::Spinner) 'Tempo por operação (segundos)'
     $range = $control.GetCurrentPattern([System.Windows.Automation.RangeValuePattern]::Pattern)
@@ -150,7 +159,7 @@ function Test-InstalledSourceWindow($App,[int]$Iteration,[string]$DataRoot,[stri
     if ($after.timeoutSeconds -ne $ExpectedTimeout -or $range.Current.Value -ne $ExpectedTimeout -or @($after.projects).Count -or $after.assessments -ne 0) { throw 'The UI preference was not persisted or the empty project graph changed.' }
     return [pscustomobject]@{
         iteration=$Iteration; view='Permissões'; projects=0; assessments=0; timeoutSeconds=$ExpectedTimeout
-        modelRequired=$true; settingsReopened=($Iteration -eq 2); transport='Windows UI Automation'
+        modelRequired=$true; settingsReopened=($Iteration -eq 2); unifiedUsageNavigation=$CheckUnifiedUsage; transport='Windows UI Automation'
     }
 }
 function Get-ProjectCreationExpression([string]$Kind,[string]$Target) {
@@ -242,6 +251,14 @@ try {
         if ($LASTEXITCODE -ne 0) { throw 'Could not hash installed SDK files.' }
         $result.securityRuntime = $tree | ConvertFrom-Json
         if ($manifest.securityRuntime.sha256 -notmatch '^[a-f0-9]{64}$' -or $result.securityRuntime.sha256 -cne $manifest.securityRuntime.sha256 -or $result.securityRuntime.files -ne $manifest.securityRuntime.files -or $result.securityRuntime.bytes -ne $manifest.securityRuntime.bytes) { throw 'Installed SDK resources differ from the build.' }
+        if ([version]$manifest.version -ge [version]'0.2.2') {
+            $sdkPackage = Join-Path $runtime 'node_modules/@openai/codex-security'
+            $result.reviewGuideSha256 = (Get-FileHash -LiteralPath (Join-Path $sdkPackage '_bundled_plugin/skills/attack-path-analysis/references/attack-path-facts.md')).Hash.ToLowerInvariant()
+            $result.reviewLicenseSha256 = (Get-FileHash -LiteralPath (Join-Path $sdkPackage 'LICENSE')).Hash.ToLowerInvariant()
+            if ($result.reviewGuideSha256 -cne '1979ea81991ba1c095c1846d4b8e09429edc6295912f87a6ebb7fa7e32651a1e' -or $result.reviewLicenseSha256 -cne 'd17f227e4df5da1600391338865ce0f3055211760a36688f816941d58232d8dc') {
+                throw 'The installed review guide or its offline license differs from the pinned SDK.'
+            }
+        }
         $frame = & $node (Join-Path $runtime 'cli.mjs') --check
         $checkExit = $LASTEXITCODE
         $result.sdkDiagnostic = $frame | ConvertFrom-Json
@@ -286,7 +303,7 @@ try {
         if ($GitHubHosted) {
             try {
                 if ($sourceEdition) {
-                    $observation = Test-InstalledSourceWindow $app $iteration $profileRoot $sourceFolder $savedTimeout
+                    $observation = Test-InstalledSourceWindow $app $iteration $profileRoot $sourceFolder $savedTimeout ([version]$manifest.version -ge [version]'0.2.2')
                     $savedTimeout = $observation.timeoutSeconds
                     $result.starts += $observation
                     $result.settingsReopened = $observation.settingsReopened

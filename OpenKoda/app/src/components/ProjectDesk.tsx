@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
-import { Folder, Globe2, LayoutDashboard, Maximize2, Network, PanelRight, PanelLeft, Plus, X } from 'lucide-react';
-import { type Action, type Assessment, type Payload, type Project, type Snapshot, errorMessage } from '../types';
+import { Check, Folder, Globe2, LayoutDashboard, Maximize2, Network, PanelRight, PanelLeft, Pencil, Plus, X } from 'lucide-react';
+import { type Action, type Assessment, type Project, type Snapshot } from '../types';
 import Projects from './Projects';
 import ProjectInsights from './ProjectInsights';
 import { ProjectTree } from './ProjectRail';
 import ProjectLaunch from './ProjectLaunch';
 import ProjectConversation from './ProjectConversation';
-import { pruneChatDrafts } from '../chat-draft';
+import { knownProvider, type AiSelection } from '../ai-provider';
+import { bindChatDraft, pruneChatDrafts } from '../chat-draft';
 import ProjectWelcome, { type StartKind } from './ProjectWelcome';
 
 interface Props {
@@ -25,23 +26,33 @@ export default function ProjectDesk({sourceOnly=false,snapshot,busy,action,selec
   const [tree,setTree]=useState(false);
   const [treeCollapsed,setTreeCollapsed]=useState(false);
   const [error,setError]=useState('');
-  const [starting,setStarting]=useState(false);
-  const working=useRef(false);
-  const retry=useRef<{projectId:string;payload:Payload}|undefined>(undefined);
+  const [editingTitle,setEditingTitle]=useState<{id:string;text:string}>();
+  const renameButton=useRef<HTMLButtonElement>(null);
+  type NewChat = {key:string; project:Project; source?:Assessment; selection:AiSelection|null; prepared?:Assessment};
+  const [session,setSession]=useState<NewChat>();
+  const creation=useRef<{key:string;promise:Promise<Assessment>}|undefined>(undefined);
   const main=useRef<HTMLDivElement>(null);
   const mobileMenu=useRef<HTMLButtonElement>(null);
   const panelLauncher=useRef<HTMLButtonElement|null>(null);
   const panelClose=useRef<HTMLButtonElement>(null);
   const panelOpen=panel!==undefined;
   const pendingFocus=useRef(false);
-  const project=live.find(p=>p.id===(snapshot.assessments.find(a=>a.id===selected)?.projectId || projectId)) ?? live[0];
+  const draft=session&&activeIds.has(session.project.id)?session:undefined;
+  const project=draft?.project ?? live.find(p=>p.id===(snapshot.assessments.find(a=>a.id===selected)?.projectId || projectId)) ?? live[0];
   const history=snapshot.assessments.filter(a=>a.projectId===project?.id && activeIds.has(a.projectId)).sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt));
-  const chat=history.find(a=>a.id===selected) ?? history[0];
+  const saved=history.find(a=>a.id===selected) ?? history[0];
+  const chat:Assessment|undefined=draft ? history.find(a=>a.id===draft.prepared?.id) ?? draft.prepared ?? {
+    id:draft.key,projectId:draft.project.id,kind:draft.project.kind,target:draft.source?.target??draft.project.target,
+    title:'',objective:'',status:'draft',events:[],evidence:[],coverage:[],summary:'',
+    aiSelection:draft.selection,createdAt:'',updatedAt:'',
+  } : saved;
   const ProjectIcon=project?.kind==='network'?Network:project?.kind==='web'?Globe2:Folder;
   useEffect(()=>{
     const projects=new Set(snapshot.projects.filter(p=>!p.archived).map(p=>p.id));
-    pruneChatDrafts(new Set(snapshot.assessments.filter(a=>projects.has(a.projectId)).map(a=>a.id)));
-  },[snapshot.projects,snapshot.assessments]);
+    const keys=new Set(snapshot.assessments.filter(a=>projects.has(a.projectId)).map(a=>a.id));
+    if(draft)keys.add(draft.key);
+    pruneChatDrafts(keys);
+  },[snapshot.projects,snapshot.assessments,draft?.key]);
   useEffect(()=>{
     if(!tree)return;
     document.querySelector<HTMLButtonElement>('#project-tree .tree-new')?.focus();
@@ -55,36 +66,67 @@ export default function ProjectDesk({sourceOnly=false,snapshot,busy,action,selec
     setPanel(undefined);
     panelLauncher.current?.focus({preventScroll:true});
   }
-  useEffect(()=>{if(!launch && chat && chat.id!==selected)onSelect(chat.id);},[launch,chat?.id,selected,onSelect]);
+  useEffect(()=>{if(!draft && !launch && chat && chat.id!==selected)onSelect(chat.id);},[draft,launch,chat?.id,selected,onSelect]);
   useEffect(()=>{if(pendingFocus.current){main.current?.focus();pendingFocus.current=false;}},[launch,project?.id,chat?.id,panelOpen]);
-  function openChat(id:string){pendingFocus.current=true;onSelect(id);setLaunch(false);setPanel(undefined);setTree(false);setError('');}
+  function openChat(id:string){setSession(undefined);pendingFocus.current=true;onSelect(id);setLaunch(false);setPanel(undefined);setTree(false);setError('');}
   function openProject(id:string){setProjectId(id);openChat(snapshot.assessments.filter(a=>a.projectId===id).sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt))[0]?.id??'');}
   function togglePanel(){
     if(panelOpen){closePanel();return;}
     setPanel('overview');setSplit(false);setTree(false);
   }
-  async function newChat(p:Project){
-    if(working.current)return;
-    working.current=true;setStarting(true);setError('');
-    try{
-      let payload=retry.current?.projectId===p.id?retry.current.payload:undefined;
-      if(!payload){
-        const n=snapshot.assessments.filter(a=>a.projectId===p.id).length+1;
-        const previous = p.id===project?.id && chat ? chat : snapshot.assessments
-          .filter(item=>item.projectId===p.id)
-          .sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt))[0];
-        payload={projectId:p.id,sourceAssessmentId:previous?.id,title:'Conversa '+n,idempotencyKey:crypto.randomUUID()};
-        retry.current={projectId:p.id,payload};
-      }
-      const a=await action<Assessment>('project.newConversation',payload);retry.current=undefined;setProjectId(p.id);openChat(a.id);
-    }catch(e){setError(errorMessage(e));}finally{working.current=false;setStarting(false);}
+  function newChat(p:Project){
+    const previous=p.id===project?.id && chat?.createdAt ? chat : snapshot.assessments
+      .filter(item=>item.projectId===p.id).sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt))[0];
+    const settings=snapshot.settings;
+    const selection=previous?.aiSelection ?? (settings.hasApiKey&&knownProvider(settings.provider)
+      ? {provider:settings.provider,model:settings.model} : null);
+    const key=crypto.randomUUID();
+    setSession({key,project:p,source:previous,selection});setProjectId(p.id);
+    onSelect('');setLaunch(false);setPanel(undefined);setTree(false);setError('');
   }
-  function newProject(kind:StartKind='code'){pendingFocus.current=true;setStartKind(kind);setLaunch(true);setPanel(undefined);setTree(false);setError('');}
+  async function prepareConversation():Promise<Assessment>{
+    if(!draft)throw new Error('O projeto desta conversa mudou.');
+    if(draft.prepared)return draft.prepared;
+    if(creation.current?.key===draft.key)return creation.current.promise;
+    const promise=requestFirstConversation(draft);
+    creation.current={key:draft.key,promise};
+    try{return await promise;}finally{if(creation.current?.key===draft.key)creation.current=undefined;}
+  }
+  async function requestFirstConversation(current:NewChat){
+    const result=await action<Assessment>('project.newConversation',{
+      projectId:current.project.id,sourceAssessmentId:current.source?.id,firstTurn:true,
+      title:'Nova conversa',aiSelection:current.selection,idempotencyKey:current.key,
+    });
+    bindChatDraft(current.key,result.id);
+    setSession(value=>value?.key===current.key?{...value,prepared:result}:value);
+    return result;
+  }
+  useEffect(()=>{
+    if(draft?.prepared&&selected!==draft.prepared.id)onSelect(draft.prepared.id);
+  },[draft?.prepared?.id,onSelect,selected]);
+  async function chooseDraftModel(choice:AiSelection) {
+    if(!draft)return;
+    if(draft.prepared)await action('ai.selection.save',{assessmentId:draft.prepared.id,aiSelection:choice});
+    setSession(current=>current?.key===draft.key?{...current,selection:choice,
+      prepared:current.prepared?{...current.prepared,aiSelection:choice}:undefined}:current);
+  }
+  function newProject(kind:StartKind='code'){setSession(undefined);pendingFocus.current=true;setStartKind(kind);setLaunch(true);setPanel(undefined);setTree(false);setError('');}
   function dismissTree(){setTree(false);mobileMenu.current?.focus({preventScroll:true});}
+  function finishRename(){
+    setEditingTitle(undefined);
+    requestAnimationFrame(()=>renameButton.current?.focus());
+  }
+  async function saveTitle(){
+    if(!editingTitle || busy || !editingTitle.text.trim())return;
+    try{
+      await action('project.renameConversation',{assessmentId:editingTitle.id,title:editingTitle.text.trim()});
+      finishRename();
+    }catch(e){setError(e instanceof Error?e.message:String(e));}
+  }
   const showTree=live.length>0;
   return <section className={'project-desk'+(showTree?' with-tree':'')+(tree?' tree-open':'')+(treeCollapsed?' tree-collapsed':'')} aria-label="Área de projetos"
     onKeyDown={event=>{if(event.key==='Escape'&&tree&&!event.defaultPrevented){event.preventDefault();dismissTree();}}}>
-    {showTree && <ProjectTree projects={live} assessments={snapshot.assessments} projectId={launch?undefined:project?.id} assessmentId={launch?undefined:chat?.id} busy={busy||starting} onNew={()=>newProject()} onChat={openChat} onProject={openProject} onNewChat={p=>void newChat(p)}/>}
+    {showTree && <ProjectTree projects={live} assessments={snapshot.assessments} projectId={launch?undefined:project?.id} assessmentId={launch?undefined:chat?.id} busy={busy} onNew={()=>newProject()} onChat={openChat} onProject={openProject} onNewChat={p=>void newChat(p)}/>}
     {tree&&<button className="tree-dismiss" aria-label="Fechar lista de projetos" tabIndex={-1} onClick={dismissTree}/>}
     <div className="desk-main" ref={main} tabIndex={-1}>
       {showTree&&<button ref={mobileMenu} type="button" className="tree-mobile-toggle" aria-controls="project-tree" aria-expanded={tree} onClick={()=>setTree(!tree)}><PanelLeft size={16}/>Projetos</button>}
@@ -94,13 +136,25 @@ export default function ProjectDesk({sourceOnly=false,snapshot,busy,action,selec
       :<>
         <header className="desk-bar"><div className="desk-location">
           <button className="desk-tree-toggle" aria-controls="project-tree" aria-expanded={!treeCollapsed} aria-label={treeCollapsed?'Mostrar lista de projetos':'Recolher lista de projetos'} title={treeCollapsed?'Mostrar lista de projetos':'Recolher lista de projetos'} onClick={()=>setTreeCollapsed(!treeCollapsed)}><PanelLeft size={17}/></button>
-          <ProjectIcon className="desk-location-icon" size={17}/><div><h1 title={project.name}>{project.name}</h1>{chat&&<small title={chat.title}>{chat.title}</small>}</div></div>
+          <ProjectIcon className="desk-location-icon" size={17}/><div><h1 title={project.name}>{project.name}</h1>
+            {chat&&(!draft||history.some(a=>a.id===chat.id))&&(editingTitle?.id===chat.id?
+              <form className="desk-title-editor" onSubmit={e=>{e.preventDefault();void saveTitle();}} onKeyDown={e=>{if(e.key==='Escape'){e.preventDefault();finishRename();}}}>
+                <input autoFocus aria-label="Título da conversa" maxLength={160} required value={editingTitle.text} onChange={e=>setEditingTitle({id:chat.id,text:e.target.value})}/>
+                <button type="submit" aria-label="Salvar título" disabled={busy||!editingTitle.text.trim()}><Check size={14}/></button>
+                <button type="button" aria-label="Cancelar renomeação" onClick={finishRename}><X size={14}/></button>
+              </form>:
+              <button className="desk-chat-title" type="button" ref={renameButton} aria-label="Renomear conversa" title={chat.title} onClick={()=>setEditingTitle({id:chat.id,text:chat.title})}>
+                <small>{chat.title}</small><Pencil size={12} aria-hidden="true"/>
+              </button>)}</div></div>
           <div className="desk-actions"><button ref={panelLauncher} type="button" title="Painel do projeto" aria-label="Painel do projeto" aria-expanded={panelOpen} aria-controls="desk-project-panel" onClick={togglePanel}><LayoutDashboard size={16} aria-hidden="true"/><span>Projeto</span></button></div>
         </header>
         <div className={'desk-content'+(panel&&split?' desk-split':'')}>
           <div className="desk-conversation" hidden={!!panel&&!split}>
-            {chat?<ProjectConversation key={chat.id} sourceOnly={sourceOnly} assessment={chat} plans={snapshot.plans?.filter(plan=>!snapshot.workPlanBindings?.some(binding=>binding.executionPlanId===plan.id))} settings={snapshot.settings} action={action} busy={busy} onAdvanced={sourceOnly?undefined:()=>onAdvanced(chat.id)} onModels={onModels}/>
-            :<div className="desk-welcome"><h2>Comece uma conversa</h2><button className="button primary" disabled={starting||busy} onClick={()=>void newChat(project)}><Plus size={16}/>Nova conversa</button></div>}
+            {chat?<ProjectConversation key={draft?.key??chat.id} draftKey={draft?.key} unsaved={!!draft&&!draft.prepared} prepareConversation={draft?prepareConversation:undefined}
+              analysisSource={draft && !history.some(item=>item.id===chat.id)?draft.source:chat} onAnalysisAdmitted={openChat}
+              onDraftSelection={draft?chooseDraftModel:undefined}
+              sourceOnly={sourceOnly} assessment={chat} plans={snapshot.plans?.filter(plan=>!snapshot.workPlanBindings?.some(binding=>binding.executionPlanId===plan.id))} settings={snapshot.settings} action={action} busy={busy} onAdvanced={sourceOnly?undefined:()=>onAdvanced(chat.id)} onModels={onModels}/>
+            :<div className="desk-welcome"><h2>Comece uma conversa</h2><button className="button primary" disabled={busy} onClick={()=>void newChat(project)}><Plus size={16}/>Nova conversa</button></div>}
           </div>
           {panel&&<aside id="desk-project-panel" className="desk-panel" aria-label="Projeto" onKeyDown={event=>{
             if(event.key==='Escape'&&!event.defaultPrevented&&!event.nativeEvent.isComposing&&event.target instanceof Element&&!event.target.closest('[role="dialog"],dialog,select,[aria-expanded="true"]')){event.stopPropagation();closePanel();}

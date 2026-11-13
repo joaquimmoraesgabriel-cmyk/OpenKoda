@@ -30,7 +30,7 @@ test('conteúdos de ajustes, perfil, achados e diagnóstico cabem na coluna estr
   await page.goto('/');
   await page.getByRole('button', {name: 'Configurações', exact: true}).click();
   const categories = page.getByRole('navigation', {name: 'Categorias de configuração'});
-  for (const name of ['Geral', 'Aparência', 'IA e modelos', 'Uso e orçamento', 'Histórico de uso']) {
+  for (const name of ['Geral', 'Aparência', 'IA e modelos', 'Histórico de uso']) {
     const button = categories.getByRole('button', {name, exact: true});
     await button.click();
     await expect(button).toHaveAttribute('aria-current', 'page');

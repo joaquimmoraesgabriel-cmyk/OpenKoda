@@ -9,10 +9,11 @@ type Props = {
   value: AiSelection | null;
   onChange: (value: AiSelection) => void | Promise<void>;
   disabled?: boolean;
+  forAnalysis?: boolean;
   onModels?: () => void;
 };
 
-export function ChatModelPicker({ value, onChange, disabled, onModels }: Props) {
+export function ChatModelPicker({ value, onChange, disabled, onModels, forAnalysis = false }: Props) {
   const id = useId();
   const trigger = useRef<HTMLButtonElement>(null);
   const dialog = useRef<HTMLDivElement>(null);
@@ -63,20 +64,31 @@ export function ChatModelPicker({ value, onChange, disabled, onModels }: Props) 
     if (!open) return;
     let active = true;
     async function load() {
-      const result = await Promise.allSettled((Object.keys(providers) as ProviderId[]).map(async provider => {
-        const status = await request<ProviderStatus>('ai.status', { provider });
-        if (!status.hasApiKey || status.provider !== provider) return { provider, models: [] };
-        const models = status.enabledModels ?? (await request<{ models: string[] }>('ai.models', { provider })).models;
-        return { provider, models };
-      }));
+      const result: Group[] = [];
+      let incomplete = false;
+      // Native catalog requests share an inference lock across providers.
+      for (const provider of Object.keys(providers) as ProviderId[]) {
+        if (!active) return;
+        try {
+          const status = await request<ProviderStatus>('ai.status', { provider });
+          if (!status.hasApiKey || status.provider !== provider || status.enabledModels?.length === 0) continue;
+          let models = status.enabledModels;
+          if (forAnalysis || !models) {
+            const catalog = await request<{ models: string[] }>('ai.models', { provider, forAnalysis });
+            const enabled = status.enabledModels && new Set(status.enabledModels);
+            models = catalog.models.filter(model => !enabled || enabled.has(model));
+          }
+          if (models.length) result.push({ provider, models });
+        } catch { incomplete = true; }
+        if (active) setGroups([...result]);
+      }
       if (!active) return;
-      setGroups(result.flatMap(r => r.status === 'fulfilled' && r.value.models.length ? [r.value] : []));
-      if (result.some(r => r.status === 'rejected')) setError('Alguns catálogos não puderam ser carregados.');
+      if (incomplete) setError('Alguns catálogos não puderam ser carregados.');
       setLoading(false);
     }
     void load();
     return () => { active = false; };
-  }, [open]);
+  }, [open, forAnalysis]);
 
   function close(restoreFocus: boolean) {
     const panel = dialog.current;
@@ -132,7 +144,7 @@ export function ChatModelPicker({ value, onChange, disabled, onModels }: Props) 
         </nav>
         <div className="chat-model-list" ref={list}>
           {loading && <p role="status">Consultando provedores…</p>}
-          {!loading && !visible.length && <p>{groups.length ? 'Nenhum modelo corresponde à busca.' : 'Ative um modelo em IA e modelos.'}</p>}
+          {!loading && !visible.length && <p>{groups.length ? 'Nenhum modelo corresponde à busca.' : forAnalysis ? 'Ative um modelo de texto com tarifa disponível para análise.' : 'Ative um modelo em IA e modelos.'}</p>}
           {visible.map(g => <section key={g.provider}><h4>{providers[g.provider].name}</h4>
             {g.models.map(m => {
               const selected = value?.provider === g.provider && value.model === m;

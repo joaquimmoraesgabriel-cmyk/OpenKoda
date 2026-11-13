@@ -7,7 +7,7 @@ const KEYS:[&str;7]=["synthetic-openai-provider-key","synthetic-openrouter-provi
     "synthetic-anthropic-provider-key","synthetic-gemini-provider-key","synthetic-deepseek-provider-key","synthetic-xai-provider-key"];
 struct Transport { calls:Mutex<Vec<(ProviderId,String)>> }
 impl Provider for Transport {
-    fn models(&self,p:ProviderId,key:&str)->Result<Vec<String>,String>{
+    fn models(&self,p:ProviderId,key:&str,_:Option<&std::collections::HashSet<String>>)->Result<Vec<String>,String>{
         assert_eq!(key,KEYS[p.slot() as usize-1]);
         Ok(vec!["shared-model".into(),format!("{}-model",p.id())])
     }

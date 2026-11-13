@@ -216,10 +216,16 @@ pub fn project_value(value:Value,redactor:&dyn DataRedactor)->Value{
 }
 pub fn projection_info(redactor:&dyn DataRedactor,redacted:bool,omitted:Vec<&str>)->Value{json!({"schema":"openkoda.projection.v1","redactorVersion":"openkoda.redactor.v1","mode":redactor.mode(),"redacted":redacted,"omittedFields":omitted,"reasonCodes":if redactor.mode()==RedactionMode::MetadataOnly{vec!["data_redactor_unavailable"]}else{vec![]}})}
 pub fn evidence_view(store:&Store,s:&Snapshot,aid:&str,eid:&str,redactor:&dyn DataRedactor)->Result<EvidenceView,String>{
-    let a=s.assessments.iter().find(|a|a.id==aid).ok_or_else(||error("data_subject_missing"))?;let e=a.evidence.iter().find(|e|e.id==eid).ok_or_else(||error("data_subject_missing"))?;
+    let a=s.assessments.iter().find(|a|a.id==aid).ok_or_else(||error("data_subject_missing"))?;
+    let hidden=crate::security_scan::restricted_results(store,s,a);
+    evidence_projection(store,s,a,eid,redactor,hidden.evidence.contains(eid))
+}
+fn evidence_projection(store:&Store,s:&Snapshot,a:&crate::model::Assessment,eid:&str,redactor:&dyn DataRedactor,restricted:bool)->Result<EvidenceView,String>{
+    let aid=a.id.as_str();
+    let e=a.evidence.iter().find(|e|e.id==eid).ok_or_else(||error("data_subject_missing"))?;
     let resolved=resolve_subject(store,s,&DataSubject::Evidence{assessment_id:aid.into(),evidence_id:eid.into()},&RejectExternal)?;let mut class=classification_state(s,&resolved)?;
     let redacted=redactor.redact(&e.content);class.secret_material|=redacted.secret_material;
-    let preview=if redactor.mode()==RedactionMode::MetadataOnly{None}else{Some(limited(redacted.text.clone()))};let bytes=preview.as_ref().map_or(0,String::len);
+    let preview=if restricted||redactor.mode()==RedactionMode::MetadataOnly{None}else{Some(limited(redacted.text.clone()))};let bytes=preview.as_ref().map_or(0,String::len);
     let raw:Value=serde_json::from_str(&e.content).unwrap_or(Value::Null);
     let structured=if raw["adapter"]=="source.rules.v1"&&s.executions.iter().any(|x|x.assessment_id==aid&&x.evidence_id.as_deref()==Some(eid)&&s.plans.iter().any(|p|p.id==x.plan_id&&p.adapter=="source.rules.v1")){Some(json!({"kind":"source_rules","data":project_value(raw,redactor)}))}else if crate::source_context::is_source_capture(e,a,&s.plans){let mut v=raw; if let Some(files)=v["source"]["files"].as_array_mut(){for f in files{if let Some(o)=f.as_object_mut(){o.remove("text");}}}Some(json!({"kind":"source_capture","data":project_value(v,redactor)}))}else{None};
     let shape=|allowed:bool|json!({"allowedByShape":allowed,"reasonCodes":if allowed{vec![]}else{vec!["data_shape_unavailable"]},"requiresDataReview":true});
@@ -240,8 +246,21 @@ pub fn snapshot_view(store:&Store,s:&Snapshot,redactor:&dyn DataRedactor)->Resul
     for (project,original) in value["projects"].as_array_mut().ok_or_else(||error("data_projection_failed"))?.iter_mut().zip(&s.projects){
         if let Some(options)=&original.analysis_options{project["analysisOptions"]=crate::project_options::view(options,redactor);}
     }
-    for a in value["assessments"].as_array_mut().ok_or_else(||error("data_projection_failed"))?{let aid=a["id"].as_str().ok_or_else(||error("data_projection_failed"))?.to_owned();let original=s.assessments.iter().find(|a|a.id==aid).unwrap();a["evidence"]=json!(original.evidence.iter().map(|e|evidence_view(store,s,&aid,&e.id,redactor)).collect::<Result<Vec<_>,_>>()?);}
+    let mut hidden_findings=std::collections::HashSet::new();
+    for (view,assessment) in value["assessments"].as_array_mut().ok_or_else(||error("data_projection_failed"))?.iter_mut().zip(&s.assessments){
+        let hidden=crate::security_scan::restricted_results(store,s,assessment);
+        view["evidence"]=json!(assessment.evidence.iter().map(|e|evidence_projection(store,s,assessment,&e.id,redactor,hidden.evidence.contains(&e.id))).collect::<Result<Vec<_>,_>>()?);
+        hidden_findings.extend(hidden.findings);
+    }
+    for finding in value["findings"].as_array_mut().into_iter().flatten(){
+        if finding["id"].as_str().is_some_and(|id|hidden_findings.contains(id)){hide_finding_text(finding);}
+    }
     value["schema"]=json!("openkoda.snapshot-view.v1");value["projection"]=projection_info(redactor,true,vec!["assessments[].evidence[].content"]);Ok(value)
+}
+pub(crate) fn hide_finding_text(finding:&mut Value){
+    finding["title"]=json!("Candidato com leitura restrita");
+    finding["description"]=json!("Conteúdo indisponível pela política de dados deste projeto.");
+    finding["recommendation"]=json!("");
 }
 
 #[cfg(test)]

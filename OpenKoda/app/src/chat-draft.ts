@@ -10,6 +10,8 @@ export interface ChatDraft {
 
 const empty: ChatDraft = { text: '', proposing: false };
 const drafts = new Map<string, ChatDraft>();
+// A new conversation's in-memory key becomes its permanent assessment id on admission.
+const savedIds = new Map<string, string>();
 const listeners = new Set<() => void>();
 
 function subscribe(notify: () => void) {
@@ -18,7 +20,7 @@ function subscribe(notify: () => void) {
 }
 
 export function readDraft(id: string) {
-  return drafts.get(id) ?? empty;
+  return drafts.get(savedIds.get(id) ?? id) ?? empty;
 }
 
 export function useChatDraft(id: string) {
@@ -26,6 +28,7 @@ export function useChatDraft(id: string) {
 }
 
 export function updateDraft(id: string, patch: Partial<ChatDraft>) {
+  id = savedIds.get(id) ?? id;
   const next = { ...readDraft(id), ...patch };
   if (next.text || next.attachment || next.proposing) drafts.set(id, next);
   else drafts.delete(id);
@@ -39,10 +42,31 @@ export function finishDraft(id: string, sent: ChatDraft) {
   else if (sent.attachment && current.attachment === sent.attachment) updateDraft(id, { attachment: undefined });
 }
 
+export function bindChatDraft(draftId: string, assessmentId: string) {
+  const draft = drafts.get(draftId);
+  if (draft) {
+    drafts.set(assessmentId, draft);
+    drafts.delete(draftId);
+  }
+  savedIds.set(draftId, assessmentId);
+}
+
 export function pruneChatDrafts(liveAssessmentIds: ReadonlySet<string>) {
   let changed = false;
+  const live = new Set(liveAssessmentIds);
+  for (const [draftId, id] of savedIds) {
+    if (live.has(draftId)) live.add(id);
+    else if (!live.has(id)) savedIds.delete(draftId);
+  }
   for (const id of drafts.keys()) {
-    if (!liveAssessmentIds.has(id)) changed = drafts.delete(id) || changed;
+    if (!live.has(id)) changed = drafts.delete(id) || changed;
   }
   if (changed) listeners.forEach(notify => notify());
+}
+
+export function conversationTitle(line: string) {
+  const words = line.trim().split(/\s+/u);
+  const title = words.slice(0, 9).join(' ');
+  const letters = Array.from(title);
+  return letters.length > 68 || words.length > 9 ? letters.slice(0, 67).join('').trimEnd() + '…' : title;
 }

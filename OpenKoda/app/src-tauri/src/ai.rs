@@ -20,6 +20,9 @@ mod investigation;
 mod planning;
 #[path = "ai_budget.rs"]
 mod budget;
+#[path = "ai_scan_transport.rs"]
+mod scan_transport;
+pub(crate) use scan_transport::{HttpScan, Rates as ScanRates, ReviewModel as ScanModel, ScanTransport};
 #[path = "ai_data.rs"]
 mod data;
 #[path = "ai_work.rs"]
@@ -73,8 +76,8 @@ fn authenticate(request:reqwest::blocking::RequestBuilder, provider:ProviderId, 
 
 trait Provider:Send+Sync {
     fn response(&self,provider:ProviderId,model:&str,key:&str,prompt:&str,instructions:&str,max_output_tokens:u32)->Result<Value,String>;
-    fn chat_response(&self,provider:ProviderId,model:&str,key:&str,prompt:&str,instructions:&str,maximum:u32,_stop:&std::sync::atomic::AtomicBool)->Result<Value,String>{self.response(provider,model,key,prompt,instructions,maximum)}
-    fn models(&self,provider:ProviderId,key:&str)->Result<Vec<String>,String>{
+    fn chat_response(&self,provider:ProviderId,model:&str,key:&str,prompt:&str,instructions:&str,maximum:u32,_stop:&std::sync::atomic::AtomicBool,_progress:Arc<Mutex<chat::Progress>>)->Result<Value,String>{self.response(provider,model,key,prompt,instructions,maximum)}
+    fn models(&self,provider:ProviderId,key:&str,scan_prices:Option<&std::collections::HashSet<String>>)->Result<Vec<String>,String>{
         let client=client()?;
         let mut models=std::collections::BTreeSet::new();
         let mut cursors=std::collections::HashSet::new();
@@ -95,7 +98,22 @@ trait Provider:Send+Sync {
             let response=page.send().map_err(network_error)?;
             let body=read_bounded_response(response,16*1024*1024)?;
             let (names,next)=provider.catalog_page(&body)?;
-            models.extend(names);
+            if let Some(prices)=scan_prices {
+                if provider==ProviderId::OpenRouter {
+                    models.extend(body["data"].as_array().into_iter().flatten()
+                        .filter(|row|scan_transport::router_settings(row).is_ok())
+                        .filter_map(|row|row["id"].as_str()).map(str::to_owned));
+                } else {
+                    let mut names=names;
+                    if provider==ProviderId::Gemini {
+                        let generative:std::collections::HashSet<_>=body["models"].as_array().into_iter().flatten()
+                            .filter(|row|row["supportedGenerationMethods"].as_array().is_some_and(|methods|methods.iter().any(|m|m=="generateContent")))
+                            .filter_map(|row|row["name"].as_str()?.strip_prefix("models/")).collect();
+                        names.retain(|id|generative.contains(id.as_str()));
+                    }
+                    models.extend(names.into_iter().filter(|id|prices.contains(id)||scan_transport::bundled_rates(provider,id).is_some()));
+                }
+            } else { models.extend(names); }
             let Some(next)=next else{return Ok(models.into_iter().collect());};
             if cursors.len()>=100 || !cursors.insert(next.clone()){return Err("O catálogo excedeu o limite de páginas ou retornou um cursor repetido.".into());}
             cursor=Some(next);
@@ -104,7 +122,7 @@ trait Provider:Send+Sync {
 }
 struct HttpProvider;
 impl Provider for HttpProvider {
-    fn chat_response(&self,provider:ProviderId,model:&str,key:&str,prompt:&str,instructions:&str,maximum:u32,stop:&std::sync::atomic::AtomicBool)->Result<Value,String>{chat::http_chat(provider,model,key,prompt,instructions,maximum,stop)}
+    fn chat_response(&self,provider:ProviderId,model:&str,key:&str,prompt:&str,instructions:&str,maximum:u32,stop:&std::sync::atomic::AtomicBool,progress:Arc<Mutex<chat::Progress>>)->Result<Value,String>{chat::http_chat(provider,model,key,prompt,instructions,maximum,stop,progress)}
     fn response(&self,provider:ProviderId,model:&str,key:&str,prompt:&str,instructions:&str,max_output_tokens:u32)->Result<Value,String>{
         let body=provider.body(model,prompt,instructions,max_output_tokens);
         let response=authenticate(client()?.post(provider.inference_url()),provider,key).json(&body).send().map_err(network_error)?;
@@ -140,6 +158,9 @@ struct ConfigureProvider {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ProviderInput { provider:Option<ProviderId> }
+#[derive(Deserialize)]
+#[serde(rename_all="camelCase",deny_unknown_fields)]
+struct CatalogInput {provider:Option<ProviderId>,#[serde(default)] for_analysis:bool}
 #[derive(Deserialize)]
 #[serde(rename_all="camelCase",deny_unknown_fields)]
 struct AssessmentSelection { assessment_id:String, ai_selection:Option<AiSelection> }
@@ -253,7 +274,7 @@ impl AiService {
         if planning::supports(action){return self.operation_propose(payload,store,work.ok_or("work_owned_operation")?);}
         if budget::supports(action){return self.budget_handle(action,payload,store);}
         match action {
-            "ai.chat.status"|"ai.chat.stop" => self.chat.inspect(payload,action=="ai.chat.stop"),
+            "ai.chat.status"|"ai.chat.stop" => self.chat.inspect_with_policy(payload,action=="ai.chat.stop",store),
             "ai.key.save" => {
                 let _lease=self.inference.try_lock().map_err(|_|"Aguarde a solicitação em andamento antes de trocar a credencial.".to_string())?;
                 let input: KeyInput = decode(payload)?;
@@ -338,11 +359,12 @@ impl AiService {
             }
             "ai.status" => { let input:ProviderInput=decode(payload)?; self.provider_status(store,input.provider) }
             "ai.models" => {
-                let input:ProviderInput=decode(payload)?;
+                let input:CatalogInput=decode(payload)?;
                 let provider=self.selected_provider(input.provider,store)?;
                 let _work=work.as_ref().ok_or("work_owned_operation")?;
                 let (key,revision) = self.provider_credential(provider)?;
-                let models=self.provider.models(provider,&key)?;
+                let prices=if input.for_analysis {Some(self.budget.priced_scan_models(provider)?)}else{None};
+                let models=self.provider.models(provider,&key,prices.as_ref())?;
                 Ok(json!({"provider":provider,"models":models,"credentialRevision":revision,"note":"O catálogo inclui os modelos disponíveis para a chave. O teste de conexão verifica a geração de texto pelo modelo selecionado."}))
             }
             "ai.test" => {
@@ -386,7 +408,7 @@ impl AiService {
                     let details:String=r.get(6)?;let body:Value=serde_json::from_str(&details).unwrap_or(Value::Null);
                     Ok(json!({"id":r.get::<_,String>(0)?,"endpoint":r.get::<_,String>(7)?,"model":r.get::<_,String>(1)?,"status":r.get::<_,String>(2)?,"createdAt":r.get::<_,String>(3)?,"inputTokens":r.get::<_,Option<i64>>(4)?,"outputTokens":r.get::<_,Option<i64>>(5)?,"unknownAcknowledged":request_unknown_acknowledged(&details),"resolution":body.get("resolution"),"operationProposal":body.get("operationProposal"),"budget":body.get("budget"),"scopeRef":body.get("scopeRef"),"contextTargetRefs":body.get("contextTargetRefs"),"dataReviewRef":body.get("dataReviewRef"),"dataUseReceiptRef":body.get("dataUseReceiptRef"),"dataPolicyRef":body.get("dataPolicyRef"),"dataBinding":body.get("dataBinding"),"providerCredentialRef":body.get("providerCredentialRef"),"chatMessageIds":body.get("chatMessageIds"),"dataReceiptStatus":if body.get("dataUseReceiptRef").is_some(){"recorded"}else{"legacy_no_data_policy_receipt"}}))
                 }).map_err(failure)?.collect::<Result<Vec<_>,_>>().map_err(failure)?;
-                Ok(json!({"messages":messages,"requests":requests,"limit":100,"historySentToProvider":false}))
+                Ok(json!({"assessmentId":input.assessment_id,"messages":messages,"requests":requests,"limit":100,"historySentToProvider":false}))
             }
             "ai.request.reconcile"=>self.reconcile_request(decode(payload)?,store),
             "candidate.record" => self.candidate(store, decode(payload)?),
@@ -435,7 +457,7 @@ impl AiService {
     }
     pub(crate) fn security_key(&self,store:&Store,assessment:&str,expected:ProviderId,model:&str)->Result<Zeroizing<String>,String>{
         let cfg=self.config_for(store,Some(assessment),true)?;
-        if !matches!(expected,ProviderId::OpenAI|ProviderId::OpenRouter)||cfg.provider!=expected.id()||cfg.model!=model{
+        if cfg.provider!=expected.id()||cfg.model!=model{
             return Err("O provedor ou modelo mudou. Revise a seleção desta avaliação.".into());
         }
         self.provider_credential(expected).map(|(key,_)|key)
@@ -446,8 +468,10 @@ impl AiService {
     pub(crate) fn reserve_security(&self,id:&str,assessment:&str,provider:ProviderId,model:&str,cap:u64)->Result<(),String>{
         self.budget.reserve_security(id,assessment,provider,model,cap)
     }
-    pub(crate) fn security_dispatched(&self,id:&str)->Result<(),String>{self.budget.dispatched(id)}
     pub(crate) fn security_not_sent(&self,id:&str)->Result<(),String>{self.budget.not_sent(id)}
+    pub(crate) fn security_usage(&self,id:&str,requests:u64,partial:u64,input:u64,output:u64)->Result<(),String>{
+        self.budget.security_usage(id,requests,partial,input,output)
+    }
     pub(crate) fn security_settle(&self,id:&str,estimate:Option<u64>)->Result<(),String>{self.budget.security_settle(id,estimate)}
 
     fn config_for(&self,store:&Store,assessment:Option<&str>,require_model:bool)->Result<model::Settings,String>{
@@ -634,7 +658,7 @@ impl AiService {
         let raw_result=if matches!(operation,"ask"|"operation_proposal"){
             self.chat.start(assessment,&id,data.as_ref().map(|data|data.review)).and_then(|live|{
                 live.admit(admitted_message_id.clone())?;
-                self.provider.chat_response(provider,model,key,prompt,instructions,max_output_tokens,&live.token)
+                self.provider.chat_response(provider,model,key,prompt,instructions,max_output_tokens,&live.token,live.progress.clone())
             })
         }else{self.provider.response(provider,model,key,prompt,instructions,max_output_tokens)};
         let result=self.commit_response(&id,assessment,key,history_message,raw_result);

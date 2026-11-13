@@ -1,15 +1,13 @@
-//! Local host for the pinned Codex Security SDK. The WebView supplies neither
-//! an executable, an output directory, a repository root, nor credentials.
-use crate::{ai::AiService, ai_provider::ProviderId, core::{self, Store}, model::{self, Assessment, Evidence, Snapshot}, scope, scope_targets};
+//! Code-review admission, scoped source transfer and durable review receipts.
+use crate::{ai::{AiService, HttpScan, ScanTransport}, ai_provider::ProviderId, core::{self, Store}, model::{self, Assessment, Evidence, Snapshot}, scope, scope_targets};
 use serde::{Deserialize, Serialize};
 use serde_json::{json,Value};
-use std::{collections::HashSet, fs, io::{BufRead,BufReader,Read,Write}, path::{Path,PathBuf}, process::{Child,Command,Stdio}, sync::{Arc,Mutex,atomic::{AtomicBool,Ordering},mpsc},thread,time::{Duration,Instant}};
+use std::{collections::HashSet, fs, path::{Path,PathBuf}, sync::{Arc,Mutex,atomic::{AtomicBool,Ordering},mpsc},time::{Duration,Instant}};
 use zeroize::Zeroizing;
 
-const LIMIT:usize=2*1024*1024;
-const UNEXPECTED:&str="O SDK não entregou um resultado terminal válido. Consulte o histórico antes de iniciar outra varredura.";
+#[path="security_review.rs"]
+mod review;
 const INTERRUPTED:&str="Execução interrompida. O resultado remoto e o custo final podem ser desconhecidos.";
-const CODE_SCAN_PROVIDER_UNAVAILABLE:&str="A análise de código usa OpenAI nesta versão. Os demais provedores continuam disponíveis nas conversas.";
 
 #[derive(Clone,Debug,Serialize,Deserialize)]
 #[serde(rename_all="camelCase",deny_unknown_fields)]
@@ -20,8 +18,10 @@ pub struct Receipt {
     id:String,assessment_id:String,idempotency_key:String,request_digest:String,status:String,stage:String,message:String,
     created_at:String,updated_at:String,provider:String,model:String,max_cost_usd:f64,events:Vec<Progress>,
     result_evidence_id:Option<String>,findings_total:Option<u64>,error:Option<String>,
+    #[serde(default,skip_serializing_if="Option::is_none")]selected_paths:Option<Vec<String>>,
 }
 impl Receipt {
+    pub(crate) fn id(&self) -> &str { &self.id }
     fn active(&self)->bool{matches!(self.status.as_str(),"starting"|"running"|"cancelling")}
     fn update(&mut self,status:&str,stage:&str,message:&str){
         self.status=status.into();self.stage=stage.into();self.message=message.into();self.updated_at=model::now();
@@ -31,7 +31,7 @@ impl Receipt {
 }
 #[derive(Deserialize,Serialize)]
 #[serde(rename_all="camelCase",deny_unknown_fields)]
-pub(crate) struct Start{assessment_id:String,idempotency_key:String,prompt:Option<String>,target:Option<Targets>,max_cost_usd:f64,#[serde(default,skip_serializing_if="std::ops::Not::not")]acknowledge_sensitive:bool}
+pub(crate) struct Start{assessment_id:String,idempotency_key:String,prompt:Option<String>,target:Option<Targets>,max_cost_usd:f64,#[serde(default,skip_serializing_if="std::ops::Not::not")]acknowledge_sensitive:bool,#[serde(default,skip_serializing_if="Option::is_none")]retry_of:Option<String>}
 #[derive(Serialize,Deserialize)]
 #[serde(untagged)]
 enum Targets{One(String),Many(Vec<String>)}
@@ -48,6 +48,7 @@ struct Finding{#[serde(default,skip_serializing_if="Option::is_none")]id:Option<
 #[derive(Serialize,Deserialize,Debug)]
 #[serde(rename_all="camelCase",deny_unknown_fields)]
 struct Coverage{
+    #[serde(default,skip_serializing_if="Vec::is_empty")]reviewed_ranges:Vec<String>,
     scope:Vec<String>,excluded_paths:Vec<String>,additional_exclusions:u64,findings_total:u64,report_truncated:bool,
     #[serde(default,skip_serializing_if="String::is_empty")]summary:String,
     #[serde(default,skip_serializing_if="Vec::is_empty")]limitations:Vec<String>,
@@ -58,43 +59,16 @@ struct Cost{estimated_usd:Option<f64>}
 #[derive(Serialize,Deserialize,Debug)]
 #[serde(rename_all="camelCase",deny_unknown_fields)]
 struct ResultData {scan_id:Option<String>,report:String,findings:Vec<Finding>,coverage:Coverage,cost:Option<Cost>}
-#[derive(Deserialize)]
-#[serde(tag="type",rename_all="lowercase")]
-enum Frame {
-    Progress{stage:String,message:String},
-    Error{code:String,message:String},
-    Result{status:String,#[serde(flatten)]data:ResultData},
-}
 struct Terminal{status:String,data:Option<ResultData>,error:Option<String>}
 impl Terminal {
     fn failure(message:&str)->Self{Self{status:"failed".into(),data:None,error:Some(message.into())}}
-    fn interrupted()->Self{Self{status:"interrupted".into(),data:None,error:Some(INTERRUPTED.into())}}
 }
 struct Scope {repo:PathBuf,targets:Vec<String>,deadline:Instant,_locks:Vec<crate::source_scan::MetadataLease>}
-struct Job<'a> {id:String,aid:String,prompt:String,objective_digest:String,acknowledge_sensitive:bool,scope:Scope,provider:ProviderId,model:String,cap:f64,key:Zeroizing<String>,output:PathBuf,cancel:Arc<AtomicBool>,_inference:std::sync::MutexGuard<'a,()>}
+struct Job<'a> {id:String,aid:String,prompt:String,objective_digest:String,acknowledge_sensitive:bool,scope:Scope,provider:ProviderId,model:String,cap:f64,key:Zeroizing<String>,cancel:Arc<AtomicBool>,_inference:std::sync::MutexGuard<'a,()>}
 struct Active {aid:String,cancel:Arc<AtomicBool>}
-pub(crate) struct Service{helper:PathBuf,node:PathBuf,active:Mutex<Option<Active>>,check_cache:Mutex<Option<(Instant,Value)>>}
+pub(crate) struct Service{transport:Arc<dyn ScanTransport>,active:Mutex<Option<Active>>}
 
 fn decode<T:serde::de::DeserializeOwned>(value:Value)->Result<T,String>{serde_json::from_value(value).map_err(|_|"Campos inválidos para a análise OpenKoda.".into())}
-// std::fs and Tauri can return a Win32 verbatim disk path. Node 24 treats
-// that spelling as an invalid module entry point (EISDIR on the drive).
-// Keep the exact drive and OS components, including non-ASCII characters.
-fn node_path(path:&Path)->PathBuf{
-    #[cfg(windows)]{
-        use std::path::{Component,Prefix};
-        let mut components=path.components();
-        if let Some(Component::Prefix(prefix))=components.next(){
-            if let Prefix::VerbatimDisk(drive)=prefix.kind(){
-                if components.next()==Some(Component::RootDir){
-                    let mut dos=PathBuf::from(format!("{}:\\",char::from(drive)));
-                    dos.extend(components.map(|c|c.as_os_str()));
-                    return dos;
-                }
-            }
-        }
-    }
-    path.to_path_buf()
-}
 fn lookup<'a>(s:&'a Snapshot,aid:&str)->Result<&'a Assessment,String>{s.assessments.iter().find(|a|a.id==aid).ok_or_else(||"Avaliação não encontrada.".into())}
 fn latest(a:&Assessment)->Option<&Receipt>{a.events.iter().rev().find_map(|e|e.security_scan.as_ref())}
 fn public(a:&Assessment,r:&Receipt)->Result<Value,String>{
@@ -102,7 +76,7 @@ fn public(a:&Assessment,r:&Receipt)->Result<Value,String>{
     let o=v.as_object_mut().unwrap();o.remove("requestDigest");o.remove("idempotencyKey");
     let result=if let Some(id)=&r.result_evidence_id{
         let ev=a.evidence.iter().find(|e|&e.id==id).ok_or("O recibo não possui a evidência vinculada.")?;
-        let data=serde_json::from_str::<ResultData>(&ev.content).map_err(|_|"Relatório do SDK inválido no armazenamento.")?;
+        let data=serde_json::from_str::<ResultData>(&ev.content).map_err(|_|"Relatório de análise inválido no armazenamento.")?;
         json!(data)
     }else{Value::Null};
     o.insert("result".into(),result);Ok(json!({"scan":v}))
@@ -148,9 +122,61 @@ fn content_reasons(store:&Store,s:&Snapshot,a:&Assessment,r:&Receipt)->Vec<Strin
         }else{subjects.push(DataSubject::ScopeSource{assessment_id:a.id.clone(),scope_ref:reference,target_ref:None});}
         if let Some(id)=&r.result_evidence_id{subjects.push(DataSubject::Evidence{assessment_id:a.id.clone(),evidence_id:id.clone()});}
         let mut reasons=Vec::new();for subject in subjects{reasons.extend(local_subject_reasons(store,s,a,&subject)?);}
+        for parent in source_ancestors(s,&a.id)?{
+            let source=lookup(s,&parent.scope.assessment_id)?;
+            let subject=source_subject(s,&parent.scope)?;
+            reasons.extend(local_subject_reasons(store,s,source,&subject)?);
+            if let Some(pin)=&parent.policy{
+                let rule=&s.data_policy_revisions.iter().find(|r|crate::data_policy::policy_ref(r)==*pin)
+                    .ok_or("Revisão da política da origem ausente.")?.body.local_raw_view;
+                let level=crate::data_policy::current_classification(s,&subject).map_or(crate::data_policy::Sensitivity::Unclassified,|c|c.sensitivity);
+                if !rule.enabled||!rule.sensitivities.contains(&level){reasons.push("data_destination_denied".into());}
+            }
+        }
         reasons.sort();reasons.dedup();Ok::<_,String>(reasons)
     })();
     decision.unwrap_or_else(|_|vec!["data_source_unknown".into()])
+}
+/// Projections of a scan report and its candidates share the receipt's local
+/// disclosure decision. Validation can replace a candidate's evidence links,
+/// so also recover its stable ID from the original report.
+#[derive(Default)]
+pub(crate) struct RestrictedScanContent {
+    pub evidence: HashSet<String>,
+    pub findings: HashSet<String>,
+}
+pub(crate) fn restricted_results(store:&Store,s:&Snapshot,a:&Assessment)->RestrictedScanContent {
+    let mut hidden=RestrictedScanContent::default();
+    for receipt in a.events.iter().filter_map(|e|e.security_scan.as_ref()) {
+        let Some(id)=receipt.result_evidence_id.as_ref() else{continue};
+        if content_reasons(store,s,a,receipt).is_empty(){continue;}
+        hidden.evidence.insert(id.clone());
+        let report=a.evidence.iter().find(|e|e.id==*id)
+            .and_then(|e|serde_json::from_str::<ResultData>(&e.content).ok());
+        if let Some(report)=report {
+            hidden.findings.extend(report.findings.iter().enumerate()
+                .map(|(index,f)|candidate_id(&a.id,&receipt.id,index,f)));
+        }
+        hidden.findings.extend(s.findings.iter().filter(|f|f.assessment_id==a.id && f.evidence_ids.contains(id)).map(|f|f.id.clone()));
+    }
+    hidden
+}
+fn candidate_id(aid:&str,scan_id:&str,index:usize,f:&Finding)->String{
+    let origin=f.id.clone().unwrap_or_else(||format!("{index}:{}",core::hash(&json!(f).to_string())));
+    scope_targets::derived_id("openkoda.codex-security.finding.v1",&[aid,scan_id,&origin])
+}
+pub(crate) fn check_report_read(store:&Store,s:&Snapshot,subject:&crate::data_policy::DataSubject)->Result<(),String>{
+    use crate::data_policy::{DataSubject,DerivedProducer};
+    let a=lookup(s,subject.assessment_id())?;
+    let hidden=restricted_results(store,s,a);
+    let denied=match subject {
+        DataSubject::Evidence{evidence_id,..}=>hidden.evidence.contains(evidence_id),
+        DataSubject::Derived{producer:DerivedProducer::Finding,object_id,..}=>hidden.findings.contains(object_id),
+        DataSubject::AssessmentMetadata{category:crate::data_policy::DataCategory::ActivityMetadata,..}=>
+            a.events.iter().filter_map(|e|e.security_scan.as_ref()).any(|r|!content_reasons(store,s,a,r).is_empty()),
+        _=>false,
+    };
+    if denied {Err("data_destination_denied: a política restringe a leitura desta análise.".into())} else {Ok(())}
 }
 fn project_content(store:&Store,s:&Snapshot,a:&Assessment,r:&Receipt,value:&mut Value){
     let reasons=content_reasons(store,s,a,r);if reasons.is_empty(){return;}
@@ -160,6 +186,7 @@ fn project_content(store:&Store,s:&Snapshot,a:&Assessment,r:&Receipt,value:&mut 
     value["message"]=json!(HIDDEN);value["stage"]=json!("restricted");
     if !value["error"].is_null(){value["error"]=json!(HIDDEN);}
     if let Some(events)=value["events"].as_array_mut(){for event in events{event["message"]=json!(HIDDEN);event["stage"]=json!("restricted");}}
+    if let Some(o)=value.as_object_mut(){o.remove("selectedPaths");}
     value["contentUnavailable"]=json!(true);value["contentReasonCodes"]=json!(reasons);
     if value.get("result").is_some(){value["result"]=Value::Null;value["resultUnavailable"]=json!(true);value["resultReasonCodes"]=value["contentReasonCodes"].clone();}
 }
@@ -187,7 +214,43 @@ fn currency(value:f64)->Result<u64,String>{
     if !value.is_finite()||value<0.0||value>1_000_000.0{return Err("Valor monetário inválido.".into());}
     Ok((value*1_000_000.0).ceil() as u64)
 }
+fn source_ancestors<'a>(s:&'a Snapshot,aid:&str)->Result<Vec<&'a scope::ConversationSource>,String>{
+    let mut parents=Vec::new();
+    let mut seen=HashSet::new();
+    let mut cursor=aid;
+    while let Some(parent)=s.scope_receipts.iter().find(|r|r.action=="project.newConversation"&&r.result.assessment_id==cursor)
+        .and_then(|r|r.result.conversation_source.as_ref()) {
+        if !seen.insert(parent.scope.assessment_id.as_str()){return Err("Origem circular da conversa.".into());}
+        parents.push(parent);
+        cursor=&parent.scope.assessment_id;
+    }
+    Ok(parents)
+}
+
+fn source_subject(s:&Snapshot,reference:&scope::ScopeRef)->Result<crate::data_policy::DataSubject,String>{
+    let revision=s.scope_revisions.iter().find(|r|r.id==reference.revision_id&&r.digest==reference.digest&&r.assessment_id==reference.assessment_id)
+        .ok_or("Escopo de origem ausente.")?;
+    let entry=revision.body.target_set.as_ref().and_then(|set|set.entries.iter().find(|e|e.entry_id==set.primary_entry_id));
+    Ok(crate::data_policy::DataSubject::ScopeSource{assessment_id:reference.assessment_id.clone(),scope_ref:reference.clone(),target_ref:entry.map(scope_targets::entry_ref)})
+}
+
 fn check_data(s:&Snapshot,aid:&str,provider:ProviderId)->Result<bool,String>{
+    let mut sensitive=check_source_data(s,aid,provider,None,true)?;
+    for parent in source_ancestors(s,aid)? {
+        let source=&parent.scope.assessment_id;
+        scope::check_new_local_input(s,source)?;
+        if scope::current_ref(s,source)?.as_ref()!=Some(&parent.scope){
+            return Err("O escopo da conversa de origem mudou. Selecione novamente o alvo autorizado.".into());
+        }
+        let classified=crate::data_policy::current_classification(s,&source_subject(s,&parent.scope)?).is_some();
+        if parent.policy.is_some()||classified||s.data_bindings.iter().any(|b|&b.assessment_id==source) {
+            sensitive|=check_source_data(s,source,provider,parent.policy.as_ref(),false)?;
+        }
+    }
+    Ok(sensitive)
+}
+
+fn check_source_data(s:&Snapshot,aid:&str,provider:ProviderId,pinned:Option<&crate::data_policy::DataPolicyRef>,check_objective:bool)->Result<bool,String>{
     use crate::data_policy::{self,DataCategory,DataDestination,DataSubject,Sensitivity};
     let a=lookup(s,aid)?;
     let Some(policy)=s.data_policies.iter().find(|p|p.project_id==a.project_id)else{return Ok(false)};
@@ -197,10 +260,8 @@ fn check_data(s:&Snapshot,aid:&str,provider:ProviderId)->Result<bool,String>{
     let body=scope_targets::current_body(s,aid)?;
     let entry=body.target_set.as_ref().and_then(|set|set.entries.iter().find(|e|e.entry_id==set.primary_entry_id));
     let target=entry.map_or("primary",|e|e.project_target_id.as_str());
-    let subjects=[
-        DataSubject::ScopeSource{assessment_id:aid.into(),scope_ref:scope,target_ref:entry.map(scope_targets::entry_ref)},
-        DataSubject::AssessmentMetadata{assessment_id:aid.into(),category:DataCategory::HumanText}
-    ];
+    let mut subjects=vec![source_subject(s,&scope)?];
+    if check_objective{subjects.push(DataSubject::AssessmentMetadata{assessment_id:aid.into(),category:DataCategory::HumanText});}
     let mut sensitivity=Sensitivity::Internal;
     for subject in subjects{
         let fingerprint=crate::data_projection::canonical_fingerprint(s,&subject)?;
@@ -209,7 +270,7 @@ fn check_data(s:&Snapshot,aid:&str,provider:ProviderId)->Result<bool,String>{
         if c.secret_material||c.sensitivity==Sensitivity::Unclassified{return Err("A classificação vigente impede o envio desta fonte.".into());}
         sensitivity=sensitivity.max(c.sensitivity);
     }
-    for id in [&policy.current_revision_id,&binding.policy_ref.revision_id]{
+    for id in [&policy.current_revision_id,&binding.policy_ref.revision_id].into_iter().chain(pinned.map(|r|&r.revision_id)){
         let rev=s.data_policy_revisions.iter().find(|r|&r.id==id&&r.project_id==a.project_id).ok_or("Revisão da política de dados ausente.")?;
         let rule=rev.body.destinations.iter().find(|r|r.destination==DataDestination::RemoteAi).ok_or("Destino de IA remota ausente.")?;
         if !rule.enabled||!rule.target_catalog_ids.iter().any(|t|t==target)||!rule.sensitivities.contains(&sensitivity)
@@ -241,7 +302,7 @@ fn approved_scope(s:&Snapshot,input:&Start)->Result<Scope,String>{
     scope::check_new_local_input(s,aid)?;
     let body=scope_targets::current_body(s,aid)?;
     let refs=if let Some(set)=&body.target_set{
-        if set.entries.len()!=1||!set.local_exclusions.is_empty()||!set.excluded_project_targets.is_empty(){return Err("O SDK precisa de uma seleção local única que corresponda às exclusões do escopo.".into());}
+        if set.entries.len()!=1||!set.local_exclusions.is_empty()||!set.excluded_project_targets.is_empty(){return Err("A análise precisa de uma seleção local única que corresponda às exclusões do escopo.".into());}
         vec![scope_targets::entry_ref(&set.entries[0])]
     }else{vec![]};
     for method in ["source.rules.v1","ai.remote-review.v1"]{
@@ -266,6 +327,17 @@ fn approved_scope(s:&Snapshot,input:&Start)->Result<Scope,String>{
         if !selected.starts_with(target){return Err("Seleção fora do alvo autorizado nesta avaliação.".into());}
         locks.push(crate::source_scan::lock_metadata_target(&selected)?);
     }
+    for parent in source_ancestors(s,aid)?{
+        let original=lookup(s,&parent.scope.assessment_id)?;
+        let source_root=Path::new(&original.target);
+        if !target.starts_with(source_root){return Err("A seleção excede o alvo da conversa de origem.".into());}
+        let Some(id)=&parent.scan_id else{continue};
+        let allowed=original.events.iter().filter_map(|event|event.security_scan.as_ref()).find(|r|&r.id==id)
+            .and_then(|r|r.selected_paths.as_ref()).ok_or("Os caminhos da análise de origem estão indisponíveis. Selecione o alvo em uma nova análise.")?;
+        if !allowed.is_empty() && (paths.is_empty()||paths.iter().any(|path|!allowed.iter().any(|p|Path::new(path).starts_with(p)))) {
+            return Err("A seleção excede os arquivos da análise de origem.".into());
+        }
+    }
     let mut timeout=Duration::from_secs(2*60*60);
     if let Some(end)=&body.window.ends_at{let time=chrono::DateTime::parse_from_rfc3339(end).map_err(|_|"Janela de escopo inválida.")?;timeout=timeout.min((time.with_timezone(&chrono::Utc)-chrono::Utc::now()).to_std().map_err(|_|"Escopo expirado.")?);}
     Ok(Scope{repo,targets:paths,deadline:Instant::now()+timeout,_locks:locks})
@@ -288,58 +360,12 @@ fn check_repository_boundary(profile:&Path,repo:&Path,project:&model::Project)->
     Ok(())
 }
 impl Service {
-    pub(crate) fn new(resources:&Path)->Self{
-        let packaged=resources.join("security-runtime");
-        #[cfg(debug_assertions)]
-        let runtime=if packaged.join("cli.mjs").is_file(){packaged}else{PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../security-runtime")};
-        #[cfg(not(debug_assertions))]
-        let runtime=packaged;
-        let bundled=runtime.join("bin/node.exe");
-        let node=if bundled.is_file(){bundled}else{std::env::var_os("ProgramFiles").map(PathBuf::from).unwrap_or_else(||PathBuf::from(r"C:\Program Files")).join("nodejs/node.exe")};
-        Self{node,helper:runtime.join("cli.mjs"),active:Mutex::new(None),check_cache:Mutex::new(None)}
-    }
-    fn command(&self)->Result<Command,String>{
-        if !self.node.is_file()||!self.helper.is_file(){return Err("O runtime local do OpenKoda não está instalado.".into());}
-        let mut cmd=Command::new(node_path(&self.node));
-        cmd.env_clear();
-        for name in ["SystemRoot","WINDIR","SystemDrive","TEMP","TMP","LOCALAPPDATA","APPDATA","ProgramFiles","ProgramFiles(x86)","ProgramW6432","USERPROFILE","PATH","PATHEXT","NUMBER_OF_PROCESSORS","PROCESSOR_ARCHITECTURE","COMSPEC"]{
-            if let Some(v)=std::env::var_os(name){cmd.env(name,v);}
-        }
-        #[cfg(windows)] {use std::os::windows::process::CommandExt;cmd.creation_flags(0x08000000);}
-        let helper=node_path(&self.helper);
-        cmd.arg(&helper).current_dir(helper.parent().unwrap()).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null());
-        Ok(cmd)
-    }
-    fn check(&self)->Value{
-        let Ok(mut cache)=self.check_cache.lock()else{return json!({"available":false})};
-        if let Some((at,v))=&*cache{if at.elapsed()<Duration::from_secs(15){return v.clone();}}
-        let checked=(||->Result<Value,String>{
-            let mut child=Managed::new(self.command()?.arg("--check").stdin(Stdio::null()).spawn().map_err(|_|"Node.js não iniciou.")?)?;
-            let output=child.child.stdout.take().ok_or("Saída indisponível.")?;
-            let rx=read_lines(output,64*1024);
-            let deadline=Instant::now()+Duration::from_secs(45);
-            let data=rx.recv_timeout(deadline.saturating_duration_since(Instant::now())).map_err(|err|match err{
-                mpsc::RecvTimeoutError::Timeout=>"Tempo de verificação do runtime esgotado.",
-                mpsc::RecvTimeoutError::Disconnected=>"O Node.js encerrou sem emitir o diagnóstico do runtime.",
-            })??;
-            let v:Value=serde_json::from_slice(&data).map_err(|_|"Resposta de diagnóstico do SDK inválida.")?;
-            let exit=loop{
-                if let Some(status)=child.child.try_wait().map_err(|_|"Falha no diagnóstico.")?{break status;}
-                if Instant::now()>=deadline{return Err("Tempo de verificação do runtime esgotado.".into());}
-                thread::sleep(Duration::from_millis(30));
-            };
-            if v["type"]!="check"||v["available"].as_bool()!=Some(exit.success()){return Err("Diagnóstico de runtime incompatível com o término do processo.".into());}
-            Ok(v)
-        })().unwrap_or_else(|e|json!({"available":false,"missing":[e]}));
-        *cache=Some((Instant::now(),checked.clone()));checked
-    }
+    pub(crate) fn new(_resources:&Path)->Self{Self{transport:Arc::new(HttpScan),active:Mutex::new(None)}}
     pub(crate) fn status(&self,store:&Store,ai:&AiService,payload:Value)->Result<Value,String>{
         let input:Status=decode(payload)?;
         let (provider,model,key)=ai.security_selection(store,input.assessment_id.as_deref())?;
-        let runtime=self.check();
-        let reason=if provider!=ProviderId::OpenAI{Some(CODE_SCAN_PROVIDER_UNAVAILABLE)}
-            else if runtime["available"]!=true{Some("Confira os componentes do runtime OpenKoda.")}
-            else if !key{Some("Configure a chave deste provedor.")}
+        let runtime=json!({"available":true,"engine":"isolated-source","version":env!("CARGO_PKG_VERSION")});
+        let reason=if !key{Some("Configure a chave deste provedor.")}
             else if !crate::ai_provider::valid_model(&model){Some("Selecione e salve um modelo.")}else{None};
         let sensitive=if let Some(aid)=input.assessment_id.as_deref(){check_data(&store.snapshot()?,aid,provider).unwrap_or(false)}else{false};
         Ok(json!({"available":reason.is_none(),"reason":reason,"runtime":runtime,"provider":provider,"model":model,"hasApiKey":key,"requiresSensitiveConfirmation":sensitive}))
@@ -368,7 +394,7 @@ impl Service {
             Ok(())
         })
     }
-    fn prepare<'a>(&self,store:&Store,ai:&'a AiService,input:Start)->Result<(Value,Option<Job<'a>>),String>{
+    fn prepare<'a>(&self,store:&Store,ai:&'a AiService,mut input:Start)->Result<(Value,Option<Job<'a>>),String>{
         core::valid_id(&input.assessment_id)?;core::valid_id(&input.idempotency_key)?;
         let digest=core::hash(&serde_json::to_string(&input).map_err(|_|"Pedido inválido.")?);
         let mut active=self.active.lock().map_err(|_|"Estado da varredura indisponível.")?;
@@ -377,19 +403,21 @@ impl Service {
             if r.request_digest!=digest{return Err("A mesma chave de execução já representa outra solicitação.".into());}
             return Ok((public_checked(store,&state,a,r)?,None));
         }
-        let (provider,_,_)=ai.security_selection(store,Some(&input.assessment_id))?;
-        if provider!=ProviderId::OpenAI{return Err(CODE_SCAN_PROVIDER_UNAVAILABLE.into());}
         if active.is_some(){return Err("Já existe uma varredura OpenKoda em andamento.".into());}
         if !(0.01..=100.0).contains(&input.max_cost_usd){return Err("Informe um limite de US$ 0,01 a US$ 100.".into());}
         let prompt=input.prompt.as_deref().filter(|p|!p.trim().is_empty()).unwrap_or(&a.objective).trim();
         if prompt.len()>8192||prompt.contains('\0'){return Err("Descrição da varredura inválida.".into());}
-        self.command()?;
-        if self.check()["available"]!=true{return Err("O runtime local do OpenKoda está indisponível. Confira seu diagnóstico.".into());}
         let inference=ai.security_lease()?;
         let _gate=store.scope_gate.lock().map_err(|_|"Escopo indisponível.")?;
-        let state=store.snapshot()?;let scope=approved_scope(&state,&input)?;
+        let state=store.snapshot()?;
+        if let Some(previous_id)=&input.retry_of {
+            let prior=latest(lookup(&state,&input.assessment_id)?).filter(|r|r.id==*previous_id&&!r.active()).ok_or("O registro da análise mudou. Consulte o estado atual.")?;
+            let paths=prior.selected_paths.as_ref().ok_or("Esta versão histórica não registrou a seleção de arquivos da análise anterior.")?;
+            if input.target.is_some(){return Err("Uma repetição deve preservar os caminhos anteriores.".into());}
+            if !paths.is_empty(){input.target=Some(Targets::Many(paths.clone()));}
+        }
+        let scope=approved_scope(&state,&input)?;
         let (provider,model,_)=ai.security_selection(store,Some(&input.assessment_id))?;
-        if provider!=ProviderId::OpenAI{return Err(CODE_SCAN_PROVIDER_UNAVAILABLE.into());}
         let objective_digest=core::hash(prompt);
         check_disclosure(&state,&input.assessment_id,provider,&objective_digest,input.acknowledge_sensitive)?;
         let key=ai.security_key(store,&input.assessment_id,provider,&model)?;
@@ -400,14 +428,8 @@ impl Service {
         let project=state.projects.iter().find(|p|p.id==a.project_id).ok_or("Projeto ausente.")?;
         check_repository_boundary(&store.root,&scope.repo,project)?;
         let id=model::id();let at=model::now();
-        let mut r=Receipt{id:id.clone(),assessment_id:input.assessment_id.clone(),idempotency_key:input.idempotency_key,request_digest:digest,status:String::new(),stage:String::new(),message:String::new(),created_at:at.clone(),updated_at:at,provider:provider.id().into(),model:model.clone(),max_cost_usd:input.max_cost_usd,events:vec![],error:None,result_evidence_id:None,findings_total:None};
+        let mut r=Receipt{id:id.clone(),assessment_id:input.assessment_id.clone(),idempotency_key:input.idempotency_key,request_digest:digest,status:String::new(),stage:String::new(),message:String::new(),created_at:at.clone(),updated_at:at,provider:provider.id().into(),model:model.clone(),max_cost_usd:input.max_cost_usd,events:vec![],error:None,result_evidence_id:None,findings_total:None,selected_paths:Some(scope.targets.clone())};
         r.update("starting","starting","Preparando o OpenKoda.");
-        let parent=store.root.join("security-scans").join(&a.project_id);
-        fs::create_dir_all(&parent).map_err(|_|"Não foi possível reservar a pasta de artefatos do SDK.")?;
-        let output=parent.join(&id);
-        fs::create_dir(&output).map_err(|_|"Não foi possível reservar a execução do SDK.")?;
-        let mut scope=scope;
-        scope._locks.push(crate::source_scan::lock_metadata_target(&output)?);
         ai.reserve_security(&id,&input.assessment_id,provider,&model,currency(input.max_cost_usd)?)?;
         let receipt=store.mutate(|s|{
             scope::check_new_local_input(s,&input.assessment_id)?;scope::freeze_review(s,&input.assessment_id,"security.scan.start")?;
@@ -418,17 +440,20 @@ impl Service {
         let receipt=match receipt{Ok(v)=>v,Err(e)=>{ai.security_not_sent(&id)?;return Err(e);}};
         let cancel=Arc::new(AtomicBool::new(false));
         *active=Some(Active{aid:input.assessment_id.clone(),cancel:cancel.clone()});
-        Ok((receipt,Some(Job{id,aid:input.assessment_id,prompt,objective_digest,acknowledge_sensitive:input.acknowledge_sensitive,scope,provider,model,cap:input.max_cost_usd,key,output,cancel,_inference:inference})))
+        Ok((receipt,Some(Job{id,aid:input.assessment_id,prompt,objective_digest,acknowledge_sensitive:input.acknowledge_sensitive,scope,provider,model,cap:input.max_cost_usd,key,cancel,_inference:inference})))
     }
     pub(crate) fn start_worker(&self,store:&Store,ai:&AiService,input:Value,ready:&mpsc::SyncSender<Result<Value,String>>)->Result<(),String>{
         let (receipt,job)=self.prepare(store,ai,decode(input)?)?;
         let _=ready.send(Ok(receipt));
         if let Some(job)=job{
             let mut dispatched=false;
-            let result=self.drive(store,ai,&job,&mut dispatched);
+            let mut accounting=review::Usage::default();
+            let result=review::run(self.transport.as_ref(),store,ai,&job,&mut dispatched,&mut accounting);
             let mut terminal=result.unwrap_or_else(|e|Terminal::failure(&e));
-            let estimate=terminal.data.as_ref().and_then(|d|d.cost.as_ref()).and_then(|c|c.estimated_usd).and_then(|v|currency(v).ok());
-            let settled=if dispatched{ai.security_settle(&job.id,estimate)}else{ai.security_not_sent(&job.id)};
+            if job.cancel.load(Ordering::Acquire) && terminal.status!="cancelled" {
+                terminal.status="cancelled".into();terminal.error=Some("Análise cancelada.".into());
+            }
+            let settled=if dispatched{ai.security_settle(&job.id,accounting.estimate())}else{ai.security_not_sent(&job.id)};
             if settled.is_err(){terminal.error=Some("A conciliação financeira da execução ainda está pendente.".into());}
             let saved=finish(store,&job.aid,&job.id,terminal);
             if let Ok(mut slot)=self.active.lock(){*slot=None;}
@@ -436,74 +461,6 @@ impl Service {
         }
         Ok(())
     }
-    fn drive(&self,store:&Store,ai:&AiService,job:&Job,dispatched:&mut bool)->Result<Terminal,String>{
-        let mut process=Managed::new(self.command()?.spawn().map_err(|_|"Não foi possível iniciar o Node.js do SDK.")?)?;
-        let mut stdin=process.child.stdin.take().ok_or("Entrada do SDK indisponível.")?;
-        let rx=read_lines(process.child.stdout.take().ok_or("Saída do SDK indisponível.")?,LIMIT);
-        let cancel_before=||Terminal{status:"cancelled".into(),error:None,data:None};
-        {
-            let _scope=store.scope_gate.lock().map_err(|_|"Escopo indisponível.")?;
-            let state=store.snapshot()?;scope::check_new_local_input(&state,&job.aid)?;check_disclosure(&state,&job.aid,job.provider,&job.objective_digest,job.acknowledge_sensitive)?;
-            if ai.security_key(store,&job.aid,job.provider,&job.model)?.as_str()!=job.key.as_str(){return Err("A credencial selecionada mudou antes do envio.".into());}
-            if job.cancel.load(Ordering::Acquire){return Ok(cancel_before());}
-            // Record the dispatch intent before a single credential byte reaches
-            // the helper. A partial pipe write cannot prove a remote no-op.
-            record(store,&job.aid,&job.id,|r|{if r.status!="cancelling"{r.update("running","starting","Iniciando a análise do projeto.");}Ok(())})?;
-            ai.security_dispatched(&job.id)?;*dispatched=true;
-            #[derive(Serialize)]#[serde(rename_all="camelCase")]
-            struct Wire<'a>{operation:&'a str,repository:&'a Path,output_dir:&'a Path,provider:&'a str,model:&'a str,api_key:&'a str,prompt:&'a str,max_cost_usd:f64,#[serde(skip_serializing_if="Option::is_none")]target:Option<&'a [String]>}
-            let repository=node_path(&job.scope.repo);let output=node_path(&job.output);
-            let wire=Wire{operation:"scan",repository:&repository,output_dir:&output,provider:job.provider.id(),model:&job.model,api_key:job.key.as_str(),prompt:&job.prompt,max_cost_usd:job.cap,target:(!job.scope.targets.is_empty()).then_some(&job.scope.targets)};
-            let mut bytes=Zeroizing::new(serde_json::to_vec(&wire).map_err(|_|"Falha ao preparar o SDK.")?);
-            bytes.push(b'\n');stdin.write_all(&bytes).and_then(|_|stdin.flush()).map_err(|_|INTERRUPTED)?;
-        }
-        let mut terminal=None;let mut closed=false;let mut cancelling=None;let mut last_scope_check=Instant::now();
-        loop {
-            let now=Instant::now();
-            if last_scope_check.elapsed()>=Duration::from_secs(2){
-                last_scope_check=now;let state=store.snapshot()?;
-                if scope::check_new_local_input(&state,&job.aid).and_then(|_|check_disclosure(&state,&job.aid,job.provider,&job.objective_digest,job.acknowledge_sensitive)).is_err(){job.cancel.store(true,Ordering::Release);}
-            }
-            if cancelling.is_none()&&(job.cancel.load(Ordering::Acquire)||now>=job.scope.deadline){
-                let _=stdin.write_all(b"{\"operation\":\"cancel\"}\n");let _=stdin.flush();cancelling=Some(now);
-                record(store,&job.aid,&job.id,|r|{if r.status!="cancelling"{r.update("cancelling","cancel","Encerrando a análise em andamento.");}Ok(())})?;
-            }
-            if cancelling.is_some_and(|at:Instant|at.elapsed()>Duration::from_secs(20)){return Ok(Terminal::interrupted());}
-            if !closed {match rx.recv_timeout(Duration::from_millis(100)){
-                Ok(Ok(line))=>{
-                    if terminal.is_some(){return Err(UNEXPECTED.into());}
-                    let parsed:Frame=serde_json::from_slice(&line).map_err(|_|UNEXPECTED)?;
-                    match parsed{
-                        Frame::Progress{stage,message}=>{
-                            let stage=clean(&stage,64,&job.key);let message=clean(&message,512,&job.key);
-                            record(store,&job.aid,&job.id,|r|{if r.status=="running"{r.update("running",&stage,&message);}Ok(())})?;
-                        }
-                        Frame::Error{code,message}=>terminal=Some(Terminal::failure(&format!("{} · {}",clean(&code,64,&job.key),clean(&message,1000,&job.key)))),
-                        Frame::Result{status,data}=>terminal=Some(validate_terminal(status,data,&job.key)?),
-                    }
-                }
-                Ok(Err(e))=>return Err(e),Err(mpsc::RecvTimeoutError::Disconnected)=>closed=true,Err(mpsc::RecvTimeoutError::Timeout)=>{}
-            }}else{thread::sleep(Duration::from_millis(50));}
-            if closed{if let Some(exit)=process.child.try_wait().map_err(|_|INTERRUPTED)?{
-                let t=terminal.ok_or(UNEXPECTED)?;
-                if (t.status=="completed")!=exit.success(){return Err(UNEXPECTED.into());}
-                return Ok(t);
-            }}
-        }
-    }
-}
-fn clean(text:&str,max:usize,key:&str)->String{crate::ai::redact(text,Some(key)).chars().take(max).collect()}
-fn validate_terminal(status:String,mut d:ResultData,key:&str)->Result<Terminal,String>{
-    if !matches!(status.as_str(),"completed"|"cancelled"|"failed")||d.report.len()>256*1024||d.findings.len()>100
-        ||d.coverage.scope.len()>128||d.coverage.excluded_paths.len()>1024||d.coverage.limitations.len()>128||d.cost.as_ref().and_then(|c|c.estimated_usd).is_some_and(|v|currency(v).is_err())
-        ||status=="completed"&&(d.scan_id.as_deref().is_none_or(|v|v.trim().is_empty())||d.report.trim().is_empty()){return Err(UNEXPECTED.into());}
-    d.scan_id=d.scan_id.map(|v|clean(&v,256,key));d.report=clean(&d.report,256*1024,key);
-    for f in &mut d.findings{f.id=f.id.take().map(|v|clean(&v,256,key));f.title=clean(&f.title,512,key);f.description=clean(&f.description,8192,key);f.severity=clean(&f.severity,64,key);f.location=f.location.take().map(|v|clean(&v,2048,key));}
-    for path in d.coverage.scope.iter_mut().chain(d.coverage.excluded_paths.iter_mut()){*path=clean(path,4096,key);}
-    d.coverage.summary=clean(&d.coverage.summary,4096,key);
-    for limitation in &mut d.coverage.limitations{*limitation=clean(limitation,2048,key);}
-    let error=(status=="failed").then(||"O SDK encerrou a análise com falha.".into());
-    Ok(Terminal{status,data:Some(d),error})
 }
 fn finish(store:&Store,aid:&str,id:&str,terminal:Terminal)->Result<(),String>{
     store.mutate(|s|{
@@ -513,69 +470,25 @@ fn finish(store:&Store,aid:&str,id:&str,terminal:Terminal)->Result<(),String>{
         if let Some(data)=terminal.data {
             let content=serde_json::to_string_pretty(&data).map_err(|_|"Relatório inválido.")?;
             let ev=Evidence{id:model::id(),name:"Relatório do OpenKoda".into(),sha256:core::hash(&content),content,created_at:model::now()};
-            if terminal.status=="completed"{
+            if matches!(terminal.status.as_str(),"completed"|"partial"){
                 for (index,f) in data.findings.iter().enumerate(){
                     let severity=f.severity.to_lowercase();
                     // Unknown or informational severities stay verbatim in the
                     // source report. The domain has four risk levels.
                     if f.title.trim().is_empty()||!matches!(severity.as_str(),"low"|"medium"|"high"|"critical"){continue;}
-                    let origin=f.id.clone().unwrap_or_else(||format!("{index}:{}",core::hash(&json!(f).to_string())));
-                    let fid=scope_targets::derived_id("openkoda.codex-security.finding.v1",&[aid,id,&origin]);
+                    let fid=candidate_id(aid,id,index,f);
                     if s.findings.iter().any(|f|f.id==fid){continue;}
-                    let description=match f.location.as_deref(){Some(path)=>format!("{}\n\nLocal informado pelo SDK: {path}",f.description),None=>f.description.clone()};
+                    let description=match f.location.as_deref(){Some(path)=>format!("{}\n\nLocal no código: {path}",f.description),None=>f.description.clone()};
                     s.findings.push(model::Finding{id:fid,assessment_id:aid.into(),title:f.title.clone(),severity,confidence:"candidate".into(),status:"candidate".into(),description,recommendation:String::new(),evidence_ids:vec![ev.id.clone()],created_at:model::now()});
                 }
             }
             r.result_evidence_id=Some(ev.id.clone());r.findings_total=Some(data.coverage.findings_total);a.evidence.push(ev);
         }
-        let message=terminal.error.as_deref().unwrap_or(match terminal.status.as_str(){"completed"=>"Análise concluída pelo OpenKoda.","cancelled"=>"Análise cancelada.",_=>INTERRUPTED});
+        let message=terminal.error.as_deref().unwrap_or(match terminal.status.as_str(){"completed"=>"Análise concluída pelo OpenKoda.","partial"=>"Análise parcial. Consulte a cobertura.","cancelled"=>"Análise cancelada.",_=>INTERRUPTED});
         r.update(&terminal.status,&terminal.status,message);e.message=r.message.clone();
         e.kind=if r.status=="completed"{"success"}else{"warning"}.into();a.updated_at=r.updated_at.clone();r.error=terminal.error;Ok(())
     })
 }
-fn read_lines(reader:impl Read+Send+'static,limit:usize)->mpsc::Receiver<Result<Vec<u8>,String>>{
-    let (tx,rx)=mpsc::sync_channel(8);
-    thread::spawn(move||{
-        let mut reader=BufReader::new(reader);
-        loop{let mut line=Vec::new();
-            match (&mut reader).take(limit as u64+1).read_until(b'\n',&mut line){
-                Ok(0)=>break,
-                Ok(n) if n<=limit&&line.last()==Some(&b'\n')=>{if tx.send(Ok(line)).is_err(){break;}},
-                _=>{let _=tx.send(Err("Linha do SDK inválida ou maior que o limite.".into()));break;}
-            }
-        }
-    });rx
-}
-struct Managed{
-    child:Child,
-    #[cfg(windows)] job:windows_sys::Win32::Foundation::HANDLE,
-}
-impl Managed{
-    fn new(mut child:Child)->Result<Self,String>{
-        #[cfg(windows)]{
-            use std::os::windows::io::AsRawHandle;
-            use windows_sys::Win32::{Foundation::CloseHandle,System::JobObjects::*};
-            // The helper waits for stdin; no SDK work starts until after it
-            // belongs to the job. Closing our last handle kills descendants.
-            unsafe{
-                let job=CreateJobObjectW(std::ptr::null(),std::ptr::null());
-                let mut info:JOBOBJECT_EXTENDED_LIMIT_INFORMATION=std::mem::zeroed();
-                info.BasicLimitInformation.LimitFlags=JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
-                if job.is_null()||SetInformationJobObject(job,JobObjectExtendedLimitInformation,(&info as *const JOBOBJECT_EXTENDED_LIMIT_INFORMATION).cast(),std::mem::size_of_val(&info) as u32)==0||AssignProcessToJobObject(job,child.as_raw_handle())==0{
-                    if !job.is_null(){CloseHandle(job);}let _=child.kill();let _=child.wait();
-                    return Err("O Windows recusou o controle da árvore de processos do SDK.".into());
-                }
-                Ok(Self{child,job})
-            }
-        }
-        #[cfg(not(windows))]{Ok(Self{child})}
-    }
-}
-impl Drop for Managed{fn drop(&mut self){
-    #[cfg(windows)] unsafe{windows_sys::Win32::Foundation::CloseHandle(self.job);}
-    let _=self.child.kill();let _=self.child.wait();
-}}
-
 pub(crate) fn project(mut value:Value,redactor:&dyn crate::data_projection::DataRedactor)->Value{
     // The SDK report is already bounded by its wire schema. The generic
     // 2 KiB preview would silently discard most of a reviewed Markdown report.
@@ -594,6 +507,29 @@ pub(crate) fn project(mut value:Value,redactor:&dyn crate::data_projection::Data
 #[cfg(all(test,windows))]
 mod tests {
     use super::*;
+    use std::thread;
+    struct OfflineReview;
+    impl ScanTransport for OfflineReview {
+        fn model_settings(&self,_:&AiService,_:ProviderId,_:&str,_:&str)->Result<crate::ai::ScanModel,String>{Ok(crate::ai::ScanModel::text(crate::ai::ScanRates{input:1_000_000,output:2_000_000}))}
+        fn review(&self,_:ProviderId,_:&str,key:&str,input:&str,_:&str,_:u32,_:crate::ai::ScanModel,stop:&AtomicBool,_:Instant)->Result<Value,String>{
+            assert!(!input.contains(key));
+            assert!(!input.contains("fake-private-key-of-second-configured-provider"));
+            assert!(!input.contains("UNSELECTED_SOURCE_CANARY"));
+            let prompt:Value=serde_json::from_str(input).unwrap();
+            if prompt["objective"]=="wait"{while !stop.load(Ordering::Acquire){thread::sleep(Duration::from_millis(10));}return Err("Cancelado.".into());}
+            if prompt["objective"]=="missing-terminal"{return Err("Resposta interrompida.".into());}
+            let has_test=prompt["sources"].as_array().unwrap().iter().any(|source|source["path"]=="src/test.txt");
+            let mut findings=vec![];
+            if has_test || prompt["objective"]=="unverifiable"{
+                let path=if prompt["objective"]=="unverifiable"{"../../secret.txt"}else{"src/test.txt"};
+                findings.push(json!({"path":path,"line":1,"excerpt":"fixture","title":"Fixture finding","description":"Fixture details","severity":"high"}));
+            }
+            let answer=if prompt["objective"]=="cross-file" && prompt["previousQueries"].as_array().unwrap().is_empty(){
+                json!({"queries":[{"op":"search","query":"separate"},{"op":"read","path":"outside.txt","line":1}]})
+            }else{json!({"summary":"Fixture report","findings":findings})};
+            Ok(json!({"status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":answer.to_string()}]}],"usage":{"input_tokens":20,"output_tokens":10}}))
+        }
+    }
     const KEY:&str="fixture-security-key-not-for-a-provider";
     struct Fixture{dir:tempfile::TempDir,store:Store,ai:AiService,service:Service,aid:String}
     impl Fixture{
@@ -612,24 +548,39 @@ mod tests {
             }
             let ai=AiService::new_with_budget_root(store.root.clone(),store.root.clone()).unwrap();
             ai.handle("ai.key.save",json!({"key":KEY}),&store).unwrap();ai.save_settings(json!({"model":"fixture-model"}),&store).unwrap();
-            let body=json!({"idempotencyKey":model::id(),"name":"Synthetic SDK","kind":"code","root":repo,"title":"Review","objective":"Local synthetic fixture","useRipgrep":false,"ports":[],"relativeTarget":relative,"githubImportId":import_id});
+            let body=json!({"idempotencyKey":model::id(),"name":"Synthetic source","kind":"code","root":repo,"title":"Review","objective":"Local synthetic fixture","useRipgrep":false,"ports":[],"relativeTarget":relative,"githubImportId":import_id});
             let created=store.handle(core::Request{action:"project.launch".into(),payload:body}).unwrap();
             let aid=created["assessmentId"].as_str().unwrap().to_owned();
-            let mut service=Service::new(dir.path());service.helper=dir.path().join("fixture.mjs");
-            fs::write(&service.helper,r#"import {createInterface} from 'node:readline';import {writeFileSync} from 'node:fs';import {join} from 'node:path';
-if(process.argv.includes('--check')){console.log(JSON.stringify({type:'check',available:true}));process.exit(0);}
-const input=createInterface({input:process.stdin});let job;
-input.on('line',l=>{const call=JSON.parse(l);
-if(call.operation==='cancel'){console.log(JSON.stringify({type:'result',status:'cancelled',scanId:null,report:'',findings:[],coverage:{scope:[],excludedPaths:[],additionalExclusions:0,findingsTotal:0,reportTruncated:false},cost:null}));process.exit(1);}
-job=call;if(process.argv.includes(job.apiKey)||Object.values(process.env).includes(job.apiKey))process.exit(9);
-writeFileSync(join(job.outputDir,'fixture-started'),'1');console.log(JSON.stringify({type:'progress',stage:'review',message:'synthetic progress'}));
-if(job.prompt==='wait')return;if(job.prompt==='missing-terminal')process.exit(0);
-console.log(JSON.stringify({type:'result',status:'completed',scanId:'sdk-fixture-123',report:'Fixture report: '+job.apiKey,findings:[{id:'sdk-finding-1',title:'Fixture finding',severity:'high',description:'Fixture details',location:'src/test.txt:1'}],coverage:{scope:job.target||[],excludedPaths:[],additionalExclusions:0,findingsTotal:1,reportTruncated:false},cost:{estimatedUsd:0.0123}}));process.exit(0);});"#).unwrap();
+            let service=Service{transport:Arc::new(OfflineReview),active:Mutex::new(None)};
             Self{dir,store,ai,service,aid}
         }
         fn input(&self,prompt:&str)->Value{json!({"assessmentId":self.aid,"idempotencyKey":model::id(),"prompt":prompt,"maxCostUsd":1.0})}
         fn run(&self,body:Value)->Value{let(tx,rx)=mpsc::sync_channel(1);self.service.start_worker(&self.store,&self.ai,body,&tx).unwrap();rx.recv().unwrap().unwrap()}
         fn get(&self)->Value{self.service.get(&self.store,json!({"assessmentId":self.aid})).unwrap()}
+    }
+    #[test]
+    fn composer_analysis_publishes_only_after_admission_and_reuses_the_scoped_objective(){
+        let mut f=Fixture::new(Some("src"));
+        let state=f.store.snapshot().unwrap();
+        let key=model::id();
+        let create=json!({"projectId":state.projects[0].id,"sourceAssessmentId":f.aid,"firstTurn":true,
+            "title":"Revisão da API","analysisObjective":"Revisar somente a API selecionada.","idempotencyKey":key});
+        let child=f.store.handle(core::Request{action:"project.newConversation".into(),payload:create.clone()}).unwrap();
+        assert_eq!(f.store.handle(core::Request{action:"project.newConversation".into(),payload:create}).unwrap()["id"],child["id"]);
+        assert_eq!(child["objective"],"Revisar somente a API selecionada.");
+        assert_eq!(child["target"],state.assessments[0].target);
+        let snapshot=||crate::data_host::project_response("snapshot",json!({}),&f.store,&f.ai.data_redactor()).unwrap();
+        assert_eq!(snapshot()["assessments"].as_array().unwrap().len(),1);
+        let mut body=json!({"assessmentId":child["id"],"idempotencyKey":key,"maxCostUsd":0.0});
+        let (tx,_)=mpsc::sync_channel(1);
+        assert!(f.service.start_worker(&f.store,&f.ai,body.clone(),&tx).is_err());
+        assert_eq!(snapshot()["assessments"].as_array().unwrap().len(),1);
+        body["maxCostUsd"]=json!(0.1);
+        f.run(body.clone());
+        assert_eq!(snapshot()["assessments"].as_array().unwrap().len(),2);
+        f.aid=child["id"].as_str().unwrap().to_owned();
+        assert_eq!(f.get()["scan"]["status"],"completed");
+        assert_eq!(f.run(body),f.get());
     }
     #[test]fn managed_github_checkout_runs_without_authorizing_profile_or_unattested_paths(){
         let f=Fixture::with_managed_source(None,true);
@@ -669,6 +620,18 @@ console.log(JSON.stringify({type:'result',status:'completed',scanId:'sdk-fixture
             let change=|body:crate::data_policy::DataPolicyBody|{let status=call("data.policy.status",json!({"projectId":pid}));let review=call("data.policy.prepare",json!({"projectId":pid,"expectedStateDigest":status["stateDigest"],"body":body}));call("data.policy.commit",json!({"review":review["review"],"idempotencyKey":model::id(),"acknowledgePolicy":true}));};
             let mut denied=original.clone();denied.local_raw_view.enabled=false;change(denied);
             for view in views(){assert!(!view.to_string().contains(CANARY),"SDK activity bypassed local read policy: {view}");}
+            if completed {
+                let state=f.store.snapshot().unwrap();
+                let evidence=&state.assessments[0].evidence[0];
+                let finding=&state.findings[0];
+                let snapshot=data_projection::snapshot_view(&f.store,&state,&TestRedactor).unwrap();
+                assert!(snapshot["assessments"][0]["evidence"][0]["preview"].is_null());
+                assert!(!snapshot["findings"][0]["description"].as_str().unwrap().contains("Fixture details"));
+                let mutation=crate::data_host::project_response("finding.update",json!(finding),&f.store,&TestRedactor).unwrap();
+                assert!(!mutation.to_string().contains("Fixture details"));
+                let subject=crate::data_policy::DataSubject::Evidence{assessment_id:f.aid.clone(),evidence_id:evidence.id.clone()};
+                assert!(check_report_read(&f.store,&state,&subject).is_err());
+            }
             change(original);
             for view in views(){assert!(view.to_string().contains(CANARY),"reallow must not erase canonical activity");}
             let status=call("data.policy.status",json!({"projectId":pid}));call("data.policy.revoke",json!({"projectId":pid,"expectedStateDigest":status["stateDigest"],"idempotencyKey":model::id(),"acknowledgeRevocation":true}));
@@ -771,41 +734,26 @@ console.log(JSON.stringify({type:'result',status:'completed',scanId:'sdk-fixture
         let f=Fixture::new(None);let body=f.input("complete");assert!(f.get()["scan"].is_null());
         f.run(body.clone());let stored=f.get();let scan=&stored["scan"];
         assert_eq!(scan["status"],"completed","{scan}");assert_eq!(scan["findingsTotal"],1);
-        assert_eq!(scan["result"]["scanId"],"sdk-fixture-123");assert!(!stored.to_string().contains(KEY));
+        assert_eq!(scan["result"]["scanId"],scan["id"]);assert!(!stored.to_string().contains(KEY));
         let state=f.store.snapshot().unwrap();assert_eq!(state.findings.len(),1);assert_eq!(state.findings[0].status,"candidate");
         assert_eq!(state.findings[0].evidence_ids[0],scan["resultEvidenceId"]);assert_eq!(state.assessments[0].evidence.len(),1);
         let ledger=f.ai.handle("ai.budget.status",json!({"assessmentId":f.aid}),&f.store).unwrap();
-        assert_eq!(ledger["recentChargesTotal"],1);assert_eq!(ledger["recentCharges"][0]["assumedChargeUsd"].as_str().unwrap().parse::<f64>().unwrap(),0.0123);
+        assert_eq!(ledger["recentChargesTotal"],1);assert_eq!(ledger["recentCharges"][0]["assumedChargeUsd"].as_str().unwrap(),"0.000040");
         assert_eq!(f.run(body.clone()),stored);let mut changed=body;changed["prompt"]=json!("changed");
         assert!(f.service.prepare(&f.store,&f.ai,decode(changed).unwrap()).is_err());
         assert_eq!(f.store.snapshot().unwrap().findings.len(),1);
-        assert!(f.dir.path().join("profile/security-scans").is_dir());
+        assert!(!f.dir.path().join("profile/security-scans").exists());
     }
-    #[test]fn unsupported_code_scan_provider_has_no_dispatch_budget_receipt_or_artifacts(){
-        const REASON:&str="A análise de código usa OpenAI nesta versão. Os demais provedores continuam disponíveis nas conversas.";
-        for provider in ProviderId::ALL.into_iter().filter(|p|*p!=ProviderId::OpenAI){
+    #[test]fn all_configured_providers_reach_scoped_review_and_preserve_idempotency(){
+        for provider in ProviderId::ALL{
             let f=Fixture::new(None);
             f.ai.handle("ai.key.save",json!({"provider":provider,"key":KEY}),&f.store).unwrap();
-            f.ai.handle("ai.selection.save",json!({"assessmentId":f.aid,"aiSelection":{"provider":provider,"model":"openai/gpt-6-luna"}}),&f.store).unwrap();
-            let called=f.dir.path().join("sdk-called");
-            let helper=fs::read_to_string(&f.service.helper).unwrap();
-            fs::write(&f.service.helper,format!("import {{appendFileSync}} from 'node:fs';appendFileSync({},'1');\n{helper}",serde_json::to_string(&called).unwrap())).unwrap();
-            let before=serde_json::to_value(f.store.snapshot().unwrap()).unwrap();
-            let budget=f.ai.handle("ai.budget.status",json!({"assessmentId":f.aid}),&f.store).unwrap();
+            f.ai.handle("ai.selection.save",json!({"assessmentId":f.aid,"aiSelection":{"provider":provider,"model":"fixture-model"}}),&f.store).unwrap();
             let input=f.input("complete");
-            for _ in 0..2{
-                let(tx,_rx)=mpsc::sync_channel(1);
-                let error=f.service.start_worker(&f.store,&f.ai,input.clone(),&tx).err().expect("unsupported provider must be rejected before preparing a scan");
-                assert_eq!(error,REASON,"{}",provider.id());
-            }
-            assert!(!called.exists(),"even the SDK runtime check must not run for {}",provider.id());
-            assert_eq!(f.ai.handle("ai.budget.status",json!({"assessmentId":f.aid}),&f.store).unwrap(),budget);
-            assert_eq!(serde_json::to_value(f.store.snapshot().unwrap()).unwrap(),before);
-            assert!(f.get()["scan"].is_null());
-            assert!(!f.store.root.join("security-scans").exists());
-            *f.service.check_cache.lock().unwrap()=Some((Instant::now(),json!({"available":false})));
-            let status=f.service.status(&f.store,&f.ai,json!({"assessmentId":f.aid})).unwrap();
-            assert_eq!(status["available"],false);assert_eq!(status["reason"],REASON);
+            assert_eq!(f.service.status(&f.store,&f.ai,json!({"assessmentId":f.aid})).unwrap()["available"],true);
+            f.run(input.clone());
+            let receipt=f.get();assert_eq!(receipt["scan"]["provider"],provider.id());assert_eq!(receipt["scan"]["status"],"completed","{receipt}");
+            assert_eq!(f.run(input),receipt);assert_eq!(f.store.snapshot().unwrap().findings.len(),1);
         }
     }
     #[test]fn openai_code_scan_keeps_cap_and_legacy_router_receipts_remain_replayable(){
@@ -818,32 +766,87 @@ console.log(JSON.stringify({type:'result',status:'completed',scanId:'sdk-fixture
         record(&f.store,&f.aid,id,|r|{r.provider="openrouter".into();r.model="openai/gpt-6-luna".into();Ok(())}).unwrap();
         f.ai.handle("ai.key.save",json!({"provider":"openrouter","key":KEY}),&f.store).unwrap();
         f.ai.handle("ai.selection.save",json!({"assessmentId":f.aid,"aiSelection":{"provider":"openrouter","model":"openai/gpt-6-luna"}}),&f.store).unwrap();
-        let called=f.dir.path().join("sdk-replayed");
-        fs::write(&f.service.helper,format!("import {{writeFileSync}} from 'node:fs';writeFileSync({},'1');process.exit(9);",serde_json::to_string(&called).unwrap())).unwrap();
-        *f.service.check_cache.lock().unwrap()=None;
+
         let expected=f.get();let before=serde_json::to_value(f.store.snapshot().unwrap()).unwrap();
         let budget=f.ai.handle("ai.budget.status",json!({"assessmentId":f.aid}),&f.store).unwrap();
         assert_eq!(f.run(body.clone()),expected);
         assert_eq!(f.service.cancel(&f.store,json!({"assessmentId":f.aid})).unwrap(),expected);
         assert_eq!(serde_json::to_value(f.store.snapshot().unwrap()).unwrap(),before);
         assert_eq!(f.ai.handle("ai.budget.status",json!({"assessmentId":f.aid}),&f.store).unwrap(),budget);
-        assert!(!called.exists());
         body["prompt"]=json!("different request");
         let error=f.service.prepare(&f.store,&f.ai,decode(body).unwrap()).err().unwrap();
         assert!(error.contains("mesma chave"));
     }
-    #[test]fn verbatim_tauri_paths_launch_node_and_invalid_exit_cannot_mark_available(){
-        let mut f=Fixture::new(None);
-        f.service.helper=f.service.helper.canonicalize().unwrap();
-        f.service.node=f.service.node.canonicalize().unwrap();
-        assert_eq!(f.service.check()["available"],true);
-        assert_eq!(node_path(Path::new(r"\\?\C:\Área privada\openkoda")),Path::new(r"C:\Área privada\openkoda"));
-        *f.service.check_cache.lock().unwrap()=None;
-        fs::write(&f.service.helper,"console.log(JSON.stringify({type:'check',available:true}));process.exit(1);").unwrap();
-        assert_eq!(f.service.check()["available"],false);
-        *f.service.check_cache.lock().unwrap()=None;
-        fs::write(&f.service.helper,"process.exit(1);").unwrap();
-        assert!(f.service.check()["missing"][0].as_str().unwrap().contains("sem emitir"));
+    #[test]fn follow_up_queries_only_read_the_snapshot_and_each_inference_is_metered(){
+        let f=Fixture::new(None);
+        let body=f.input("cross-file");f.run(body.clone());
+        let scan=&f.get()["scan"];assert_eq!(scan["status"],"completed","{scan}");
+        assert!(scan["events"].as_array().unwrap().iter().any(|e|e["stage"]=="source_query" && e["message"].as_str().unwrap().contains("2 trecho")));
+        let charges=f.ai.handle("ai.budget.status",json!({}),&f.store).unwrap();
+        let charge=&charges["recentCharges"][0];
+        assert_eq!(charge["resolution"]["requests"],2);
+        assert_eq!(charge["resolution"]["partialRequests"],0);
+        assert_eq!(charge["inputTokens"],40);
+        assert_eq!(charge["assumedChargeUsd"],"0.000080");
+        assert_eq!(f.run(body)["scan"]["id"],scan["id"]);
+    }
+
+    #[test]
+    fn model_queries_cannot_expand_an_assessment_to_a_sibling_file() {
+        let f = Fixture::new(Some("src"));
+        fs::write(f.dir.path().join("repo/src/second.rs"), "fn local_only() {}").unwrap();
+        fs::write(f.dir.path().join("repo/outside.txt"), "separate UNSELECTED_SOURCE_CANARY").unwrap();
+        let mut broader = f.input("cross-file");
+        broader["target"] = json!("outside.txt");
+        assert!(f.service.prepare(&f.store, &f.ai, decode(broader).unwrap()).is_err());
+
+        f.run(f.input("cross-file"));
+        let receipt = f.get();
+        let scan = &receipt["scan"];
+        assert_eq!(scan["status"], "completed", "{scan}");
+        assert!(scan["events"].as_array().unwrap().iter().any(|event|
+            event["stage"] == "source_query" && event["message"].as_str().unwrap().contains("0 trecho")));
+        assert!(!receipt.to_string().contains("UNSELECTED_SOURCE_CANARY"));
+    }
+    #[test]fn rejects_unlocated_output_while_retaining_measured_cost(){
+        let f=Fixture::new(None);f.run(f.input("unverifiable"));
+        assert_eq!(f.get()["scan"]["status"],"failed");
+        assert!(f.store.snapshot().unwrap().findings.is_empty());
+        let ledger=f.ai.handle("ai.budget.status",json!({}),&f.store).unwrap();
+        assert_eq!(ledger["recentCharges"][0]["assumedChargeUsd"],"0.000040");
+    }
+    #[test]fn enforces_the_cap_before_subsequent_batches_and_reports_partial_coverage(){
+        let f=Fixture::new(None);
+        fs::write(f.dir.path().join("repo/zz-large.txt"),"x".repeat(40*1024)).unwrap();
+        let mut body=f.input("complete");body["maxCostUsd"]=json!(0.01);
+        f.run(body);let scan=&f.get()["scan"];
+        assert_eq!(scan["status"],"partial","{scan}");
+        let ledger=f.ai.handle("ai.budget.status",json!({}),&f.store).unwrap();
+        assert_eq!(ledger["recentCharges"][0]["resolution"]["requests"],1);
+    }
+    #[test]fn scrubs_other_provider_keys_even_when_found_in_source(){
+        let f=Fixture::new(None);
+        let secret="fake-private-key-of-second-configured-provider";
+        f.ai.handle("ai.key.save",json!({"provider":"openrouter","key":secret}),&f.store).unwrap();
+        fs::write(f.dir.path().join("repo/secret-in-code.rs"),format!("let k = \"{secret}\";")).unwrap();
+        f.run(f.input("complete"));
+        let scan=&f.get()["scan"];assert_eq!(scan["status"],"partial","{scan}");
+        assert!(!scan.to_string().contains(secret));
+        assert!(scan["result"]["coverage"]["limitations"].as_array().unwrap().iter().any(|v|v.as_str().unwrap().contains("ocultados")));
+    }
+    #[test]fn explicit_retry_preserves_previous_target_and_replaying_it_does_not_bill_twice(){
+        let f=Fixture::new(None);
+        let mut body=f.input("unverifiable");body["target"]=json!("src/test.txt");
+        f.run(body);let first=f.get();
+        assert_eq!(first["scan"]["status"],"failed");
+        let mut retry=f.input("complete");retry["retryOf"]=first["scan"]["id"].clone();
+        let mut broader=retry.clone();broader["target"]=json!("outside.txt");
+        assert!(f.service.prepare(&f.store,&f.ai,decode(broader).unwrap()).is_err());
+        f.run(retry.clone());let done=f.get();
+        assert_eq!(done["scan"]["status"],"completed");assert_eq!(done["scan"]["selectedPaths"],json!(["src/test.txt"]));
+        assert_eq!(f.run(retry),done);
+        let ledger=f.ai.handle("ai.budget.status",json!({}),&f.store).unwrap();
+        assert_eq!(ledger["recentChargesTotal"],2);
     }
     #[test]fn empty_exit_cannot_confirm_and_unknown_charge_remains(){
         let f=Fixture::new(None);f.run(f.input("missing-terminal"));assert_eq!(f.get()["scan"]["status"],"failed");
@@ -868,17 +871,70 @@ console.log(JSON.stringify({type:'result',status:'completed',scanId:'sdk-fixture
         drop(job);Service::recover(&f.store).unwrap();assert_eq!(f.get()["scan"]["status"],"interrupted");
         let again=Service::new(f.dir.path());let (_,job)=again.prepare(&f.store,&f.ai,decode(body).unwrap()).unwrap();assert!(job.is_none());
     }
-    #[test]fn terminal_contract_rejects_false_completion_and_overlong_lines(){
-        let frame=json!({"type":"result","status":"completed","scanId":null,"report":"","findings":[],"coverage":{"scope":[],"excludedPaths":[],"additionalExclusions":0,"findingsTotal":0,"reportTruncated":false},"cost":null});
-        let Frame::Result{status,data}=serde_json::from_value(frame).unwrap()else{panic!()};assert!(validate_terminal(status,data,KEY).is_err());
-        assert!(read_lines(&b"overlong\n"[..],3).recv().unwrap().is_err());
+    #[test]
+    fn derived_scans_keep_source_paths_sensitivity_revocation_and_pinned_policy() {
+        use crate::data_policy::{DataCategory,DataDestination,DataPolicyService,Sensitivity,test_support::TestRedactor};
+        let f=Fixture::new(None);
+        let mut first=f.input("complete");
+        first["target"]=json!("src");
+        f.run(first);
+        f.ai.test_data_authority(&f.store,&f.aid);
+        let base=f.store.snapshot().unwrap();
+        let pid=&base.projects[0].id;
+        let svc=DataPolicyService::new();
+        let call=|method:&str,payload:Value|svc.handle(method,payload,&f.store,&TestRedactor,&crate::data_projection::RejectExternal,None).unwrap();
+        let scope=scope::current_ref(&base,&f.aid).unwrap().unwrap();
+        let subject=source_subject(&base,&scope).unwrap();
+        let fingerprint=crate::data_projection::canonical_fingerprint(&base,&subject).unwrap().unwrap();
+        let review=call("data.classification.prepare",json!({"subject":subject,"expectedSourceFingerprint":fingerprint,"sensitivity":"sensitive","reason":"Private source"}));
+        call("data.classification.commit",json!({"review":review["review"],"idempotencyKey":model::id(),"acknowledgeClassification":true}));
+        let policy=base.data_policy_revisions.last().unwrap().body.clone();
+        let update=|body:&crate::data_policy::DataPolicyBody|{
+            let status=call("data.policy.status",json!({"projectId":pid}));
+            let review=call("data.policy.prepare",json!({"projectId":pid,"expectedStateDigest":status["stateDigest"],"body":body}));
+            call("data.policy.commit",json!({"review":review["review"],"idempotencyKey":model::id(),"acknowledgePolicy":true}));
+        };
+        let adopt=||{
+            let status=call("data.policy.status",json!({"projectId":pid,"assessmentId":f.aid}));
+            let r=&status["currentRevision"];
+            let review=call("data.binding.prepare",json!({"assessmentId":f.aid,"policyRef":{"projectId":pid,"revisionId":r["id"],"digest":r["digest"]},"expectedStateDigest":status["stateDigest"]}));
+            call("data.binding.commit",json!({"review":review["review"],"idempotencyKey":model::id(),"acknowledgeProspectiveAdoption":true}));
+        };
+        const OBJECTIVE:&str="Derived private objective canary";
+        let derive=|parent:&str|{
+            let chat=f.store.handle(core::Request{action:"project.newConversation".into(),payload:json!({"projectId":pid,"sourceAssessmentId":parent,"analysisObjective":OBJECTIVE,"firstTurn":true,"title":"Synthetic analysis","idempotencyKey":model::id()})}).unwrap();
+            let id=chat["id"].as_str().unwrap().to_owned();
+            f.ai.test_data_authority(&f.store,&id);
+            id
+        };
+        let child=derive(&f.aid);
+        let grandchild=derive(&child);
+        let state=f.store.snapshot().unwrap();
+        let input=|target:Option<&str>,ack:bool|decode::<Start>(json!({"assessmentId":grandchild,"idempotencyKey":model::id(),"maxCostUsd":1.0,"target":target,"acknowledgeSensitive":ack})).unwrap();
+        assert!(approved_scope(&state,&input(None,true)).is_err());
+        assert!(approved_scope(&state,&input(Some("outside.txt"),true)).is_err());
+        assert!(approved_scope(&state,&input(Some("src/test.txt"),true)).is_ok());
+        assert_eq!(f.service.status(&f.store,&f.ai,json!({"assessmentId":grandchild})).unwrap()["requiresSensitiveConfirmation"],true);
+        assert!(f.service.prepare(&f.store,&f.ai,input(Some("src"),false)).is_err());
+        let mut revoked=state.clone();
+        revoked.assessment_scopes.iter_mut().find(|b|b.assessment_id==f.aid).unwrap().revocation=Some(scope::ScopeRevocation{
+            id:model::id(),at:model::now(),author:"local-user".into(),rationale:"Revoked source".into(),prevent_new_admissions:true,revision_id:scope.revision_id.clone()
+        });
+        assert!(check_data(&revoked,&grandchild,ProviderId::OpenAI).is_err());
+        f.run(json!({"assessmentId":grandchild,"idempotencyKey":model::id(),"maxCostUsd":1.0,"target":"src","acknowledgeSensitive":true}));
+        assert_eq!(f.service.get(&f.store,json!({"assessmentId":grandchild})).unwrap()["scan"]["status"],"completed");
+        let mut restricted=policy.clone();
+        restricted.local_raw_view.sensitivities.retain(|s|*s!=Sensitivity::Sensitive);
+        restricted.destinations.iter_mut().find(|r|r.destination==DataDestination::RemoteAi).unwrap().categories.retain(|c|*c!=DataCategory::SourceExcerpt);
+        update(&restricted);adopt();
+        assert!(check_data(&f.store.snapshot().unwrap(),&grandchild,ProviderId::OpenAI).is_err());
+        let view=crate::data_host::project_response("snapshot",json!({}),&f.store,&TestRedactor).unwrap();
+        assert!(!view.to_string().contains(OBJECTIVE));
+        let pinned=derive(&f.aid);
+        update(&policy);adopt();
+        assert!(check_data(&f.store.snapshot().unwrap(),&pinned,ProviderId::OpenAI).is_err());
     }
-    #[test]fn coverage_keeps_partial_scope_and_redacts_secrets(){
-        let raw=json!({"scanId":"known","report":"Relatório parcial","findings":[],"coverage":{"scope":[],"excludedPaths":[],"additionalExclusions":0,"findingsTotal":0,"reportTruncated":false,"summary":"39 de 252 arquivos revisados","limitations":[format!("213 arquivos fora da revisão; {}",KEY)]},"cost":null});
-        let data=validate_terminal("completed".into(),serde_json::from_value(raw).unwrap(),KEY).unwrap().data.unwrap();
-        assert_eq!(data.coverage.summary,"39 de 252 arquivos revisados");
-        assert!(data.coverage.limitations[0].contains("213 arquivos"));assert!(!data.coverage.limitations[0].contains(KEY));
-    }
+
     #[test]fn existing_chat_policy_controls_project_source_and_revocation(){
         let f=Fixture::new(None);f.ai.test_data_authority(&f.store,&f.aid);
         let mut s=f.store.snapshot().unwrap();check_data(&s,&f.aid,ProviderId::OpenAI).unwrap();

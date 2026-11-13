@@ -17,19 +17,21 @@ import { ConversationTimeline, type ChatMessage } from './ConversationTimeline';
 import { ConversationText } from './ConversationText';
 import { ChatModelPicker } from './ChatModelPicker';
 import { ChatComposerMenus } from './ChatComposerMenus';
+import ChatCodeAnalysis from './ChatCodeAnalysis';
 import SecurityScanPanel, { useSecurityScan } from './SecurityScan';
 import { scanActive, scanStateLabel } from '../security-scan';
 import './project-conversation.css';
 
-type LiveStatus={requestId:string|null;stopping:boolean;messageId?:string|null;dataReview?:{id:string;digest:string}|null};
+type LiveStatus={requestId:string|null;stopping:boolean;processingMs?:number|null;partialText?:string|null;messageId?:string|null;dataReview?:{id:string;digest:string}|null};
 type Turn=Awaited<ReturnType<typeof prepareChat>>&{budget?:BudgetReview;selection:AiSelection;line:string;opening:boolean;draft:ChatDraft;image?:string;signal:AbortSignal};
-type Props={sourceOnly?:boolean;assessment:Assessment;settings:Settings;plans?:ExecutionPlan[];action:Action;busy:boolean;onAdvanced?:()=>void;onModels?:()=>void};
-export default function ProjectConversation(props:Props){return <Conversation key={props.assessment.id} {...props}/>;}
+type Props={draftKey?:string;unsaved?:boolean;analysisSource?:Assessment;onAnalysisAdmitted?:(id:string)=>void;prepareConversation?:()=>Promise<Assessment>;onDraftSelection?:(selection:AiSelection)=>Promise<void>;sourceOnly?:boolean;assessment:Assessment;settings:Settings;plans?:ExecutionPlan[];action:Action;busy:boolean;onAdvanced?:()=>void;onModels?:()=>void};
+export default function ProjectConversation(props:Props){return <Conversation key={props.draftKey??props.assessment.id} {...props}/>;}
 
-function Conversation({sourceOnly=false,assessment,plans,action,busy,onAdvanced,onModels}:Props){
+function Conversation({draftKey,unsaved=false,analysisSource,onAnalysisAdmitted,prepareConversation,onDraftSelection,sourceOnly=false,assessment,plans,action,busy,onAdvanced,onModels}:Props){
+  const inputId=draftKey??assessment.id;
   const [messages,setMessages]=useState<ChatMessage[]>([]);
   const [acceptedMessage,setAcceptedMessage]=useState<string>();
-  const {text:draft,attachment,proposing:requestedProposal}=useChatDraft(assessment.id);
+  const {text:draft,attachment,proposing:requestedProposal}=useChatDraft(inputId);
   const proposing=!sourceOnly&&requestedProposal;
   const [mode,setMode]=useState<ApprovalMode>(()=>{
     try{const saved=localStorage.getItem('openkoda.chat.approval.'+assessment.id);return saved==='always'||saved==='scope'?saved:'risk';}catch{return 'risk';}
@@ -40,27 +42,47 @@ function Conversation({sourceOnly=false,assessment,plans,action,busy,onAdvanced,
   const mount=useRef(true),job=useRef<AbortController|undefined>(undefined),file=useRef<HTMLInputElement>(null),stamp=useRef(0);
   const scroll=useRef<HTMLDivElement>(null),transcript=useRef<HTMLDivElement>(null),stick=useRef(true),input=useRef<HTMLTextAreaElement>(null);
   const [awayFromEnd,setAwayFromEnd]=useState(false);
+  const [analyzing,setAnalyzing]=useState(false);
   const sel:AiSelection|null=assessment.aiSelection??null;
-  const scanner=useSecurityScan(assessment);
+  const scanner=useSecurityScan(assessment,!unsaved);
   const scanRunning=!!scanner.scan && scanActive(scanner.scan.status);
   const localRunning=!sourceOnly&&['queued','preparing','planning','running','pausing','canceling'].includes(assessment.status);
   const running=!!phase||!!remote.requestId||localRunning||scanRunning;
   const refresh=useCallback(async()=>{
-    if(!native)return;
+    if(!native||unsaved)return;
     const version=++stamp.current;
-    const [history,state]=await Promise.all([request<{messages:ChatMessage[]}>('ai.history',{assessmentId:assessment.id}),request<typeof remote>('ai.chat.status',{assessmentId:assessment.id})]);
+    const history=await request<{messages:ChatMessage[]}>('ai.history',{assessmentId:assessment.id});
     if(!mount.current||version!==stamp.current)return;
     if(Array.isArray(history?.messages)){
       setMessages(history.messages.filter(m=>m&&typeof m.id==='string'&&typeof m.text==='string'&&typeof m.createdAt==='string'&&['user','assistant'].includes(m.role)));
     }
-    if(state&&(state.requestId===null||typeof state.requestId==='string')&&typeof state.stopping==='boolean')setRemote(state);
-  },[assessment.id]);
+  },[assessment.id,unsaved]);
+  const liveKey=useRef<string|null|undefined>(undefined);
   useEffect(()=>{
     mount.current=true;
-    const read=()=>void refresh().catch(e=>{if(mount.current)setError(errorMessage(e));});read();
-    const timer=window.setInterval(read,phase||remote.requestId||localRunning?850:5500);
-    return ()=>window.clearInterval(timer);
-  },[refresh,phase,!!remote.requestId,localRunning]);
+    if(unsaved||!native)return;
+    let disposed=false,timer:number;
+    const poll=async()=>{
+      let active=false;
+      try{
+        const state=await request<LiveStatus>('ai.chat.status',{assessmentId:assessment.id});
+        if(disposed)return;
+        if(state&&(state.requestId===null||typeof state.requestId==='string')&&typeof state.stopping==='boolean'){
+          active=!!state.requestId;
+          setRemote(state);
+          if(liveKey.current!==state.requestId||!active){
+            liveKey.current=state.requestId;
+            await refresh();
+          }
+        }else {await refresh();}
+      }catch(e){if(!disposed){setRemote({requestId:null,stopping:false});setError(errorMessage(e));}}
+      if(!disposed)timer=window.setTimeout(poll,active||phase?350:localRunning?850:5500);
+    };
+    void poll();
+    const changed=()=>{setRemote(state=>({...state,partialText:null}));void refresh().catch(()=>{});};
+    window.addEventListener('openkoda:data-policy-change',changed);
+    return ()=>{disposed=true;window.clearTimeout(timer);window.removeEventListener('openkoda:data-policy-change',changed);};
+  },[assessment.id,refresh,phase,localRunning,unsaved]);
   useEffect(()=>()=>{mount.current=false;job.current?.abort();},[]);
   useLayoutEffect(()=>{
     const pane=scroll.current, content=transcript.current;
@@ -81,12 +103,13 @@ function Conversation({sourceOnly=false,assessment,plans,action,busy,onAdvanced,
     input.current?.focus({preventScroll:true});
   }
   async function dispatch(turn:Turn){
+    const assessmentId=turn.payload.assessmentId;
     if(turn.signal.aborted||!mount.current)return;
-    setApproval(undefined);setPhase('Aguardando resposta do provedor…');
+    setApproval(undefined);setPhase('Conectando ao provedor…');
     const payload={...turn.payload,allowRemote:true,acknowledgeSensitive:turn.context.packetPreview.requiresSensitiveConfirmation,...(turn.budget?{budgetReview:{id:turn.budget.id,digest:turn.budget.digest}}:{})};
     if(turn.operation==='operation_proposal'){
       const result=await action('ai.operation.propose',payload);
-      if(!validOperationProposal(result,assessment.id)||!turn.allowedAdapters.includes(result.adapter)||result.contextDigest!==turn.context.digest||!turn.scopeRef||!operationMatchesTargets(result,turn.payload.contextTargetRefs,turn.payload.operationTargetRef)){
+      if(!validOperationProposal(result,assessmentId)||!turn.allowedAdapters.includes(result.adapter)||result.contextDigest!==turn.context.digest||!turn.scopeRef||!operationMatchesTargets(result,turn.payload.contextTargetRefs,turn.payload.operationTargetRef)){
         throw new Error('O modelo não retornou uma verificação válida para o escopo desta conversa.');
       }
       if(mount.current)setOffer({proposal:result,scopeRef:turn.scopeRef});
@@ -98,12 +121,14 @@ function Conversation({sourceOnly=false,assessment,plans,action,busy,onAdvanced,
       const acceptMessage=(messageId:string)=>{
         if(settled||accepted)return;
         accepted=true;
-        if(!turn.opening)finishDraft(assessment.id,turn.draft);
-        if(mount.current)setAcceptedMessage(messageId);
+        window.dispatchEvent(new Event('openkoda:chat-admitted'));
+        if(!turn.opening)finishDraft(inputId,turn.draft);
+        if(mount.current){setAcceptedMessage(messageId);void refresh().catch(()=>{});}
       };
       const acknowledge=async()=>{
+        if(settled||accepted)return;
         try{
-          const state=await request<LiveStatus>('ai.chat.status',{assessmentId:assessment.id});
+          const state=await request<LiveStatus>('ai.chat.status',{assessmentId});
           const review=turn.payload.dataReview;
           if(settled||accepted||!state.requestId||typeof state.messageId!=='string'||
             !review||state.dataReview?.id!==review.id||state.dataReview?.digest!==review.digest)return;
@@ -117,7 +142,7 @@ function Conversation({sourceOnly=false,assessment,plans,action,busy,onAdvanced,
         // A fast provider refusal can finish between status polls. The exact
         // review and durable user-message link also confirm that admission.
         if(!accepted)try{
-          const history=await request<{messages:ChatMessage[];requests?:{dataReviewRef?:{id:string;digest:string};chatMessageIds?:unknown}[]}>('ai.history',{assessmentId:assessment.id});
+          const history=await request<{messages:ChatMessage[];requests?:{dataReviewRef?:{id:string;digest:string};chatMessageIds?:unknown}[]}>('ai.history',{assessmentId});
           const review=turn.payload.dataReview;
           const receipt=history.requests?.find(receipt=>receipt.dataReviewRef?.id===review.id&&receipt.dataReviewRef?.digest===review.digest);
           const ids=Array.isArray(receipt?.chatMessageIds)?receipt.chatMessageIds:[];
@@ -127,7 +152,7 @@ function Conversation({sourceOnly=false,assessment,plans,action,busy,onAdvanced,
         throw error;
       }finally{settled=true;window.clearInterval(timer);}
     }
-    if(!turn.opening)finishDraft(assessment.id,turn.draft);
+    if(!turn.opening)finishDraft(inputId,turn.draft);
     if(mount.current)await refresh();
   }
   async function prepare(line:string,opening=false){
@@ -136,14 +161,16 @@ function Conversation({sourceOnly=false,assessment,plans,action,busy,onAdvanced,
     const active=()=>!controller.signal.aborted&&mount.current;
     let waiting=false;
     const picked=opening?undefined:attachment;
-    const submittedDraft=readDraft(assessment.id);
+    const submittedDraft=readDraft(inputId);
     const message=picked?.text!==undefined?line+'\n\nArquivo selecionado ('+picked.name+'):\n'+picked.text:line;
     setError('');setAcceptedMessage(undefined);setPendingLine(line);setPhase('Preparando o contexto…');
     try{
       if(new TextEncoder().encode(message).byteLength>8000)throw new Error('A mensagem e o texto anexado podem ter até 8.000 bytes. Envie um trecho menor.');
-      const prepared=await prepareChat(assessment,sel,message,{image:picked?.image,file:!!picked,signal:controller.signal,propose:proposing&&!opening});
+      const target=prepareConversation?await prepareConversation():assessment;
       if(!active())return;
-      const budget=await request<BudgetStatus>('ai.budget.status',{assessmentId:assessment.id});
+      const prepared=await prepareChat(target,sel,message,{image:picked?.image,file:!!picked,signal:controller.signal,propose:proposing&&!opening});
+      if(!active())return;
+      const budget=await request<BudgetStatus>('ai.budget.status',{assessmentId:target.id});
       if(!budget||typeof budget.enabled!=='boolean'||budget.degraded)throw new Error('Verifique o orçamento nas configurações antes de enviar.');
       let estimate:BudgetReview|undefined;
       if(budget.enabled){
@@ -158,7 +185,7 @@ function Conversation({sourceOnly=false,assessment,plans,action,busy,onAdvanced,
       }else await dispatch(turn);
     }catch(e){if(active()){
       setError(errorMessage(e));
-      if(opening&&readDraft(assessment.id)===submittedDraft&&!submittedDraft.text)updateDraft(assessment.id,{text:line});
+      if(opening&&readDraft(inputId)===submittedDraft&&!submittedDraft.text)updateDraft(inputId,{text:line});
     }}
     finally{if(!waiting&&job.current===controller){job.current=undefined;if(mount.current){setPhase('');setPendingLine('');void refresh().catch(()=>{});}}}
   }
@@ -185,7 +212,7 @@ function Conversation({sourceOnly=false,assessment,plans,action,busy,onAdvanced,
     if(stopping)return;
     setStopping(true);
     try{
-      if(remote.requestId||phase==='Aguardando resposta do provedor…'){
+      if(remote.requestId||phase==='Conectando ao provedor…'){
         const live=await request<typeof remote>('ai.chat.status',{assessmentId:assessment.id});
         if(live.requestId)await request('ai.chat.stop',{assessmentId:assessment.id,requestId:live.requestId});
         else throw new Error('A solicitação está mudando de etapa. Confira o estado antes de interromper.');
@@ -198,7 +225,7 @@ function Conversation({sourceOnly=false,assessment,plans,action,busy,onAdvanced,
   }
   async function attach(f?:File){
     if(!f)return;setLoadingFile(true);setError('');
-    try{const prepared=await readChatAttachment(f);if(mount.current)updateDraft(assessment.id,{attachment:prepared});}catch(e){if(mount.current)setError(errorMessage(e));}finally{if(mount.current)setLoadingFile(false);}
+    try{const prepared=await readChatAttachment(f);if(mount.current)updateDraft(inputId,{attachment:prepared});}catch(e){if(mount.current)setError(errorMessage(e));}finally{if(mount.current)setLoadingFile(false);}
   }
   const disabled=busy||running||!!approval||loadingFile;
   const shortcut=composerShortcut();
@@ -208,23 +235,31 @@ function Conversation({sourceOnly=false,assessment,plans,action,busy,onAdvanced,
     try{localStorage.setItem('openkoda.chat.approval.'+assessment.id,next);}catch{/* The choice still applies to this conversation. */}
   }
   const TargetIcon=assessment.kind==='web'?Globe:assessment.kind==='network'?Network:Folder;
-  const workLabel=remote.stopping||stopping?'Interrompendo o trabalho…':phase|| (remote.requestId?'Aguardando resposta do provedor…':localRunning?statusLabels[assessment.status]:'');
+  const processing=typeof remote.processingMs==='number' && remote.requestId;
+  const seconds=Math.floor((remote.processingMs??0)/1000);
+  const elapsed=seconds<60?seconds+' s':Math.floor(seconds/60)+' min '+(seconds%60)+' s';
+  const partial=remote.requestId&&typeof remote.partialText==='string'?remote.partialText:'';
+  const workLabel=remote.stopping||stopping?'Interrompendo o trabalho…':processing
+    ? (partial?'Respondendo':'Processando')+' · '+elapsed
+    : phase|| (remote.requestId?'Conectando ao provedor…':localRunning?statusLabels[assessment.status]:'');
   return <section className="project-chat" aria-label="Conversa do projeto">
     <div className="project-chat-log" tabIndex={0} role="region" aria-label="Histórico da conversa" ref={scroll}
       onScroll={e=>{const el=e.currentTarget;if(!el.clientHeight)return;stick.current=el.scrollHeight-el.clientHeight-el.scrollTop<=64;setAwayFromEnd(!stick.current);}}
       onClickCapture={e=>{if(e.target instanceof Element && e.target.closest('summary'))stick.current=false;}}>
-      <div className="project-chat-transcript" ref={transcript}><header className="chat-heading">
+      <div className="project-chat-transcript" ref={transcript}>{!unsaved&&!draftKey&&(!sourceOnly||!!scanner.scan||messages.length>0)&&<header className="chat-heading">
         <div><h2>{assessment.title}</h2><span className="chat-state" title={scanner.scan?'Estado da análise do OpenKoda':'Estado da avaliação'} data-state={scanner.scan?.status??assessment.status}>{scanner.scan?scanStateLabel[scanner.scan.status]:statusLabels[assessment.status]}</span></div>
         <p title={assessment.target}><TargetIcon size={14}/><span>{assessment.target}</span></p>
-      </header>
-      <ConversationTimeline events={assessment.events} messages={messages}/>
-      <SecurityScanPanel assessment={assessment} controller={scanner}/>
+      </header>}
+      {scanner.scan&&assessment.events.some(e=>e.kind==='chat_scan_first_turn')&&<article className="project-chat-turn user"><header><strong>Você</strong></header><p>{assessment.objective}</p></article>}
+      <ConversationTimeline events={assessment.events.filter(e=>e.kind!=='chat_scan_first_turn'&&!e.kind.startsWith('chat_first_turn')&&(!sourceOnly||!e.message.startsWith('Conversa criada.')))} messages={messages}/>
+      {(!draftKey && (!sourceOnly || !assessment.events.some(e=>e.kind.startsWith('chat_first_turn')||e.message.startsWith('Conversa criada.'))) || !!scanner.scan || !!scanner.error)&&<SecurityScanPanel assessment={assessment} controller={scanner}/>}
       {assessment.summary&&<section className="chat-summary"><h3>Resultado da análise</h3><ConversationText text={assessment.summary}/></section>}
       {!sourceOnly&&offer&&<ChatVerification proposal={offer.proposal} scopeRef={offer.scopeRef} action={action} disabled={busy||running||!!approval} onPrepared={()=>setOffer(undefined)}/>}
       {!sourceOnly&&<ProjectKaliTools assessment={assessment} action={action} busy={busy||running||!!approval}/>}
       {!sourceOnly&&(plans??[]).filter(plan=>plan.assessmentId===assessment.id&&['proposed','approved'].includes(plan.status)&&Date.parse(plan.expiresAt)>Date.now()).map(plan=>
         <ChatPlanApproval key={plan.id} plan={plan} mode={mode} disabled={busy||!!phase||!!remote.requestId||!!approval} action={action}/>)}
       {pendingLine&&!messages.some(message=>message.id===acceptedMessage)&&<article className="project-chat-turn user"><header><strong>Você</strong></header><p>{pendingLine}</p></article>}
+      {partial&&<article className="project-chat-turn assistant" data-live-answer={remote.requestId} aria-label="Resposta em andamento"><header><strong>OpenKoda</strong></header><ConversationText text={partial}/></article>}
       {workLabel&&<p className="chat-progress" role="status"><LoaderCircle size={16}/>{workLabel}</p>}
       {approval&&<section className="chat-approval"><ShieldCheck size={20}/><h3>Autorizar envio para {providers[approval.selection.provider].name}?</h3><p>{approval.selection.model} · {approval.context.bytes.toLocaleString('pt-BR')} bytes preparados{approval.budget?' · reserva de '+usd(approval.budget.reservedUsd):''}.</p>{approval.image&&<img alt="Imagem selecionada para envio" src={'data:image/jpeg;base64,'+approval.image}/>}
         <details><summary>Ver conteúdo do envio</summary>{approval.context.packetPreview.prompts.map(p=><pre key={p.index}>{p.instructions}{'\n'}{p.prompt.replace(/"reviewedJpeg":"[A-Za-z0-9+/=]+"/g,'"imagem":"Prévia acima"')}</pre>)}</details>
@@ -234,21 +269,24 @@ function Conversation({sourceOnly=false,assessment,plans,action,busy,onAdvanced,
     <div className="project-chat-bottom">
       {awayFromEnd&&<button type="button" className="chat-jump" aria-label="Voltar à mensagem mais recente" title="Voltar à mensagem mais recente" onClick={followEnd}><ArrowDown size={17}/></button>}
       {error&&<div className="chat-error" role="alert">{error}{onAdvanced&&<button type="button" onClick={onAdvanced}>Revisar avaliação</button>}</div>}
-      <form className="project-composer" onSubmit={e=>{e.preventDefault();if(canSend)void prepare(draft);}}>
-        {attachment&&<div className="chat-attachment">{attachment.image?<img alt="Anexo selecionado" src={'data:image/jpeg;base64,'+attachment.image}/>:<FileText size={16}/>}<span>{attachment.name}</span><button type="button" disabled={disabled} onClick={()=>updateDraft(assessment.id,{attachment:undefined})} aria-label="Remover anexo"><X size={14}/></button></div>}
-        {proposing&&<div className="chat-attachment"><ListChecks size={16}/><span>Verificação</span><button type="button" disabled={disabled} aria-label="Voltar à conversa" onClick={()=>updateDraft(assessment.id,{proposing:false})}><X size={14}/></button></div>}
-        <textarea ref={input} aria-label="Mensagem da conversa" rows={2} maxLength={8000} value={draft} disabled={!!approval} onChange={e=>updateDraft(assessment.id,{text:e.target.value})} placeholder={proposing?'O que você quer verificar neste alvo?':'Envie uma mensagem sobre o projeto…'} onKeyDown={e=>{
+      {analyzing&&sel&&onAnalysisAdmitted?<ChatCodeAnalysis draftId={inputId} source={analysisSource} selection={sel} projectId={assessment.projectId}
+        newConversation={!unsaved} action={action} onClose={()=>setAnalyzing(false)} onAdmitted={onAnalysisAdmitted}/>:
+      <><form className="project-composer" onSubmit={e=>{e.preventDefault();if(canSend)void prepare(draft);}}>
+        {attachment&&<div className="chat-attachment">{attachment.image?<img alt="Anexo selecionado" src={'data:image/jpeg;base64,'+attachment.image}/>:<FileText size={16}/>}<span>{attachment.name}</span><button type="button" disabled={disabled} onClick={()=>updateDraft(inputId,{attachment:undefined})} aria-label="Remover anexo"><X size={14}/></button></div>}
+        {proposing&&<div className="chat-attachment"><ListChecks size={16}/><span>Verificação</span><button type="button" disabled={disabled} aria-label="Voltar à conversa" onClick={()=>updateDraft(inputId,{proposing:false})}><X size={14}/></button></div>}
+        <textarea ref={input} aria-label="Mensagem da conversa" rows={2} maxLength={8000} value={draft} disabled={!!approval} onChange={e=>updateDraft(inputId,{text:e.target.value})} placeholder={proposing?'O que você quer verificar neste alvo?':'Envie uma mensagem sobre o projeto…'} onKeyDown={e=>{
           if(!matchesComposerShortcut(e.nativeEvent,composerShortcut()))return;
           e.preventDefault();
           if(!e.repeat && canSend)e.currentTarget.form?.requestSubmit();
         }}/>
         <div className="project-composer-tools"><input type="file" hidden ref={file} onChange={e=>{void attach(e.target.files?.[0]);e.currentTarget.value='';}}/>
           <ChatComposerMenus mode={mode} onMode={changeApproval} proposing={proposing} hasAttachment={!!attachment} disabled={disabled} canPropose={native&&!sourceOnly}
-            onAttach={()=>file.current?.click()} onPropose={()=>updateDraft(assessment.id,{proposing:!proposing})}/>
-          <ChatModelPicker value={sel} disabled={disabled} onModels={onModels} onChange={async choice=>{await action('ai.selection.save',{assessmentId:assessment.id,aiSelection:choice});}}/>
+            onAnalyze={sourceOnly&&native&&sel&&onAnalysisAdmitted?()=>setAnalyzing(true):undefined}
+            onAttach={()=>file.current?.click()} onPropose={()=>updateDraft(inputId,{proposing:!proposing})}/>
+          <ChatModelPicker value={sel} disabled={disabled} onModels={onModels} onChange={async choice=>{if(onDraftSelection){await onDraftSelection(choice);return;}await action('ai.selection.save',{assessmentId:assessment.id,aiSelection:choice});}}/>
           {running?<button className="chat-send" type="button" disabled={stopping||remote.stopping||scanner.busy||scanner.scan?.status==='cancelling'} aria-label="Cancelar trabalho" title="Cancelar trabalho" onClick={()=>void stop()}><Square size={14} fill="currentColor"/></button>:<button className="chat-send" type="submit" disabled={!canSend} aria-label="Enviar mensagem" aria-keyshortcuts={shortcut==='enter'?'Enter':'Control+Enter Meta+Enter'} title={shortcut==='enter'?'Enviar mensagem (Enter)':'Enviar mensagem (Ctrl + Enter)'}><ArrowUp size={18}/></button>}
         </div></form>
-        <small>{sel?providers[sel.provider].name+' recebe a mensagem e o contexto do projeto'+(proposing?'.':', incluindo turnos recentes e o anexo escolhido.'):'Escolha um modelo ativo para conversar.'}</small>
+        <small>{sel?providers[sel.provider].name+' recebe a mensagem e o contexto do projeto'+(proposing?'.':', incluindo turnos recentes e o anexo escolhido.'):'Escolha um modelo ativo para conversar.'}</small></>}
     </div>
   </section>;
 }

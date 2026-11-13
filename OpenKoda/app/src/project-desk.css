@@ -66,6 +66,11 @@
 .desk-location>div { min-width:0; }
 .desk-location h1 { margin:0; font-size:.94rem; line-height:1.4; }
 .desk-location small { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.desk-chat-title,.desk-title-editor { display:flex;align-items:center;gap:6px;max-width:100%; }
+.desk-chat-title,.desk-title-editor button { border:0;background:transparent;color:var(--muted);padding:2px;border-radius:4px; }
+.desk-chat-title svg { flex:none; }
+.desk-chat-title:hover,.desk-title-editor button:hover { background:var(--selection);color:var(--text); }
+.desk-title-editor input { min-width:0;width:22ch;max-width:100%; }
 .desk-location-icon { color:var(--muted); }
 .desk-tree-toggle { display:grid; place-items:center; background:none; border:0; color:var(--muted); border-radius:8px; height:2.1rem; width:2.1rem; flex:none; }
 .desk-tree-toggle:hover,.desk-actions button[aria-expanded=true] { color:var(--text); background:var(--selection); }

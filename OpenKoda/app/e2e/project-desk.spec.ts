@@ -33,9 +33,10 @@ test('o primeiro projeto abre em conversa e os painéis compartilham o espaço c
   await panel.getByRole('button',{name:'Fechar painel'}).click();
   await expect(launcher).toBeFocused();
   await tree.getByRole('button',{name:'Criar nova conversa em portal'}).click();
-  await expect(tree.getByRole('button',{name:'Conversa 2',exact:true})).toHaveAttribute('aria-current','page');
+  await expect(page.getByLabel('Mensagem da conversa')).toHaveValue('');
+  await expect(tree.locator('.tree-chat')).toHaveCount(1);
   await page.reload();
-  await expect(tree.getByRole('button',{name:'Conversa 2',exact:true})).toBeVisible();
+  await expect(tree.locator('.tree-chat')).toHaveCount(1);
 });
 
 test('a modalidade define o alvo e a largura reduzida conserva os controles',async({page})=>{

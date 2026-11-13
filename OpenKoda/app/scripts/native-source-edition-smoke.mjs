@@ -95,9 +95,11 @@ try{
   const status=await invoke(page,'security.status',{assessmentId:created.assessmentId});
   result.runtime={...status.runtime,provider:status.provider,hasApiKey:status.hasApiKey,reason:status.reason};
   assert.equal(status.runtime?.available,true,'Diagnóstico local: '+JSON.stringify(status.runtime?.missing));
+  assert.equal(status.runtime.engine,'isolated-source');
+  assert.equal(status.runtime.version,version);
   assert.equal(status.available,false);assert.equal(status.hasApiKey,false);
   assert.deepEqual(await invoke(page,'security.scan.get',{assessmentId:created.assessmentId}),{scan:null});
-  result.checks.push('SDK disponível no host, perfil sintético sem credencial e nenhuma análise iniciada.');
+  result.checks.push('Motor de revisão estática disponível no host, perfil sintético sem credencial e nenhuma análise iniciada.');
   const next=await invoke(page,'project.newConversation',{projectId:created.projectId,sourceAssessmentId:created.assessmentId,
     title:'Segunda sessão sintética',idempotencyKey:randomUUID()});
   assert.notEqual(next.id,created.assessmentId);
@@ -124,7 +126,7 @@ try{
   await panel.getByRole('tab',{name:'Configurações',exact:true}).click();
   await expect(panel.getByRole('heading',{name:'Pasta do projeto'})).toBeVisible();
   await expect(panel.getByText('Alvos e escopo',{exact:true})).toHaveCount(0);
-  result.checks.push('Comparação de duas conversas usa registros do SDK e a configuração conserva a pasta local.');
+  result.checks.push('Comparação de duas conversas mostra os registros de análise do OpenKoda e a configuração conserva a pasta local.');
   assert.equal(digest(await readFile(source)),sourceSha256);
   result.checks.push('Reabertura preserva projeto, conversa e fonte; URL técnica continua no workspace de código.');
   result.passed=true;

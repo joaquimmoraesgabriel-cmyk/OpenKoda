@@ -123,6 +123,16 @@ pub(crate) fn replace_evidence(store:&Store,s:&Snapshot,value:Value,redactor:&dy
     match value{
         Value::Array(items)=>Ok(Value::Array(items.into_iter().map(|v|replace_evidence(store,s,v,redactor)).collect::<Result<_,_>>()?)),
         Value::Object(mut object)=>{
+            if object.contains_key("evidenceIds") && object.contains_key("description") && object.contains_key("severity"){
+                if let Some(a)=s.assessments.iter().find(|a|Some(a.id.as_str())==object.get("assessmentId").and_then(Value::as_str)){
+                    let hidden=crate::security_scan::restricted_results(store,s,a);
+                    if object.get("id").and_then(Value::as_str).is_some_and(|id|hidden.findings.contains(id)){
+                        let mut view=Value::Object(object);
+                        crate::data_projection::hide_finding_text(&mut view);
+                        return Ok(view);
+                    }
+                }
+            }
             if object.contains_key("content")&&object.contains_key("sha256"){
                 if let Some(id)=object.get("id").and_then(Value::as_str){
                     if let Some(a)=s.assessments.iter().find(|a|a.evidence.iter().any(|e|e.id==id)){
@@ -188,6 +198,71 @@ fn archive_view(action: &str, raw: Value, redactor: &dyn DataRedactor) -> Value 
     view
 }
 
+/// Evaluate the current and pinned local policy against every contributor of the
+/// admitted request. Reclassification cannot silently weaken an old receipt.
+pub(crate) fn local_chat_allowed(s:&Snapshot,aid:&str,receipt:Option<&DataUseReceipt>)->bool {
+    let Some(a)=s.assessments.iter().find(|a|a.id==aid) else {return false};
+    let mut levels=std::collections::BTreeSet::new();
+    if let Some(receipt)=receipt {
+        if receipt.assessment_id.as_deref()!=Some(aid)||receipt.destination!=DataDestination::RemoteAi{return false;}
+        levels.insert(receipt.selection.package_sensitivity);
+        levels.extend(receipt.human_text.iter().map(|h|h.sensitivity));
+        for version in &receipt.subjects {
+            let recorded=version.classification_ref.as_ref().and_then(|r|s.data_classifications.iter().find(|c|c.id==r.id&&c.digest==r.digest));
+            levels.insert(recorded.map_or(Sensitivity::Unclassified,|c|c.sensitivity));
+            let current=current_classification(s,&version.subject);
+            levels.insert(current.map_or(Sensitivity::Unclassified,|c|c.sensitivity));
+        }
+        let derived=DataSubject::Derived{assessment_id:a.id.clone(),producer:DerivedProducer::AiRequest,object_id:receipt.effect.id.clone()};
+        if let Some(c)=current_classification(s,&derived){levels.insert(c.sensitivity);}
+    } else {levels.insert(Sensitivity::Unclassified);}
+    let mut spec=DataUseSpec::new(DataOperation::DerivedRead,DataDestination::LocalRawView,vec![a.project_id.clone()],Some(a.id.clone()));
+    let digest=receipt.map_or_else(||core::hash(aid),|r|r.input_sha256.clone());
+    spec.requests.push(RequestFingerprint{index:0,input_sha256:digest.clone(),output_sha256:digest,input_bytes:0,output_bytes:0});
+    levels.into_iter().all(|level|{
+        spec.selection.package_sensitivity=level;
+        DataPolicyService::check_use(s,&spec).is_ok_and(|d|d.allowed)
+    })
+}
+
+fn first_turn_title(question:&str)->String {
+    let mut words=question.split_whitespace();
+    let summary=words.by_ref().take(9).collect::<Vec<_>>().join(" ");
+    if words.next().is_some() || summary.chars().count()>68 {
+        format!("{}…",summary.chars().take(67).collect::<String>().trim_end())
+    } else {summary}
+}
+
+fn published_titles(store:&Store,state:&Snapshot,pending:&std::collections::HashMap<&str,Option<&str>>,redactor:&dyn DataRedactor)
+    ->Result<std::collections::HashMap<String,String>,String>{
+    let mut titles=std::collections::HashMap::new();
+    let Some(db)=(JournalResolver{store}).database("assistant.sqlite3")? else {return Ok(titles)};
+    // One pass over the assistant journal; SQLite's MIN(rowid) associates the
+    // non-aggregate columns with the first accepted message in each conversation.
+    let mut q=db.prepare("SELECT assessment,id,text,MIN(rowid) FROM messages WHERE role='user' GROUP BY assessment").map_err(failure)?;
+    let mut records=q.query([]).map_err(failure)?;
+    let mut permissions=std::collections::HashMap::new();
+    for receipt in &state.data_use_receipts {
+        if receipt.destination==DataDestination::RemoteAi&&receipt.assessment_id.as_deref().is_some_and(|aid|pending.contains_key(aid)) {
+            permissions.insert(crate::scope_targets::derived_id("openkoda.chat.message.v1",&[&receipt.effect.id,"user"]),receipt);
+        }
+    }
+    while let Some(record)=records.next().map_err(failure)? {
+        let aid:String=record.get(0).map_err(failure)?;
+        let Some(manual_title)=pending.get(aid.as_str()) else {continue};
+        let mid:String=record.get(1).map_err(failure)?;
+        let allowed=permissions.get(&mid).is_some_and(|receipt|local_chat_allowed(state,&aid,Some(receipt)));
+        let title=if !allowed {"Conversa".to_owned()} else if let Some(title)=manual_title {
+            project_text(title,redactor)
+        } else {
+            let text:String=record.get(2).map_err(failure)?;
+            first_turn_title(&project_text(&text,redactor))
+        };
+        titles.insert(aid,title);
+    }
+    Ok(titles)
+}
+
 pub(crate) fn project_response(action:&str,value:Value,store:&Store,redactor:&dyn DataRedactor)->Result<Value,String>{
     if matches!(action,"project.options.get"|"project.options.save"){
         return crate::project_options::response(value,redactor);
@@ -196,6 +271,47 @@ pub(crate) fn project_response(action:&str,value:Value,store:&Store,redactor:&dy
         let has_key=value["settings"]["hasApiKey"].clone();
         let (state,bindings)=store.work_read(|db,state|Ok((state.clone(),crate::work_store::plan_bindings_view(db)?)))?;
         let mut output=snapshot_view(store,&state,redactor)?;
+        let mut private_scan_objectives=std::collections::HashSet::new();
+        // A scope may be prepared before the first message passes its data and
+        // budget checks. Only a committed user turn publishes that conversation.
+        if let Some(rows)=output["assessments"].as_array_mut() {
+            let scan_chats=state.assessments.iter().filter(|a|a.events.iter().any(|e|e.kind=="chat_scan_first_turn"))
+                .map(|a|a.id.as_str()).collect::<std::collections::HashSet<_>>();
+            rows.retain_mut(|row|{
+                if !row["id"].as_str().is_some_and(|id|scan_chats.contains(id)){return true;}
+                let scan=row["events"].as_array().and_then(|events|events.iter().find_map(|e|e["securityScan"].as_object()));
+                if scan.is_none_or(|r|r.get("contentUnavailable").and_then(Value::as_bool)==Some(true)){
+                    private_scan_objectives.insert(row["id"].as_str().unwrap_or_default().to_owned());
+                }
+                let Some(scan)=scan else{return false};
+                if scan.get("contentUnavailable").and_then(Value::as_bool)==Some(true){
+                    row["title"]=json!("Análise de código");
+                    row["objective"]=json!("Objetivo oculto pela política de dados do projeto.");
+                }
+                true
+            });
+            let pending=state.assessments.iter().filter_map(|a|{
+                let marker=a.events.iter().find(|e|matches!(e.kind.as_str(),"chat_first_turn"|"chat_first_turn_named"))?;
+                Some((a.id.as_str(),(marker.kind=="chat_first_turn_named").then_some(a.title.as_str())))
+            }).collect::<std::collections::HashMap<_,_>>();
+            if !pending.is_empty() {
+                let mut titles=published_titles(store,&state,&pending,redactor).unwrap_or_default();
+                let mut hidden=std::collections::HashSet::new();
+                for row in rows.iter_mut() {
+                    let Some(id)=row["id"].as_str().filter(|id|pending.contains_key(*id)) else {continue};
+                    if let Some(title)=titles.remove(id){row["title"]=json!(title);}
+                    else {hidden.insert(id.to_owned());}
+                }
+                rows.retain(|row|row["id"].as_str().is_none_or(|id|!hidden.contains(id)));
+            }
+        }
+        if let Some(revisions)=output["scopeRevisions"].as_array_mut(){
+            for revision in revisions{
+                if revision["assessmentId"].as_str().is_some_and(|id|private_scan_objectives.contains(id)){
+                    revision["body"]["objective"]=json!("Objetivo oculto pela política de dados do projeto.");
+                }
+            }
+        }
         output["settings"]["hasApiKey"]=has_key;
         output["workPlanBindings"]=project_value(json!(bindings),redactor);
         return Ok(output);
@@ -206,11 +322,50 @@ pub(crate) fn project_response(action:&str,value:Value,store:&Store,redactor:&dy
         ||matches!(action,"ai.context"|"ai.budget.preview"|"evidence.sourcePreview"|"report.prepare"|"backup.prepare"|"kali.data.prepare"|"mcp.request"|"capture.access.prepare"|"capture.access.read"){
         return Ok(value);
     }
+    // A chat reply can be larger than the generic 2 KiB label/preview limit.
+    // Redact the complete message before producing either the live or durable view.
+    let long_text=|text:&str| {
+        if redactor.mode()==RedactionMode::MetadataOnly {return project_text(text,redactor);}
+        redactor.redact(text).text.chars().take(32768).collect()
+    };
+    if matches!(action,"ai.chat.status"|"ai.chat.stop") {
+        let partial=value.get("partialText").and_then(Value::as_str).map(long_text);
+        let mut view=project_value(value,redactor);
+        if let Some(partial)=partial {view["partialText"]=json!(partial);}
+        return Ok(view);
+    }
     let state=store.snapshot()?;
+    let chat_texts=if action=="ai.history" {
+        let aid=value["assessmentId"].as_str().unwrap_or_default();
+        let mut permissions=std::collections::HashMap::new();
+        // Message history and request history each have their own pagination.
+        // Older admitted turns can still be visible after many other request types.
+        for receipt in state.data_use_receipts.iter().filter(|r|r.assessment_id.as_deref()==Some(aid)&&r.destination==DataDestination::RemoteAi) {
+            for role in ["assistant","user"] {
+                let mid=crate::scope_targets::derived_id("openkoda.chat.message.v1",&[&receipt.effect.id,role]);
+                permissions.insert(mid,receipt);
+            }
+        }
+        let legacy_allowed=local_chat_allowed(&state,aid,None);
+        value["messages"].as_array().map(|rows|rows.iter().map(|m|m["text"].as_str().map(|text|{
+            if permissions.get(m["id"].as_str().unwrap_or_default()).map_or(legacy_allowed,|r|local_chat_allowed(&state,aid,Some(r))){long_text(text)}
+            else {"[Mensagem oculta pela política de dados do projeto.]".to_owned()}
+        })).collect::<Vec<_>>())
+    } else {None};
+    let mut value=value;
+    if action=="ai.ask" {
+        let receipt=state.data_use_receipts.iter().find(|r|Some(r.effect.id.as_str())==value["requestId"].as_str()&&r.destination==DataDestination::RemoteAi);
+        if !receipt.is_some_and(|r|r.assessment_id.as_deref().is_some_and(|aid|local_chat_allowed(&state,aid,Some(r)))) {
+            value["text"]=json!("[Mensagem oculta pela política de dados do projeto.]");
+        }
+    }
     let replaced=replace_evidence(store,&state,value,redactor)?;
     let mut projected=if action.starts_with("environment.archive.") || action.starts_with("environment.removal.") {
         archive_view(action, replaced, redactor)
     } else { project_value(replaced,redactor) };
+    if let (Some(texts),Some(rows))=(chat_texts,projected.get_mut("messages").and_then(Value::as_array_mut)) {
+        for (text,row) in texts.into_iter().zip(rows) {if let Some(text)=text {row["text"]=json!(text);}}
+    }
     if let Some(object)=projected.as_object_mut(){
         // An evidence mutation returns the same EvidenceView as snapshot/MCP.
         // Keep its precise redaction and omitted-field facts instead of replacing

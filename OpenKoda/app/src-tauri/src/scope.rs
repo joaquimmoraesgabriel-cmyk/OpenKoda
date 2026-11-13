@@ -70,7 +70,15 @@ pub struct ScopeOrigin {pub source_assessment_id:String,pub source_scope:Option<
 pub struct AssessmentScope {pub id:String,pub assessment_id:String,pub generation:u64,pub current_revision_id:Option<String>,pub frozen:Option<ScopeFreeze>,pub revocation:Option<ScopeRevocation>,pub origin:Option<ScopeOrigin>}
 #[derive(Clone,Debug,Serialize,Deserialize,PartialEq,Eq)]
 #[serde(rename_all="camelCase",deny_unknown_fields)]
-pub struct ScopeResult {pub assessment_id:String,pub scope_id:String,pub revision_id:Option<String>}
+pub struct ScopeResult {pub assessment_id:String,pub scope_id:String,pub revision_id:Option<String>,
+    #[serde(default,skip_serializing_if="Option::is_none")]pub conversation_source:Option<ConversationSource>}
+#[derive(Clone,Debug,Serialize,Deserialize,PartialEq,Eq)]
+#[serde(rename_all="camelCase",deny_unknown_fields)]
+pub struct ConversationSource {
+    pub scope:ScopeRef,
+    pub scan_id:Option<String>,
+    pub policy:Option<crate::data_policy::DataPolicyRef>,
+}
 #[derive(Clone,Debug,Serialize,Deserialize,PartialEq,Eq)]
 #[serde(rename_all="camelCase",deny_unknown_fields)]
 pub struct ScopeReceipt {pub idempotency_key:String,pub action:String,pub assessment_id:String,pub request_digest:String,pub created_at:String,pub result:ScopeResult}
@@ -143,6 +151,16 @@ pub fn validate_state(s:&Snapshot)->Result<(),String>{
     for a in &s.assessments{binding(s,a)?;}
     ids.clear();for r in &s.scope_revisions{if !ids.insert(&r.id)||!owners.contains(&r.assessment_id){return Err(err("scope_integrity_error"));}}
     let mut keys=HashSet::new();for receipt in &s.scope_receipts{core::valid_id(&receipt.idempotency_key)?;stamp(&receipt.created_at)?;let source=assessment(s,&receipt.assessment_id)?;let result=assessment(s,&receipt.result.assessment_id)?;
+        if let Some(parent)=&receipt.result.conversation_source{
+            if receipt.action!="project.newConversation"||source.id!=result.id||parent.scope.assessment_id==source.id||
+                assessment(s,&parent.scope.assessment_id)?.project_id!=source.project_id{return Err(err("scope_integrity_error"));}
+            if !s.scope_revisions.iter().any(|r|r.assessment_id==parent.scope.assessment_id&&r.id==parent.scope.revision_id&&r.digest==parent.scope.digest&&r.review.is_some()){
+                return Err(err("scope_integrity_error"));
+            }
+            if let Some(pin)=&parent.policy{
+                if pin.project_id!=source.project_id||!s.data_policy_revisions.iter().any(|r|r.id==pin.revision_id&&r.digest==pin.digest&&r.project_id==pin.project_id){return Err(err("scope_integrity_error"));}
+            }
+        }
         if receipt.action == "assessment.create" && (source.id != result.id || source.id != simple_creation_id(&source.project_id, &receipt.idempotency_key)) {
             return Err(err("scope_integrity_error"));
         }
@@ -272,7 +290,7 @@ pub(crate) fn simple_creation_id(project_id: &str, key: &str) -> String {
 }
 pub(crate) fn replay(s:&Snapshot,action:&str,aid:&str,key:&str,request:&str)->Result<Option<ScopeResult>,String>{core::valid_id(key)?;if let Some(r)=s.scope_receipts.iter().find(|r|r.action==action&&r.assessment_id==aid&&r.idempotency_key==key){if r.request_digest!=request{return Err(err("scope_idempotency_conflict"));}return Ok(Some(r.result.clone()));}if s.scope_receipts.iter().filter(|r|r.assessment_id==aid).count()>=1000{return Err(err("scope_limit_reached"));}Ok(None)}
 pub(crate) fn receipt(s:&mut Snapshot,action:&str,aid:&str,key:&str,request:&str,result:ScopeResult){s.scope_receipts.push(ScopeReceipt{idempotency_key:key.into(),action:action.into(),assessment_id:aid.into(),request_digest:request.into(),created_at:model::now(),result});}
-pub(crate) fn scope_result(s:&Snapshot,aid:&str)->Result<ScopeResult,String>{let a=assessment(s,aid)?;let b=binding(s,a)?.ok_or_else(||err("scope_integrity_error"))?;Ok(ScopeResult{assessment_id:aid.into(),scope_id:b.id.clone(),revision_id:b.current_revision_id.clone()})}
+pub(crate) fn scope_result(s:&Snapshot,aid:&str)->Result<ScopeResult,String>{let a=assessment(s,aid)?;let b=binding(s,a)?.ok_or_else(||err("scope_integrity_error"))?;Ok(ScopeResult{assessment_id:aid.into(),scope_id:b.id.clone(),revision_id:b.current_revision_id.clone(),conversation_source:None})}
 pub fn handle(action:&str,payload:Value,store:&Store,redact:impl Fn(&str)->String)->Result<Value,String>{
     if combined_supports(action){return handle_combined(action,payload,store);}
     if !payload.is_object()||payload.to_string().len()>16384{return Err(err("scope_invalid_input"));}

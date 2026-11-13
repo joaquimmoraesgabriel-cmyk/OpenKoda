@@ -2,17 +2,20 @@ import { useEffect, useRef, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { native, request } from '../api';
 import { BudgetPrice, BudgetStatus, usd, usdMicros } from '../ai-budget';
-import { Action, Payload, errorMessage, shortDate } from '../types';
+import { Action, type Assessment, Payload, errorMessage, shortDate } from '../types';
 import { Field, KeyValue, Notice } from './shared';
 import { BudgetAnalytics, BudgetOverview } from './BudgetInsights';
 import { ModelCatalogField, ProviderField } from './ProviderModels';
 import './profile-usage.css';
 import './usage-history.css';
 
-const sections = ['Visão geral', 'Análises', 'Política de orçamento'] as const;
+import UsageHistory from './UsageHistory';
 
-export default function AiBudgetSettings({action,busy,onUsageHistory}:{action:Action;busy:boolean;onUsageHistory?:()=>void}){
-  const [section,setSection] = useState<typeof sections[number]>('Visão geral');
+const sections = ['Histórico', 'Análises'] as const;
+
+export default function AiBudgetSettings({action,busy,assessments,onOpenAssessment}:{action:Action;busy:boolean;assessments?:Assessment[];onOpenAssessment?:(id:string)=>void}){
+  const [section,setSection] = useState<typeof sections[number]>('Histórico');
+  const [policyOpen,setPolicyOpen] = useState(false);
   const [status,setStatus]=useState<BudgetStatus>();const [enabled,setEnabled]=useState(false);const [installation,setInstallation]=useState('');const [assessment,setAssessment]=useState('');const [prices,setPrices]=useState<BudgetPrice[]>([]);const [review,setReview]=useState<Payload>();const [ackEstimates,setAckEstimates]=useState(false);const [ackLegacy,setAckLegacy]=useState(false);const [ackUnbounded,setAckUnbounded]=useState(false);
   const [chargeId,setChargeId]=useState('');const [assumed,setAssumed]=useState('');const [note,setNote]=useState('');const [ackUnknown,setAckUnknown]=useState(false);const [pending,setPending]=useState(false);const [error,setError]=useState('');const [message,setMessage]=useState('');const pendingRef=useRef(false);
   async function reload(reset=false){try{const next=await request<BudgetStatus>('ai.budget.status');if(typeof next.enabled!=='boolean')throw new Error('Estado de orçamento indisponível.');setStatus(next);if(reset){setEnabled(next.enabled);setInstallation(next.policy?.installationLimitUsd??'');setAssessment(next.policy?.assessmentLimitUsd??'');setPrices(next.policy?.prices.map(({revision: _revision,...price})=>price)??[]);}return next;}catch(e){setStatus(undefined);throw e;}}
@@ -30,22 +33,20 @@ export default function AiBudgetSettings({action,busy,onUsageHistory}:{action:Ac
   async function resolve(){if(!charge||!ackUnknown||pendingRef.current)return;pendingRef.current=true;setPending(true);setError('');setMessage('');setAckUnknown(false);try{await action('ai.budget.resolveUnknown',{chargeId:charge.chargeId,assumedChargeUsd:assumed,note:note.trim(),acknowledgeUnknownCharge:true});await reload();setChargeId('');setMessage('Estimativa conservadora debitada no controle local. Uso e cobrança reais continuam desconhecidos; nenhuma chamada foi repetida.');}catch(e){setError(errorMessage(e));await reload().catch(()=>{});}finally{pendingRef.current=false;setPending(false);}}
   async function consult(){if(pendingRef.current)return;pendingRef.current=true;setPending(true);setError('');setReview(undefined);setAckUnknown(false);try{await reload(true);}catch(e){setError(errorMessage(e));}finally{pendingRef.current=false;setPending(false);}}
   return <section className="ai-budget-settings" onKeyDown={e=>{if(e.key==='Enter'&&(e.target as HTMLElement).tagName==='INPUT' && (e.target as HTMLInputElement).type!=='radio')e.preventDefault();}}>
-    {!native ? <Notice>O orçamento de IA está disponível no aplicativo desktop. A prévia não configura limites nem realiza chamadas.</Notice> : <>
-      <div className="usage-view-nav" role="group" aria-label="Seções de uso e orçamento">
+    <div className="usage-view-nav" role="group" aria-label="Seções do histórico de uso">
         {sections.map(name=><button key={name} type="button" aria-pressed={section===name} onClick={()=>setSection(name)}>{name}</button>)}
-        <button type="button" className="usage-refresh" aria-label="Atualizar orçamento e preços" disabled={disabled} onClick={()=>void consult()}><RefreshCw size={15} aria-hidden="true"/>Atualizar</button>
-      </div>
+        {section === 'Análises' && native && <button type="button" className="usage-refresh" aria-label="Atualizar orçamento e preços" disabled={disabled} onClick={()=>void consult()}><RefreshCw size={15} aria-hidden="true"/>Atualizar</button>}
+    </div>
+    {section === 'Histórico' ? <UsageHistory assessments={assessments} onOpenAssessment={onOpenAssessment}/> : !native ? <Notice>As análises de consumo estão disponíveis no aplicativo desktop.</Notice> : <>
       {error && <div role="alert"><Notice tone="warning">{error}</Notice></div>}
       {message && <p role="status">{message}</p>}
       {!status && !error && <p role="status">Carregando o registro de uso…</p>}
       {status && <>
         {status.degraded && <Notice tone="warning">{status.notice}</Notice>}
-        {section === 'Visão geral' && <>
-          <BudgetOverview status={status} onAnalysis={()=>setSection('Análises')} onPolicy={()=>setSection('Política de orçamento')} onUsageHistory={onUsageHistory}/>
+        <BudgetAnalytics status={status}/>
+        <BudgetOverview status={status} onPolicy={()=>setPolicyOpen(value=>!value)} policyOpen={policyOpen}/>
           {!status.degraded && <p className="analysis-scope">{status.notice}</p>}
-        </>}
-        {section === 'Análises' && <BudgetAnalytics status={status}/>}
-        {section === 'Política de orçamento' && <div className="usage-policy">
+        {policyOpen && <div className="usage-policy" id="usage-limits">
           <h3>Limites da instalação</h3>
           <p className="analysis-scope">Defina os limites e as tarifas em USD. Os custos registrados acompanham a instalação, inclusive após restaurar um perfil ou excluir um projeto.</p>
           <Notice>Os preços são manuais. A estimativa local pode divergir da fatura do provedor.</Notice>

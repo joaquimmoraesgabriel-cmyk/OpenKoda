@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Activity, ArrowRight, ChartNoAxesColumn, Wallet } from 'lucide-react';
+import { ArrowRight, ChartNoAxesColumn, Wallet } from 'lucide-react';
 import type { BudgetStatus, BudgetCharge } from '../ai-budget';
 import { providers } from '../ai-provider';
 import { shortDate } from '../types';
@@ -18,7 +18,7 @@ export function readableAmount(value?: string | null) {
   return 'USD ' + count.format(BigInt(whole)) + ',' + decimals;
 }
 
-export function BudgetOverview({status, onAnalysis, onPolicy, onUsageHistory}: {status:BudgetStatus; onAnalysis:()=>void; onPolicy:()=>void; onUsageHistory?:()=>void}) {
+export function BudgetOverview({status, onPolicy, policyOpen}: {status:BudgetStatus; onPolicy:()=>void; policyOpen:boolean}) {
   const balance = status.installation;
   const limit = Number(balance?.limitUsd);
   const remaining = balance?.remainingUsd;
@@ -38,7 +38,7 @@ export function BudgetOverview({status, onAnalysis, onPolicy, onUsageHistory}: {
             <div className="balance-fractions"><span>{committedLabel}</span><span>Limite de {readableAmount(balance?.limitUsd)}</span></div></>}
         </div>
         <div className="budget-card-footer"><span>Custos pendentes <strong>{balance?.unresolvedCount ?? 'Não informado'}</strong></span>
-        <button type="button" className="button" onClick={onPolicy}>Gerenciar limites e preços<ArrowRight size={14} aria-hidden="true"/></button></div>
+        <button type="button" className="button" aria-expanded={policyOpen} aria-controls={policyOpen ? 'usage-limits' : undefined} onClick={onPolicy}>{policyOpen ? 'Fechar limites e preços' : 'Gerenciar limites e preços'}<ArrowRight size={14} aria-hidden="true"/></button></div>
       </div>
     </section>
     <section className="billing-group">
@@ -49,10 +49,7 @@ export function BudgetOverview({status, onAnalysis, onPolicy, onUsageHistory}: {
         <div><dt><i className="series-assumed"/><span>Débitos assumidos<small>Estimativas registradas ao revisar custos desconhecidos.</small></span></dt><dd>{readableAmount(balance?.assumedChargeUsd)}</dd></div>
       </dl>
     </section>
-    <section className="usage-history-link"><Activity size={19} aria-hidden="true"/><div><h3>Registros de custo</h3>
-      <p>{status.recentChargesTotal == null ? 'Quantidade de registros indisponível' : count.format(status.recentChargesTotal) + (status.recentChargesTotal === 1 ? ' registro de custo' : ' registros de custo')}</p></div>
-      <button type="button" className="button" onClick={onAnalysis}>Ver análises<ArrowRight size={14} aria-hidden="true"/></button></section>
-    {onUsageHistory && <button className="text-button billing-history-link" type="button" onClick={onUsageHistory}>Abrir histórico de tokens<ArrowRight size={14} aria-hidden="true"/></button>}
+
   </div>;
 }
 

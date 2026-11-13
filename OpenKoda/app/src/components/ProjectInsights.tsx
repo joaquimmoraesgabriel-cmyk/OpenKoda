@@ -83,6 +83,7 @@ export default function ProjectInsights({ snapshot, project, selected, onConvers
   snapshot: Snapshot; project: Project; selected?: string; onConversation: (id: string) => void; onFinding: (id: string) => void;
 }) {
   const [view, setView] = useState<View>('conversations');
+  const [incompleteUsage, setIncompleteUsage] = useState(false);
   const [usage, setUsage] = useState<UsageRow[]>();
   const [error, setError] = useState('');
   const [refresh, setRefresh] = useState(0);
@@ -98,9 +99,9 @@ export default function ProjectInsights({ snapshot, project, selected, onConvers
     if (!native) return;
     let current = true;
     setError('');
-    void request<{ rows: UsageRow[] }>('ai.budget.history').then(result => {
+    void request<{ rows: UsageRow[]; scanHistoryUnavailable?: boolean }>('ai.budget.history').then(result => {
       if (!Array.isArray(result?.rows)) throw new Error('Histórico de uso indisponível.');
-      if (current) setUsage(result.rows);
+      if (current) { setUsage(result.rows); setIncompleteUsage(result.scanHistoryUnavailable === true); }
     }).catch(cause => {
       if (current) { setUsage(undefined); setError(errorMessage(cause)); }
     });
@@ -172,6 +173,7 @@ export default function ProjectInsights({ snapshot, project, selected, onConvers
         <span><Icon size={15} aria-hidden="true"/>{title}</span><strong>{count === null ? '—' : number.format(count)}</strong>{key === 'usage' && count !== null && <small>{count === 1 ? 'chamada' : 'chamadas'}</small>}
       </button>)}
     </div>
+    {view === 'usage' && incompleteUsage && <p role="status">O consumo das análises de código está temporariamente indisponível.</p>}
     {table}
   </div>;
 }

@@ -38,6 +38,13 @@ export function createPreviewTransport(storage: Pick<Storage,'getItem'|'setItem'
     }
     let result:unknown;
     switch(action){
+      case 'project.renameConversation': {
+        const chat=s.assessments.find(a=>a.id===payload.assessmentId && s.projects.some(p=>p.id===a.projectId&&!p.archived));
+        if(!chat)throw new Error('Conversa indisponível.');
+        chat.title=text(payload,'title',160);
+        result={id:chat.id};
+        break;
+      }
       case 'project.launch': {
         const key=text(payload,'idempotencyKey',36);
         if (!uuid.test(key)) throw new Error('Chave de idempotência inválida.');

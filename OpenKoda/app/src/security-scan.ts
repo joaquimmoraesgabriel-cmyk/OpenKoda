@@ -1,25 +1,25 @@
 import { request } from './api';
-import type { AiSelection } from './ai-provider';
+import { knownProvider, type AiSelection } from './ai-provider';
 import type { Assessment } from './types';
 import { prepareScanMetadata } from './project-chat';
 
 export const defaultScanLimit = 5;
-export const codeAnalysisProviderNotice = 'A análise de código usa OpenAI nesta versão. Os demais provedores continuam disponíveis nas conversas.';
-export const analysisFileAccessNotice = 'Os comandos da análise podem ler outros arquivos acessíveis à sua conta Windows. Use apenas código em que você confia nesta versão local.';
+export const codeAnalysisProviderNotice = 'Selecione um provedor configurado e um modelo de texto para analisar o projeto.';
+export const analysisFileAccessNotice = 'O provedor recebe trechos do código selecionado. As buscas e leituras consultam uma cópia do escopo autorizado, sem executar comandos.';
 // Product copy only. Original reports and engine receipts remain unchanged on disk.
 export const analysisDisplayText=(text:string)=>text.replace(/Codex Security/gi,'OpenKoda');
-const states = ['starting','running','cancelling','completed','failed','cancelled','interrupted'] as const;
+const states = ['starting','running','cancelling','completed','partial','failed','cancelled','interrupted'] as const;
 export type ScanState = typeof states[number];
 export const scanStateLabel:Record<ScanState,string> = {
-  starting:'Iniciando',running:'Em análise',cancelling:'Cancelamento solicitado',completed:'Concluída',
+  starting:'Iniciando',running:'Em análise',cancelling:'Cancelamento solicitado',completed:'Concluída',partial:'Parcial',
   failed:'Falhou',cancelled:'Cancelada',interrupted:'Interrompida',
 };
 export const scanActive = (status:ScanState) => status === 'starting' || status === 'running' || status === 'cancelling';
 export const supportsSecurityModel = (selection:AiSelection|null|undefined) =>
-  selection?.provider === 'openai';
+  !!selection && knownProvider(selection.provider) && !!selection.model.trim();
 type ScanEvent = {at:string;stage:string;message:string};
 type ScanFinding = {title:string;severity:string;description:string;location:string|null};
-type Coverage = {scope:string[];excludedPaths:string[];additionalExclusions:number;findingsTotal:number;reportTruncated:boolean;summary?:string;limitations?:string[]};
+type Coverage = {scope:string[];excludedPaths:string[];additionalExclusions:number;findingsTotal:number;reportTruncated:boolean;summary?:string;limitations?:string[];reviewedRanges?:string[]};
 export type ScanResult = {scanId:string|null;report:string;findings:ScanFinding[];coverage:Coverage;cost:{estimatedUsd:number|null}|null};
 export type SecurityStatus = {available:boolean;hasApiKey:boolean;provider:string;model:string;reason?:string;requiresSensitiveConfirmation?:boolean};
 export class SensitiveScanConfirmation extends Error {
@@ -27,7 +27,7 @@ export class SensitiveScanConfirmation extends Error {
 }
 export type SecurityScan = {
   id:string;assessmentId:string;status:ScanState;stage:string;message:string;events:ScanEvent[];
-  createdAt:string;updatedAt:string;provider:string;model:string;maxCostUsd:number;result:ScanResult|null;error:string|null;
+  createdAt:string;updatedAt:string;provider:string;model:string;maxCostUsd:number;selectedPaths?:string[];result:ScanResult|null;error:string|null;
 };
 
 const object = (v:unknown):v is Record<string,unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -53,7 +53,7 @@ function validResult(v:unknown):boolean {
   const c=v.coverage;
   return validFindings && object(c) && strings(c.scope) && strings(c.excludedPaths) && count(c.additionalExclusions) &&
     count(c.findingsTotal) && typeof c.reportTruncated==='boolean' && (c.summary===undefined||typeof c.summary==='string') &&
-    (c.limitations===undefined||strings(c.limitations)) && (v.cost===null || object(v.cost) &&
+    (c.limitations===undefined||strings(c.limitations)) && (c.reviewedRanges===undefined||strings(c.reviewedRanges)) && (v.cost===null || object(v.cost) &&
     (v.cost.estimatedUsd===null || typeof v.cost.estimatedUsd==='number' && Number.isFinite(v.cost.estimatedUsd)));
 }
 export function readScan(response:unknown, assessmentId:string):SecurityScan|null {
@@ -65,14 +65,14 @@ export function readScan(response:unknown, assessmentId:string):SecurityScan|nul
       typeof s.createdAt !== 'string' || typeof s.updatedAt !== 'string' ||
       !Array.isArray(s.events) || !s.events.every(e => object(e) && typeof e.at === 'string' && typeof e.stage === 'string' && typeof e.message === 'string') ||
       !(s.error === null || typeof s.error === 'string') || !(s.result === null || validResult(s.result)) ||
-      s.status==='completed' && s.result===null) {
+      (s.status==='completed'||s.status==='partial') && s.result===null && s.resultUnavailable!==true) {
     throw new Error('O aplicativo não recebeu um registro válido desta análise de segurança.');
   }
   return s as unknown as SecurityScan;
 }
 
-type StartScan = {projectId:string;assessmentId:string;selection:AiSelection;idempotencyKey:string;prompt:string;maxCostUsd:number;target?:string;acknowledgeSensitive?:boolean;signal?:AbortSignal};
-export async function startSecurityScan({projectId,assessmentId,selection,idempotencyKey,prompt,maxCostUsd,target,acknowledgeSensitive,signal}:StartScan) {
+type StartScan = {projectId:string;assessmentId:string;selection:AiSelection;idempotencyKey:string;prompt?:string;maxCostUsd:number;target?:string|string[];retryOf?:string;acknowledgeSensitive?:boolean;signal?:AbortSignal};
+export async function startSecurityScan({projectId,assessmentId,selection,idempotencyKey,prompt,maxCostUsd,target,retryOf,acknowledgeSensitive,signal}:StartScan) {
   if(!supportsSecurityModel(selection))throw new Error(codeAnalysisProviderNotice);
   function requireActive(){if(signal?.aborted)throw new Error('Criação cancelada antes da análise. O projeto criado foi preservado.');}
   async function currentStatus(){
@@ -88,7 +88,7 @@ export async function startSecurityScan({projectId,assessmentId,selection,idempo
   if(await prepareScanMetadata(projectId,assessmentId,selection))status=await currentStatus();
   requireActive();
   if(status.requiresSensitiveConfirmation&&!acknowledgeSensitive)throw new SensitiveScanConfirmation();
-  const response = await request('security.scan.start',{assessmentId,idempotencyKey,prompt:prompt.trim(),maxCostUsd,...(target?{target}:{}),
+  const response = await request('security.scan.start',{assessmentId,idempotencyKey,...(prompt?{prompt:prompt.trim()}:{}),maxCostUsd,...(target?{target}:{}),...(retryOf?{retryOf}:{}),
     ...(status.requiresSensitiveConfirmation?{acknowledgeSensitive:true}:{})});
   const scan = readScan(response,assessmentId);
   if (!scan) throw new Error('O motor não devolveu um registro para esta análise. Consulte a conversa antes de repetir.');

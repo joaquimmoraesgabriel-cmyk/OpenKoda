@@ -14,6 +14,7 @@ enumeration!(DerivedProducer{Finding,Validation,AiRequest,Investigation,Remediat
 enumeration!(DataOperation{EvidenceRead,DerivedRead,AiAsk,AiOperationPropose,AiInvestigation,KaliHashEvidence,KaliScanEvidence,ReportExport,RecoveryBackup});
 enumeration!(DataUseOutcome{Admitted,Dispatched,Completed,NotSent,Failed,Unknown,Canceled});
 dto!{
+#[derive(Eq)]
 pub struct DataPolicyRef{pub project_id:String,pub revision_id:String,pub digest:String}
 pub struct ClassificationRef{pub id:String,pub digest:String}
 pub struct CredentialRef{pub id:String,pub revision_id:String,pub digest:String}
@@ -314,7 +315,8 @@ impl DataPolicyService{
         }else if action=="evidence.access.prepare"{let p:Evidence=decode(payload)?;(DataSubject::Evidence{assessment_id:p.assessment_id,evidence_id:p.evidence_id},p.expected_raw_sha256,p.offset,p.max_bytes,p.expected_projection_sha256,true)}else{let p:Subject=decode(payload)?;if matches!(p.subject,DataSubject::Derived{producer:DerivedProducer::Capture,..}){return Err(crate::workflow::error("capture_cursor_invalid"));}(p.subject,p.expected_source_fingerprint,p.offset,p.max_bytes,p.expected_projection_sha256,false)};
         if maximum==0||maximum>32768{return Err(error("data_window_invalid"));}
         if redactor.mode()==crate::data_projection::RedactionMode::MetadataOnly{return Err(error("data_redactor_unavailable"));}
-        let s=store.snapshot()?;let resolved=crate::data_projection::resolve_subject(store,&s,&subject,external)?;
+        let s=store.snapshot()?;crate::security_scan::check_report_read(store,&s,&subject)?;
+        let resolved=crate::data_projection::resolve_subject(store,&s,&subject,external)?;
         let (raw,raw_sha)=access_text(&s,&resolved,external)?;if expected!=if evidence{raw_sha.clone()}else{resolved.fingerprint.clone()}{return Err(error("data_subject_changed"));}
         let full=redactor.redact(&raw);let projection_sha=core::hash(&full.text);if projection_expected.as_ref().is_some_and(|v|v!=&projection_sha){return Err(error("data_subject_changed"));}
         if capture_manifest.is_some()&&full.text.len()>crate::capture_access::MAX_PROJECTION_BYTES{return Err(crate::workflow::error("work_limit"));}
@@ -347,7 +349,10 @@ impl DataPolicyService{
         if spec.destination_context["rawSha256"]!=raw_sha||spec.destination_context["projectionSha256"]!=core::hash(&full.text)||end>full.text.len()||!full.text.is_char_boundary(start)||!full.text.is_char_boundary(end){return Err(error("data_subject_changed"));}
         let admitted=match self.with_admission(store,&p.review,&spec,None,EffectLink{kind:"read".into(),id:model::id()},p.acknowledge_sensitive,|a|Ok(a.clone()))?{AdmissionResult::Admitted(a)=>a,AdmissionResult::AlreadyUsed(reference)=>return Ok(if capture_read{json!({"alreadyUsed":true,"receiptRef":reference,"cursor":null})}else{json!({"alreadyUsed":true,"receiptRef":reference})})};
         let fresh=crate::data_projection::subject_versions(store,&store.snapshot()?,&subject,external)?;if fresh!=spec.subjects{return Err(error("data_subject_changed"));}
-        self.before_dispatch(store,&admitted.receipt_ref,&spec,None,||{let view=self.view.lock().map_err(|_|error("data_busy"))?;if view.0.as_deref()!=Some(subject.assessment_id())||spec.destination_context["viewEpoch"].as_u64()!=Some(view.1){return Err(error("data_view_changed"));}Ok(())})?;
+        self.before_dispatch(store,&admitted.receipt_ref,&spec,None,||{
+            crate::security_scan::check_report_read(store,&store.snapshot()?,&subject)?;
+            let view=self.view.lock().map_err(|_|error("data_busy"))?;if view.0.as_deref()!=Some(subject.assessment_id())||spec.destination_context["viewEpoch"].as_u64()!=Some(view.1){return Err(error("data_view_changed"));}Ok(())
+        })?;
         let cursor=if capture_read{
             let _gate=store.scope_gate.lock().map_err(|_|error("data_busy"))?;
             store.work_transaction(|db,state|{

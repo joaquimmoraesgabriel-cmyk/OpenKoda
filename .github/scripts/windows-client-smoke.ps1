@@ -94,6 +94,11 @@ try {
         else { $receipt.webView2Observation = 'runtime-absent-after-test' }
     }
     $guest = Get-Content -Raw -LiteralPath $guestPath | ConvertFrom-Json
+    if ([version]$version -ge [version]'0.2.2') {
+        if (@($guest.starts | Where-Object { $_.unifiedUsageNavigation -eq $true -and $_.modelRequired -eq $true }).Count -ne 2 -or !$guest.reviewLicenseSha256 -or !$guest.reviewGuideSha256) {
+            throw 'The installed client is missing evidence for usage history, analytics, model admission or the offline SDK notices.'
+        }
+    }
     $persisted = if ([version]$version -ge [version]'0.2.0') { $guest.settingsReopened } else { $guest.projectReopened }
     if (!$receipt.webView2After.present -or !$guest.passed -or !$persisted -or !$guest.uninstalled -or !$guest.databasePreserved -or @($guest.starts).Count -ne 2 -or $guest.sourceSha256 -ne $receipt.sourceExeSha256 -or $guest.installerSha256 -ne $receipt.installerSha256) {
         throw 'The Windows client and the guest receipts do not confirm the complete installed release test.'

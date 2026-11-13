@@ -64,7 +64,7 @@ fn admit(
         // are also required to configure and use the official security SDK.
         "security.status" | "security.scan.get" | "security.scan.start" | "security.scan.cancel"
         | "github.repository.import" | "github.repository.get" | "github.repository.cancel"
-        | "project.options.get" | "project.options.save"
+        | "project.options.get" | "project.options.save" | "project.renameConversation"
         | "window.behavior.get" | "window.behavior.set" | "host.connectivity"
         | "snapshot" | "settings.save" | "support.review" | "support.export"
         | "ai.status" | "ai.key.save" | "ai.key.remove" | "ai.models" | "ai.test"

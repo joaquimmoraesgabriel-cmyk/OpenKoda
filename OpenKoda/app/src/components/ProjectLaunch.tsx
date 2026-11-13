@@ -1,3 +1,4 @@
+import { conversationTitle } from '../chat-draft';
 import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight, FolderOpen, Github, Globe2, Network, SlidersHorizontal } from 'lucide-react';
 import { native, request } from '../api';
@@ -161,7 +162,7 @@ export default function ProjectLaunch({sourceOnly=false,snapshot, action, busy, 
     const customCap=Number(scanLimit),duration=Number(minutes);
     const analysisOptions:ProjectAnalysisOptions={advancedEnabled:advanced,additionalContextEnabled:extra,context:context as ProjectAnalysisOptions['context'],maxCostUsd:customLimit&&Number.isFinite(customCap)&&customCap>=.01&&customCap<=100?customCap:null,minutes:minutes&&Number.isInteger(duration)&&duration>=1&&duration<=1440?duration:null,title};
     const body = {projectId:initialProject?.id ?? null,name,kind,root:root.trim(),relativeTarget,
-      title:(advanced && title.trim()) || initialTitles[kind],objective:goal,aiSelection:selection,ports:kind==='network'?(advanced?parsedPorts.ports:[443]):[],useRipgrep:advanced && selectedRipgrep,
+      title:(advanced && title.trim()) || conversationTitle(description.trim() || defaultGoals[kind]),objective:goal,aiSelection:selection,ports:kind==='network'?(advanced?parsedPorts.ports:[443]):[],useRipgrep:advanced && selectedRipgrep,
       minutes:advanced && minutes?Number(minutes):null,...(sourceOnly?{analysisOptions}:{})};
     // Optional future preferences do not create a second project when an admitted
     // analysis needs another consent/cost review. Scope changes remain distinct.
@@ -262,7 +263,7 @@ export default function ProjectLaunch({sourceOnly=false,snapshot, action, busy, 
           <option value="all">Todo o código</option><option value="subset">Uma pasta ou arquivo</option></select></Field>
           {narrow && <Field label="Caminho dentro do projeto"><input required value={relative} maxLength={4096} placeholder="src/autenticacao.ts" onChange={e=>setRelative(e.target.value)}/></Field>}</>}
         <div className="launch-model"><strong>Modelo de IA</strong>
-          <div><ChatModelPicker value={selection} onChange={setSelection} disabled={locked} onModels={onModels}/>
+          <div><ChatModelPicker value={selection} onChange={setSelection} disabled={locked} onModels={onModels} forAnalysis={local}/>
           {selection && !sourceOnly && <button className="button quiet" type="button" onClick={()=>setSelection(null)}>Usar só a análise nativa</button>}</div></div>
         {(unsupportedScan||needsModel) && <Notice>{codeAnalysisProviderNotice}</Notice>}
         <Field label="Descrição"><textarea rows={3} value={description} maxLength={4000} onChange={e=>setDescription(e.target.value)}
@@ -290,7 +291,7 @@ export default function ProjectLaunch({sourceOnly=false,snapshot, action, busy, 
               <span>{tool.package}<small>Escolha uma evidência na conversa para analisar no Kali.</small></span></label>)}</>}</div>}</section>
         <p className="launch-summary">{securityScan && selection
           ? 'Ao criar, o OpenKoda analisará o código selecionado com '+selectionLabel(selection)+'. O provedor poderá receber arquivos e contexto do projeto. A análise pode consumir créditos.'
-          : unsupportedScan||needsModel ? 'Selecione um modelo OpenAI para criar o projeto e iniciar a análise.'
+          : unsupportedScan||needsModel ? 'Selecione um modelo de texto para criar o projeto e iniciar a análise.'
           : native ? local ? 'Ao criar, o OpenKoda verificará padrões de segurança nos arquivos selecionados, sem executar o código.'
           : kind==='web'?'Ao criar, o OpenKoda enviará uma requisição HEAD à URL informada, sem seguir redirecionamentos.'
             :'Ao criar, o OpenKoda tentará conexões TCP nas portas '+(advanced?ports:'443')+' do alvo informado, sem enviar conteúdo.'

@@ -1,5 +1,24 @@
 # Etapas e evidências da construção
 
+## 0.2.2 — revisão estática isolada e conversas
+
+O aplicativo captura os arquivos selecionados em memória, consulta o provedor cadastrado e confere cada citação contra o código enviado. Os pares de número e texto de cada linha acompanham os trechos. Se o modelo errar o número, a correção exige uma única ocorrência literal nos trechos enviados do mesmo arquivo. A análise iniciada pelo chat herda os caminhos selecionados, as classificações de dados e as revogações da origem. O histórico de uso reúne tokens, custos e controles de orçamento.
+
+Em 13/11/2026, o aplicativo analisou um arquivo Python sintético com dois modelos do OpenRouter. Ambos registraram o uso de `eval` sobre a entrada da requisição em `calculator.py:6`. O Gemini também marcou a declaração da rota. O Ministral apontou a leitura da entrada e o `eval` separadamente. Esses achados exigem triagem. O arquivo de origem permaneceu idêntico após as chamadas.
+
+| Etapa no desktop | Modelo | Tokens de entrada / saída | Resultado |
+| --- | --- | ---: | --- |
+| Análise | `google/gemini-2.5-flash-lite` | 847 / 382 | Relatório persistido, uma chamada |
+| Análise | `mistralai/ministral-8b-2512` | 881 / 571 | Relatório persistido, uma chamada |
+| Chat após a análise | `mistralai/ministral-8b-2512` | 826 / 382 | Resposta parcial observada, mensagem e uso recuperados |
+| Chat | `google/gemini-2.5-flash-lite` | 767 / 223 | Resposta parcial observada, mensagem e uso recuperados |
+
+O aumento no uso da chave e a redução nos créditos da conta coincidiram em **US$ 0,00114282** nesta rodada. A tentativa anterior à correção de linha consumiu US$ 0,00032230, as duas análises concluídas consumiram juntas US$ 0,00045530 e os dois chats consumiram US$ 0,00036522. O teste aguardou o botão de envio ficar disponível para retomar o chat após a análise. Os dois relatórios abriram novamente sem nova inferência. A credencial foi removida de cada perfil de teste. [Teste nativo do OpenRouter](scripts/native-openrouter-smoke.mjs)
+
+O executável das análises teve SHA-256 `e1f62a4eda4a070316148bc04252f56a38a2f36e25b732c3c276dfdc322ff791`. O executável final `3902e6c85860b5d27e12414c60127d1e7f56615bb42c16ea5598caa58ef40c9b` reabriu os relatórios, completou os dois chats e passou pelo teste nativo de persistência e bloqueio de 14 rotas antigas. As suítes locais passaram com 79 testes unitários da interface, 106 no Edge, 656 em Rust e 21 do runtime. Três testes Rust opt-in ficaram fora dessa rodada (conectividade do host, importação pública do GitHub e Kali gerenciado).
+
+Falta validar com crédito as integrações diretas de OpenAI, Anthropic, Google Gemini, Groq, DeepSeek e xAI, a busca/leitura entre arquivos em múltiplos lotes, imagens nos modelos que as aceitam e o faturamento quando a execução é interrompida em voo. A análise desta versão fornece candidatos estáticos. A confirmação automática por execução exige um ambiente isolado próprio.
+
 **0.2.1 — candidata local de análise de código, em validação.** A criação aceita **Pasta local** ou um link de repositório público do **GitHub**. A importação tem identidade, origem, revisão e recibo idempotente; uma solicitação repetida recupera a mesma intenção. Cancelar o download impede criar/iniciar a análise, inclusive quando a cópia termina em paralelo. Uma falha, interrupção ou cancelamento confirmados exigem **Tentar novo download** para admitir outra tentativa; resposta perdida mantém a intenção original. [Estado e limites da 0.2.1](docs/RETOMADA-0.2.1.md) · [Validação sanitizada](docs/security/0.2.1/VALIDACAO.md)
 
 O compositor limpa a mensagem após admissão, conserva rascunhos recusados antes disso e não reenvia uma mensagem ao trocar de modelo ou reabrir o projeto. **Contexto adicional** e **Opções avançadas** podem ser salvos em **Projeto → Configurações** para os próximos trabalhos, preservando escopo e autorizações das avaliações anteriores. O limite personalizado só aparece ao ativá-lo dentro das opções avançadas; sem personalização, permanece o teto estimado interno de US$ 5 por análise. Não se interpreta a ausência do campo como custo ilimitado.

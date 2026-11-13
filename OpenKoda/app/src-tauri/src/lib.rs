@@ -7,6 +7,7 @@ pub mod environment;
 pub mod executor;
 pub mod network;
 pub mod source_scan;
+mod isolated_source;
 pub mod source_context;
 pub mod security_scan;
 pub mod github_repository;

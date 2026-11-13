@@ -88,6 +88,7 @@ type Props = {
   canPropose: boolean;
   onAttach: () => void;
   onPropose: () => void;
+  onAnalyze?: () => void;
 };
 const choices = [
   { mode: 'always', trigger: 'Sempre solicitar', icon: ShieldQuestion, description: 'Confirme cada mensagem que escrever e cada operação que escolher executar.' },
@@ -95,13 +96,14 @@ const choices = [
   { mode: 'scope', trigger: 'Dentro do escopo', icon: CircleDot, description: 'Envie mensagens diretamente. O clique em Executar autoriza a operação prevista no escopo.' },
 ] as const;
 
-export function ChatComposerMenus({ mode, onMode, proposing, hasAttachment, disabled, canPropose, onAttach, onPropose }: Props) {
+export function ChatComposerMenus({ mode, onMode, proposing, hasAttachment, disabled, canPropose, onAttach, onPropose, onAnalyze }: Props) {
   const id = useId();
   const current = choices.find(choice => choice.mode === mode)!;
   const Icon = current.icon;
   return <>
     <ComposerMenu kind="actions" label="Adicionar à mensagem" trigger={<Plus size={19}/>} disabled={disabled}>
       <button type="button" role="menuitem" tabIndex={-1} disabled={proposing} onClick={onAttach}><Paperclip size={16}/>Anexar foto ou arquivo</button>
+      {onAnalyze&&<button type="button" role="menuitem" tabIndex={-1} disabled={hasAttachment} onClick={onAnalyze}><ListChecks size={16}/>Analisar código do projeto</button>}
       {canPropose && <button type="button" role="menuitemcheckbox" tabIndex={-1} aria-checked={proposing} disabled={hasAttachment} onClick={onPropose}>
         <ListChecks size={16}/>Pedir verificação{proposing && <Check size={15} className="composer-selected"/>}
       </button>}
