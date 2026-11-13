@@ -88,6 +88,17 @@ try:
     assert run("select count(*) from pg_class where relnamespace='openkoda_private'::regnamespace and relkind='r' and not relrowsecurity;") == "0"
     assert rpc("account",USER)["plan"] is None
     assert rpc("account",USER)["controls"]["paymentsEnabled"] is False
+    newcomer=str(uuid.uuid4())
+    run(f"insert into auth.users values('{newcomer}','consent@example.invalid',now());")
+    def initial(choice):
+        return rpc("consent_initial",newcomer,"2026-11-13","2026-11-13",choice)
+    first=race([lambda:initial(True),lambda:initial(False)])
+    assert sorted(r["existing"] for r in first)==[False,True]
+    expected=not first[0]["existing"]
+    assert rpc("account",newcomer)["consent"]["marketing"] is expected
+    rpc("marketing",newcomer,False)
+    assert initial(True)=={"accepted":True,"existing":True}
+    assert rpc("account",newcomer)["consent"]["marketing"] is False
     for user in [USER, OTHER]:
         rpc("consent",user,"2026-11-13","2026-11-13",False)
     denied("consent_version_invalid",rpc,"consent",USER,"old","old",True)
@@ -263,6 +274,21 @@ try:
     alerts=rpc("budget_health")["alerts"]
     assert {("day",80),("day",95),("month",80),("month",95),("daily_spike",200)}=={(a["kind"],a["threshold"]) for a in alerts}
     assert len(alerts)==len({(a["kind"],a["window_start"],a["threshold"]) for a in alerts})
+    claims = race([lambda:rpc("budget_notice_claim")] * 2)
+    notices = [a for result in claims for a in result["alerts"]]
+    assert len(notices) == 5 and all(a["attempt"] == 1 for a in notices)
+    assert len({(a["windowStart"], a["kind"], a["threshold"]) for a in notices}) == 5
+    retry = notices.pop()
+    def finish(a, sent):
+        return rpc("budget_notice_finish", a["windowStart"], a["kind"], a["threshold"], a["attempt"], sent)["updated"]
+    assert all(finish(a, True) for a in notices)
+    assert finish(retry, False) and not rpc("budget_notice_claim")["alerts"]
+    run("update openkoda_private.budget_alerts set notice_retry_at=now()-interval '1 second' where notice_sent_at is null;")
+    second, = rpc("budget_notice_claim")["alerts"]
+    assert second == {**retry, "attempt":2}
+    assert not finish(retry, True) and finish(second, True) and not rpc("budget_notice_claim")["alerts"]
+    run("update openkoda_private.budget_alerts set notice_sent_at=null,notice_retry_at=null,created_at=now()-interval '23 hours';")
+    assert not rpc("budget_notice_claim")["alerts"]
     print("PASS: RBAC/RLS, consent, support/replies, export/deletion, catalogue, mock checkout, period/rate caps, concurrent quotas and dispatch, retention, Asaas disabled by default, settlement, recurring cycles, refunds, replay and cancellation CAS.")
 finally:
     run("drop database " + DATABASE + ";","postgres")

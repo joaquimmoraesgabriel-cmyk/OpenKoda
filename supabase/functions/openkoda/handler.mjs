@@ -7,7 +7,9 @@ const ROUTER = 'https://openrouter.ai/api/v1';
 const accountActions = {
   account:['account',[]], export:['export',[]], cancel:['cancel',[]], support_list:['support_list',[]],
   skills:['skills',[]], skill:['skill',['id']], marketing:['marketing',['enabled']],
-  consent:['consent',['termsVersion','privacyVersion','marketing']], checkout:['checkout_mock',['plan','requestId']],
+  consent:['consent',['termsVersion','privacyVersion','marketing']],
+  consent_initial:['consent_initial',['termsVersion','privacyVersion','marketing']],
+  checkout:['checkout_mock',['plan','requestId']],
   support:['support_create',['subject','message','requestId']], delete:['delete',['confirmation']],
 };
 
@@ -17,6 +19,7 @@ function accountArgs(action, input) {
   if (allowed.includes('requestId')) requireValue(uuid(input.requestId));
   switch (action) {
     case 'consent':
+    case 'consent_initial':
       requireValue(typeof input.marketing === 'boolean');
       return {p_terms_version:textField(input.termsVersion,64),p_privacy_version:textField(input.privacyVersion,64),p_marketing:input.marketing};
     case 'marketing':
@@ -32,7 +35,7 @@ function accountArgs(action, input) {
   }
 }
 
-export function createHandler({env, fetcher = fetch}) {
+export function createHandler({env, fetcher = fetch, waitUntil}) {
   let catalogCache, catalogLoading;
   const key = (dictionary, fallback) => {
     const json = env(dictionary);
@@ -64,6 +67,38 @@ export function createHandler({env, fetcher = fetch}) {
       throw new ApiError(status,safe);
     }
     return readJson(res,name === 'export' ? 8*1024*1024 : 2*1024*1024,502);
+  }
+
+  async function sendNotice(id, subject, message) {
+    const project = new URL(supabase()).hostname.split('.')[0];
+    const notice = await fetcher('https://api.resend.com/emails',{method:'POST',redirect:'error',
+      signal:AbortSignal.timeout(3500),headers:{authorization:'Bearer '+env('RESEND_API_KEY'),
+        'content-type':'application/json','Idempotency-Key':id},
+      body:JSON.stringify({from:env('KODA_SUPPORT_FROM'),to:['joaquimmoraesgabriel@gmail.com'],subject,
+        text:message+' Consulte o painel administrativo: https://supabase.com/dashboard/project/'+project+'/editor?schema=openkoda_private'})});
+    await notice.body?.cancel();
+    return notice.ok;
+  }
+
+  async function deliverBudgetNotices() {
+    const {alerts} = await rpc('budget_notice_claim',{});
+    for (const a of alerts) {
+      const labels = {day:'orçamento diário',month:'orçamento mensal',daily_spike:'exposição diária em relação à média recente'};
+      if (!Object.hasOwn(labels,a.kind) || !/^\d{4}-\d{2}-\d{2}$/.test(a.windowStart) ||
+          !(a.kind === 'daily_spike' ? a.threshold === 200 : [80,95].includes(a.threshold))) continue;
+      const id = ['koda-budget',a.windowStart,a.kind,a.threshold].join('/');
+      const message = 'A exposição do serviço atingiu '+a.threshold+'% do valor de referência ('+labels[a.kind]+'). Período UTC iniciado em '+a.windowStart+'.';
+      const sent = await sendNotice(id,'Koda · Alerta de orçamento',message).catch(() => false);
+      await rpc('budget_notice_finish',{p_window:a.windowStart,p_kind:a.kind,p_threshold:a.threshold,
+        p_attempt:a.attempt,p_sent:sent}).catch(() => {});
+    }
+  }
+
+  async function notifyBudget() {
+    if (env('KODA_BUDGET_EMAIL_ENABLED') !== 'true' || !env('RESEND_API_KEY') || !env('KODA_SUPPORT_FROM')) return;
+    const task = deliverBudgetNotices().catch(() => {});
+    if (waitUntil) waitUntil(task);
+    else await task;
   }
 
   async function authenticate(request) {
@@ -120,12 +155,7 @@ export function createHandler({env, fetcher = fetch}) {
         if (action === 'support' && value?.created === true && uuid(value.id) &&
             env('RESEND_API_KEY') && env('KODA_SUPPORT_FROM')) {
           try {
-            const project = new URL(supabase()).hostname.split('.')[0];
-            const notice = await fetcher('https://api.resend.com/emails',{method:'POST',redirect:'error',signal:AbortSignal.timeout(3500),
-              headers:{authorization:'Bearer '+env('RESEND_API_KEY'),'content-type':'application/json','Idempotency-Key':'koda-support/'+value.id},
-              body:JSON.stringify({from:env('KODA_SUPPORT_FROM'),to:['joaquimmoraesgabriel@gmail.com'],subject:'Koda · Novo chamado de suporte',
-                text:'Um chamado foi registrado. Consulte o painel administrativo: https://supabase.com/dashboard/project/'+project+'/editor?schema=openkoda_private'})});
-            await notice.body?.cancel();
+            await sendNotice('koda-support/'+value.id,'Koda · Novo chamado de suporte','Um chamado foi registrado.');
           } catch { /* The committed ticket remains available in the dashboard. */ }
         }
         if (action === 'delete') {
@@ -149,17 +179,23 @@ export function createHandler({env, fetcher = fetch}) {
       const model = models.find(row => row.id === input.model);
       const {body,reservation} = buildInference(input,model);
       const identity = {p_user:user,p_request:input.requestId};
-      const hold = await rpc('ai_reserve',{...identity,p_digest:await fingerprint(JSON.stringify(body)),p_model:model.id,
-        p_operation:action === 'scan' ? 'analysis' : 'chat',p_ip_hash:ipHash,p_max_cost_micros:reservation});
+      const reserveArgs = {...identity,p_digest:await fingerprint(JSON.stringify(body)),p_model:model.id,
+        p_operation:action === 'scan' ? 'analysis' : 'chat',p_ip_hash:ipHash,p_max_cost_micros:reservation};
+      const hold = await rpc('ai_reserve',reserveArgs).catch(async error => {
+        if (error.status === 429) await notifyBudget();
+        throw error;
+      });
       requireValue(hold?.requestId === input.requestId && typeof hold.replay === 'boolean','reservation_unconfirmed',503);
       if (hold.replay) return json({code:'request_replayed',requestId:input.requestId,status:hold.status},409);
       requireValue(hold.status === 'reserved','reservation_unconfirmed',503);
+      await notifyBudget();
       const settle = async (status, usage, id) => {
         const ack = await rpc('ai_settle',{...identity,p_status:status,
           p_actual_cost_micros:usage ? Math.ceil(usage.costUsd*1e6) : null,
           p_input_tokens:usage?.inputTokens ?? null,p_output_tokens:usage?.outputTokens ?? null,
           p_generation_id:usage?.id ?? (generationId(id) ? id : null)});
         requireValue(ack?.requestId === input.requestId && ack.status === status,'settlement_unconfirmed',503);
+        if (status === 'completed') await notifyBudget();
       };
       const recordFailure = async id => {
         // Hold the upper bound durably before looking up a possibly delayed receipt.

@@ -101,6 +101,16 @@ test('only verified affordable models appear and client capabilities are constra
   assert.equal(converted.body.provider.max_price.image,0.0000001);
 });
 
+test('requests above the database one-cent ceiling fail before reservation or inference',async () => {
+  const f=fixture();
+  const response=await f.ask({...base,maxTokens:2048,messages:[
+    {role:'assistant',content:'a'.repeat(47000)},{role:'user',content:'b'.repeat(47000)},
+  ]});
+  assert.equal(response.status,422);
+  assert.equal((await response.json()).code,'request_cost_limit');
+  assert.deepEqual(f.calls.map(call=>call.path),['/auth/v1/user','/api/v1/models']);
+});
+
 test('scan uses reserve and dispatch before inference, private routing, a bounded schema and settlement',async () => {
   const f = fixture();
   const response = await f.ask(base);
@@ -268,6 +278,25 @@ test('checkout is explicitly simulated; consent, support and purge use the authe
   for (const c of f.calls.filter(c=>c.path.startsWith('/rest/v1/'))) assert.equal(c.body.p_user,userId);
 });
 
+test('initial consent delegates to the authenticated insert-once RPC and returns its replay status', async () => {
+  let existing = false;
+  const f = fixture({rpc(name, body) {
+    assert.equal(name, 'consent_initial');
+    assert.deepEqual(body, {p_user:userId, p_terms_version:'2026-11-13', p_privacy_version:'2026-11-13', p_marketing:!existing});
+    const result = json({accepted:true, existing});
+    existing = true;
+    return result;
+  }});
+  const first = {action:'consent_initial', termsVersion:'2026-11-13', privacyVersion:'2026-11-13', marketing:true};
+  assert.equal((await f.ask({...first, p_user:requestId})).status, 400);
+  assert.equal((await f.ask({...first, marketing:'true'})).status, 400);
+  for (const replay of [false, true]) {
+    const result = await f.ask({...first, marketing:!replay});
+    assert.equal(result.status, 200);
+    assert.deepEqual(await result.json(), {accepted:true, existing:replay});
+  }
+});
+
 test('support notifies only on insert, omits private fields, and retains the ticket on delivery failure',async () => {
   let created=true;
   const f=fixture({env:{RESEND_API_KEY:'fake-resend',KODA_SUPPORT_FROM:'koda@example.test'},email:()=>{throw new Error('offline');},
@@ -281,4 +310,42 @@ test('support notifies only on insert, omits private fields, and retains the tic
   assert.equal(notices[0].headers['Idempotency-Key'],'koda-support/'+requestId);
   assert.deepEqual(notices[0].body.to,['joaquimmoraesgabriel@gmail.com']);
   assert.ok(!JSON.stringify(notices[0].body).includes('PRIVATE-') && !JSON.stringify(notices[0].body).includes(userId));
+});
+
+test('budget notices retry with stable content and key without retrying model generations',async () => {
+  const event={windowStart:'2026-11-13',kind:'day',threshold:80};
+  let permit=true, attempt=0, delivered=false;
+  const f=fixture({env:{KODA_BUDGET_EMAIL_ENABLED:'true',RESEND_API_KEY:'fake-resend',KODA_SUPPORT_FROM:'koda@example.test'},
+    email:()=>delivered ? json({id:'mail-fixture'}) : json({},503),
+    rpc(name,body) {
+      if (name==='budget_notice_claim') {
+        if (!permit) return json({alerts:[]});
+        permit=false;
+        return json({alerts:[{...event,attempt:++attempt}]});
+      }
+      if (name==='budget_notice_finish') return json({updated:true});
+      if (name==='ai_reserve' && delivered) return json({code:'P0001',message:'budget_exceeded'},400);
+    }});
+  assert.equal((await f.ask(base)).status,200);
+  let acks=f.calls.filter(c=>c.path.endsWith('budget_notice_finish'));
+  assert.deepEqual(acks.map(c=>c.body.p_sent),[false]);
+  delivered=permit=true;
+  assert.equal((await f.ask({...base,requestId:'6695de83-094e-4391-bb00-d22e47b6ad9c'})).status,429);
+  acks=f.calls.filter(c=>c.path.endsWith('budget_notice_finish'));
+  assert.deepEqual(acks.map(c=>c.body.p_sent),[false,true]);
+  const messages=f.calls.filter(c=>c.path==='/emails');
+  assert.equal(messages.length,2);
+  assert.equal(messages[0].headers['Idempotency-Key'],'koda-budget/2026-11-13/day/80');
+  assert.deepEqual(messages[0],messages[1]);
+  assert.deepEqual(messages[0].body.to,['joaquimmoraesgabriel@gmail.com']);
+  for (const privateValue of [userId,requestId,base.messages[0].content,model,'fake-resend'])
+    assert.ok(!JSON.stringify(messages[0].body).includes(privateValue));
+  assert.equal(f.calls.filter(c=>c.path.endsWith('completions')).length,1);
+});
+
+test('budget notices need explicit enablement and never share client-side controls',async () => {
+  const f=fixture({env:{RESEND_API_KEY:'fake-resend',KODA_SUPPORT_FROM:'koda@example.test'}});
+  assert.equal((await f.ask(base)).status,200);
+  assert.equal((await f.ask({action:'budget_notice_claim'})).status,404);
+  assert.ok(!f.calls.some(c=>c.path.includes('budget_notice') || c.path==='/emails'));
 });

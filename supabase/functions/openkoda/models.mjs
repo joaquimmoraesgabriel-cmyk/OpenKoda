@@ -144,7 +144,7 @@ export function buildInference(input, model) {
   requireValue(inputBound + maxTokens <= model.contextLength,'context_limit',413);
   const reservation = Math.ceil(inputBound*model.inputUsdPerMillion + maxTokens*model.outputUsdPerMillion +
     (imageData ? model.usdPerImage*1e6 : 0));
-  requireValue(reservation > 0 && reservation <= 25000,'request_cost_limit',422);
+  requireValue(reservation > 0 && reservation <= 10000,'request_cost_limit',422);
   if (imageData) parts.push({type:'image_url',image_url:{url:'data:image/jpeg;base64,'+imageData}});
   return {body,reservation};
 }
