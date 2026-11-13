@@ -5,10 +5,17 @@ const callback=location.origin+'/conta/retorno/';
 const namespace='koda.auth.attempt';
 const legalVersion='2026-11-13';
 let email='', submitting=false;
+let captcha, googleGrant, grantTimer, captchaLoading;
 const notice=document.createElement('p');
 notice.setAttribute('role','status');
 const say=text=>{notice.textContent=text;};
 function content(html,title='Minha conta',subtitle=''){
+ clearTimeout(grantTimer);googleGrant=null;
+ if(captcha){
+  clearTimeout(captcha.timer);
+  if(captcha.id!=null)window.turnstile?.remove?.(captcha.id);
+  captcha=null;
+ }
  root.setAttribute('aria-busy','false');
  const mark=document.querySelector('.site-header .brand svg').cloneNode(true);
  root.replaceChildren();
@@ -25,7 +32,7 @@ async function call(operation,data={}){
   const response=await fetch('/conta/api/'+operation,{method:'POST',credentials:'same-origin',cache:'no-store',redirect:'error',headers:{'Content-Type':'application/json'},body:JSON.stringify(data),signal:AbortSignal.timeout(25000)});
   const parsed=await response.json().catch(()=>({}));
   if(!response.ok){
-   const message=response.status===429?'Muitas tentativas. Aguarde antes de tentar novamente.':response.status===401||response.status===403?'Acesso recusado. Confira a conta e a confirmação do e-mail.':'Não foi possível concluir. Confira os dados e tente novamente.';
+   const message=parsed.code==='captcha_failed'?'A verificação foi recusada ou expirou. Conclua a nova verificação.':parsed.code==='captcha_unavailable'?'A verificação de segurança está indisponível. Tente novamente em instantes.':response.status===429?'Muitas tentativas. Aguarde antes de tentar novamente.':response.status===401||response.status===403?'Acesso recusado. Confira a conta e a confirmação do e-mail.':'Não foi possível concluir. Confira os dados e tente novamente.';
    throw Object.assign(Error(message),{code:parsed.code});
   }
   return parsed;
@@ -38,8 +45,15 @@ const edge=(action,body={})=>call('account',{action,...body});
 async function authorize(desktop,chooseAccount=false,intent){
  const state=desktop?params.get('state'):crypto.randomUUID();
  const port=desktop?params.get('port'):null;
- const hash=desktop?params.get('code_challenge'):(await call('google')).challenge;
- if(desktop && (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(state??'')||!/^\d{2,5}$/.test(port??'')||Number(port)<1024||Number(port)>65535||!/^[\w-]{43}$/.test(hash??'')))throw Error('A solicitação do aplicativo expirou ou é inválida.');
+ const nativeHash=desktop?params.get('code_challenge'):null;
+ if(desktop && (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(state??'')||!/^\d{2,5}$/.test(port??'')||Number(port)<1024||Number(port)>65535||!/^[\w-]{43}$/.test(nativeHash??'')))throw Error('A solicitação do aplicativo expirou ou é inválida.');
+ if(googleGrant&&googleGrant.expires<=Date.now()){
+  googleGrant=null;clearTimeout(grantTimer);attachCaptcha('login');
+  throw Error('A verificação expirou. Conclua a nova verificação.');
+ }
+ const grant=googleGrant??await verifyGoogle(desktop);
+ googleGrant=null;clearTimeout(grantTimer);
+ const hash=desktop?nativeHash:grant.challenge;
  sessionStorage.setItem(namespace+(desktop?'.desktop':'.google'),JSON.stringify({desktop,state,port,consent:desktop?null:intent,expires:Date.now()+180000}));
  const url=new URL(project+'/auth/v1/authorize');
  url.search=new URLSearchParams({provider:'google',redirect_to:callback,code_challenge:hash,code_challenge_method:'s256'});
@@ -55,10 +69,18 @@ function consentIntent(data){
  if(data?.adult!=='on'||data?.agreement!=='on')throw Error('Confirme a idade e o aceite dos termos e da privacidade.');
  return {adult:true,termsVersion:legalVersion,privacyVersion:legalVersion,marketing:data.marketing==='on'};
 }
-function googleChoice(desktop,chooseAccount=false){
+async function verifyGoogle(desktop){
+ const result=await call('google',{captchaToken:takeCaptcha(),...(desktop?{desktop:true}:{})});
+ if(desktop?result.verified!==true:!/^[-\w]{43}$/.test(result.challenge??''))throw Error('Não foi possível iniciar o login com Google.');
+ return {challenge:result.challenge,expires:Date.now()+240000};
+}
+function googleChoice(desktop,chooseAccount=false,grant=null){
  const operation=desktop?'googleDesktopConsent':chooseAccount?'googleRetryConsent':'googleConsent';
  content('<form id="'+operation+'">'+requiredAgreements+'<button>Continuar com Google</button></form><button class="secondary account-back" data-do="login">Voltar ao login</button>','Continue com Google',
   desktop?'Confirme os requisitos da conta. Depois do login, o aplicativo permite registrar os aceites e escolher suas preferências.':'Confira os requisitos antes de abrir o Google. Você poderá escolher se deseja receber novidades em Minha conta.');
+ googleGrant=grant;
+ const refresh=()=>{googleGrant=null;attachCaptcha('login');};
+ if(grant){grantTimer=setTimeout(refresh,Math.max(0,grant.expires-Date.now()));}else{refresh();}
 }
 function signup(){
  if(!turnstileSiteKey){content('<p>O cadastro público está em preparação. A edição gratuita com chave própria está disponível na página de download.</p><button class="secondary" data-do="login">Voltar ao login</button>');return;}
@@ -69,17 +91,45 @@ function oauthFailure(desktop){
  if(desktop){
   content('<p>Abra o OpenKoda e inicie o login novamente. Você poderá escolher outra conta no Google.</p><button class="secondary account-back" data-do="login">Entrar no site</button>','O login não foi concluído');
  }else{
-  content('<button data-do="retryGoogle">Tentar com Google novamente</button><div class="auth-links"><button class="secondary" data-do="login">Entrar com e-mail</button></div>','O login não foi concluído','Tente outra vez ou escolha outra conta do Google.');
+  content('<button data-do="retryGoogle">Tentar com Google novamente</button><div class="auth-links"><button class="secondary" data-do="login">Entrar com e-mail</button></div>','O login não foi concluído','Tente outra vez ou escolha outra conta do Google.');attachCaptcha('login');
  }
 }
-let captchaLoading;
-async function attachCaptcha(){
+function takeCaptcha(){
+ if(!captcha?.token||captcha.expires<=Date.now())throw Error('Conclua a verificação de segurança.');
+ const token=captcha.token;
+ captcha.token='';captcha.enable(false);clearTimeout(captcha.timer);
+ return token;
+}
+function retryCaptcha(){
+ if(!captcha||captcha.token||captcha.id==null)return;
+ window.turnstile?.reset?.(captcha.id);
+}
+async function attachCaptcha(action){
  const form=root.querySelector('form');
- if(!form||!turnstileSiteKey)return;
- const slot=document.createElement('div');form.insertBefore(slot,form.querySelector('button'));
- captchaLoading??=new Promise((ok,fail)=>{const script=document.createElement('script');script.src='https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';script.onload=ok;script.onerror=fail;document.head.append(script);});
- try{await captchaLoading;if(slot.isConnected)window.turnstile.render(slot,{sitekey:turnstileSiteKey,action:form.id});}
- catch{say('A verificação de segurança não carregou. Tente novamente.');}
+ const first=form?.querySelector('button')??root.querySelector('[data-do="retryGoogle"]');
+ if(!first)return;
+ const buttons=[first,...root.querySelectorAll('[data-do="google"]')];
+ const slot=document.createElement('div');first.before(slot);
+ const current={id:null,token:'',expires:0,timer:null,enable:ready=>{for(const b of buttons)b.disabled=!ready;}};
+ captcha=current;current.enable(false);
+ if(!turnstileSiteKey){say('A verificação de segurança está indisponível.');return;}
+ function clear(){
+  if(captcha!==current)return;
+  current.token='';clearTimeout(current.timer);current.enable(false);
+ }
+ captchaLoading??=new Promise((ok,fail)=>{const script=document.createElement('script');script.src='https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';script.onload=ok;script.onerror=()=>{script.remove();fail();};document.head.append(script);}).catch(()=>{captchaLoading=null;throw Error();});
+ try{
+  await captchaLoading;if(!slot.isConnected)return;
+  current.id=window.turnstile.render(slot,{sitekey:turnstileSiteKey,action:action??form.id,
+   callback(token){
+    if(captcha!==current||typeof token!=='string'||!token||token.length>2048)return;
+    clearTimeout(current.timer);current.token=token;current.expires=Date.now()+285000;
+    current.enable(true);current.timer=setTimeout(()=>{clear();retryCaptcha();},285000);
+   },
+   'expired-callback':clear,'timeout-callback':clear,
+   'error-callback':()=>{if(captcha===current){clear();say('A verificação de segurança falhou. Aguarde a nova tentativa ou recarregue a página.');}return true;}
+  });
+ }catch{if(captcha===current)say('A verificação de segurança não carregou. Recarregue a página para tentar novamente.');}
 }
 function account(){
  content(`<div class="dashboard"><div class="dashboard-head"><div><h1>Minha conta</h1><p id="identity"></p></div><button class="secondary" data-do="logout">Sair</button></div>
@@ -145,23 +195,21 @@ async function signedIn(result,oauthIntent){
 async function handle(action,data){
  let security;
  if(data&&['login','signup','recover'].includes(action)&&turnstileSiteKey){
-  const token=data['cf-turnstile-response'];delete data['cf-turnstile-response'];
-  if(!token)throw Error('Conclua a verificação de segurança.');
-  security={captcha_token:token};
+  delete data['cf-turnstile-response'];
+  security={captcha_token:takeCaptcha()};
  }
  switch(action){
- case 'retryGoogle':return googleChoice(false,true);
+ case 'retryGoogle':return googleChoice(false,true,await verifyGoogle(false));
  case 'googleConsent':case 'googleRetryConsent':case 'googleDesktopConsent':
   return authorize(action==='googleDesktopConsent',action==='googleRetryConsent',consentIntent(data));
  case 'desktopCaptcha':{
   const state=params.get('state'), port=params.get('port');
   if(!/^[0-9a-f-]{36}$/i.test(state??'') || !/^\d{4,5}$/.test(port??'') || Number(port)<1024 || Number(port)>65535)throw Error('Retorno local inválido.');
-  const token=data['cf-turnstile-response'];
-  if(!token || token.length>2048)throw Error('Conclua a verificação.');
+  const token=takeCaptcha();
   const url=new URL('http://127.0.0.1:'+Number(port)+'/openkoda/callback');
   url.search=new URLSearchParams({state,captcha:token});location.replace(url.href);return;
  }
- case 'google': return googleChoice(false);
+ case 'google': return googleChoice(false,false,await verifyGoogle(false));
  case 'desktop':return googleChoice(true);
  case 'login':if(!data){login();return;}return signedIn(await call('password',{...data,gotrue_meta_security:security}));
  case 'signup':if(!data)return signup();
@@ -173,7 +221,7 @@ async function handle(action,data){
   login();return say('Confira seu e-mail para confirmar o cadastro. Ao entrar, registre os aceites no perfil.');
  case 'recover':if(!turnstileSiteKey)throw Error('Para recuperar o acesso no pré-lançamento, entre em contato com o suporte.');if(!data){content('<form id="recover"><label>E-mail da conta<input type="email" required name="email"></label><button>Enviar recuperação</button></form>');attachCaptcha();return;}
   await call('recover',{email:data.email,gotrue_meta_security:security});return say('Se a conta existir, você receberá instruções. Abra o link no mesmo navegador.');
- case 'reset':{const result=await call('reset',{password:data.password});email=result.user.email;account();return say('Senha atualizada.');}
+ case 'reset':{const result=await call('reset',{password:data.password});email=result.user.email;history.replaceState(null,'','/conta/');account();return say('Senha atualizada.');}
  case 'consent':await edge('consent',{termsVersion:'2026-11-13',privacyVersion:'2026-11-13',marketing:data.marketing==='on'});return say('Aceites registrados.');
  case 'unsubscribe':await edge('marketing',{enabled:false});return say('Consentimento de marketing retirado.');
  case 'support':{const r=await edge('support',{...data,requestId:crypto.randomUUID()});root.querySelector('#support').reset();void refreshAccount();return say('Chamado registrado. '+(r.id??''));}
@@ -184,7 +232,7 @@ async function handle(action,data){
  case 'logout':await call('logout');email='';login();return say('Sessão encerrada.');
  }
 }
-async function dispatch(action,data){if(submitting)return;submitting=true;say('');try{await handle(action,data);}catch(e){say(e.message||'Serviço indisponível.');}finally{submitting=false;}}
+async function dispatch(action,data){if(submitting)return;submitting=true;say('');try{await handle(action,data);}catch(e){retryCaptcha();say(e.message||'Serviço indisponível.');}finally{submitting=false;}}
 root.addEventListener('submit',e=>{e.preventDefault();void dispatch(e.target.id,payload(e.target));});
 root.addEventListener('click',e=>{const b=e.target.closest('[data-do]');if(b)void dispatch(b.dataset.do);});
 async function restoreDashboard(){
@@ -198,6 +246,15 @@ async function restoreDashboard(){
 }
 window.addEventListener('pageshow',event=>{if(event.persisted)void restoreDashboard();});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')void restoreDashboard();});
+function resetForm(){
+ content('<form id="reset"><label>Nova senha<input type="password" name="password" minlength="12" maxlength="128" autocomplete="new-password" required></label><button>Salvar nova senha</button></form>','Redefina sua senha');
+}
+async function loadAccount(reset=false){
+ const {user}=await call('status');
+ if(!user){login();return;}
+ email=user.email;
+ if(reset)resetForm();else account();
+}
 async function init(){
  // An old implicit-flow email may still contain credentials in its fragment.
  // Discard the fragment locally rather than importing tokens into the session.
@@ -208,7 +265,8 @@ async function init(){
   const desktop=JSON.parse(sessionStorage.getItem(namespace+'.desktop')||'null'),google=JSON.parse(sessionStorage.getItem(namespace+'.google')||'null');
   const native=desktop?.desktop&&desktop.expires>=Date.now();
   if(failed){oauthFailure(native);return;}
-  if(!code||code.length>1024)throw Error('O retorno expirou. Inicie novamente pelo dispositivo que solicitou o acesso.');
+  if(!code){history.replaceState(null,'','/conta/');await loadAccount();return;}
+  if(code.length>1024)throw Error('O retorno é inválido. Inicie novamente pelo dispositivo que solicitou o acesso.');
   let result;
   try{result=await call('exchange',{auth_code:code});}
   catch(error){
@@ -217,8 +275,9 @@ async function init(){
    }
    oauthFailure(native);return;
   }
-  if(result.kind==='recover'){email=result.user.email;content('<form id="reset"><label>Nova senha<input type="password" name="password" minlength="12" maxlength="128" autocomplete="new-password" required></label><button>Salvar nova senha</button></form>','Redefina sua senha');return;}
+  if(result.kind==='recover'){email=result.user.email;history.replaceState(null,'','/conta/?intent=nova-senha');resetForm();return;}
   if(result.kind==='google')sessionStorage.removeItem(namespace+'.google');
+  history.replaceState(null,'','/conta/');
   await signedIn(result,result.kind==='google'&&google?.expires>=Date.now()?google.consent:undefined);return;
  }
  if(params.get('desktop')==='1'){
@@ -230,7 +289,6 @@ async function init(){
  }
  if(params.get('intent')==='cadastro'){signup();return;}
  if(params.get('intent')==='recuperar'){login();await handle('recover');return;}
- const state=await call('status');
- if(state.user){email=state.user.email;account();}else login();
+ await loadAccount(params.get('intent')==='nova-senha');
 }
-init().catch(e=>{login();say(e.message);});
+init().catch(e=>{content('<button id="reload-session" type="button">Tentar novamente</button>','Não foi possível abrir a conta');root.querySelector('#reload-session').onclick=()=>location.reload();say(e.message);});

@@ -54,7 +54,28 @@ async function createAttempt(headers,kind){
 }
 const fields=(body,allowed)=>check(Object.keys(body).every(key=>allowed.includes(key)));
 const smallText=(v,min,max)=>typeof v==='string'&&v.length>=min&&v.length<=max;
-export async function sessionBridge(request,send=fetch){
+
+async function verifyGoogleCaptcha(token,secret,hostname,send){
+ check(smallText(token,1,2048)&&token.trim()===token,400,'captcha_required');
+ check(typeof secret==='string'&&secret.length>0,503,'captcha_unavailable');
+ const controller=new AbortController();
+ const deadline=setTimeout(()=>controller.abort(),10000);
+ let result;
+ try{
+  const response=await send('https://challenges.cloudflare.com/turnstile/v0/siteverify',{
+   method:'POST',redirect:'manual',headers:{'Content-Type':'application/json','Cache-Control':'no-store'},
+   body:JSON.stringify({secret,response:token}),signal:controller.signal
+  });
+  check(response.ok,503,'captcha_unavailable');
+  result=await response.json();
+ }catch{throw new SiteError(503,'captcha_unavailable');}
+ finally{clearTimeout(deadline);}
+ const errors=Array.isArray(result?.['error-codes'])?result['error-codes']:[];
+ check(!errors.some(code=>['internal-error','invalid-input-secret','missing-input-secret'].includes(code)),503,'captcha_unavailable');
+ check(result?.success===true&&result.hostname===hostname&&result.action==='login',403,'captcha_failed');
+}
+
+export async function sessionBridge(request,send=fetch,env={}){
  const url=new URL(request.url),headers=new Headers(securityHeaders);
  headers.set('Content-Type','application/json');headers.set('Cache-Control','private, no-store, max-age=0');headers.set('Vary','Origin, Cookie');
  const reply=(data,status=200)=>new Response(JSON.stringify(data),{status,headers});
@@ -116,7 +137,11 @@ export async function sessionBridge(request,send=fetch){
    const result=await upstream('/auth/v1/token?grant_type=password','POST',data);return reply({user:save(result).user});
   }
   if(action==='google'){
-   fields(data,[]);return reply({challenge:await createAttempt(headers,'google')});
+   fields(data,['captchaToken','desktop']);
+   check(data.desktop===undefined||data.desktop===true);
+   await verifyGoogleCaptcha(data.captchaToken,env.TURNSTILE_SECRET_KEY,url.hostname,send);
+   if(data.desktop)return reply({verified:true});
+   return reply({challenge:await createAttempt(headers,'google')});
   }
   if(action==='exchange'){
    fields(data,['auth_code']);check(smallText(data.auth_code,1,1024));
@@ -163,11 +188,11 @@ export async function sessionBridge(request,send=fetch){
 }
 
 export default {
- fetch(request) {
+ fetch(request,env) {
   const url = new URL(request.url);
   const headers = new Headers(securityHeaders);
   headers.set('Cache-Control',url.pathname.startsWith('/conta')?'private, no-store':'public, max-age=0, must-revalidate');
-  if(url.pathname.startsWith('/conta/api/'))return sessionBridge(request);
+  if(url.pathname.startsWith('/conta/api/'))return sessionBridge(request,fetch,env);
   if (url.protocol !== 'https:') {
    url.protocol='https:';
    headers.set('Location',url.href);

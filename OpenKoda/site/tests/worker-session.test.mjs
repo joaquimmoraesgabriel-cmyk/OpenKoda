@@ -7,20 +7,28 @@ const origin='https://site.example.invalid',auth='https://ynjcyvnrfxsrijrwpaye.s
 const user={id:'fixture',email:'user@example.invalid',email_confirmed_at:'2026-11-13'};
 const access='synthetic.jwt.onlytestcredentials',refresh='synthetic-refresh-token';
 const session={access_token:access,refresh_token:refresh,user,expires_in:3600};
+const captchaToken='only-a-fixture', captchaSecret='fixture-server-config';
+const captchaOk={success:true,hostname:new URL(origin).hostname,action:'login'};
 function request(action,body={},headers={},method='POST'){
  return new Request(origin+'/conta/api/'+action,{method,headers:{origin,'content-type':'application/json',...headers},
    ...(method==='GET'?{}:{body:JSON.stringify(body)})});
 }
 const pass={email:user.email,password:'fixture-password',gotrue_meta_security:{captcha_token:'test'}};
-function fixture(upstream){
+function fixture(upstream,siteverify=()=>Response.json(captchaOk),env={TURNSTILE_SECRET_KEY:captchaSecret}){
  const calls=[];
  const run=(action,body,headers,method)=>sessionBridge(request(action,body,headers,method),async(raw,init)=>{
+   if(raw==='https://challenges.cloudflare.com/turnstile/v0/siteverify'){
+    assert.equal(init.redirect,'manual');assert.equal(init.method,'POST');
+    assert.equal(init.headers.Authorization,undefined);assert.equal(init.headers.apikey,undefined);
+    assert.deepEqual(JSON.parse(init.body),{secret:captchaSecret,response:captchaToken});
+    return siteverify();
+   }
    const url=new URL(raw);assert.equal(url.origin,auth);assert.equal(init.redirect,'manual');assert.ok(!('cache' in init));
    assert.equal(init.headers['Cache-Control'],'no-store');assert.equal(init.headers.Pragma,'no-cache');assert.ok(init.signal instanceof AbortSignal);
    assert.ok(init.headers.apikey.startsWith('sb_publishable_'));
    const call={url,method:init.method,body:init.body?JSON.parse(init.body):{},bearer:init.headers.Authorization};
    calls.push(call);return upstream(call);
- });
+ },env);
  return {calls,run};
 }
 const pairs=response=>response.headers.getSetCookie().map(cookie=>cookie.split(';')[0]).join('; ');
@@ -68,7 +76,7 @@ test('workerd manual redirects are rejected without a second request, and a miss
   assert.equal(f.calls.length,1);assert.deepEqual(res.headers.getSetCookie(),[]);
  }
  const f=fixture(()=>Response.json({error_code:'flow_state_not_found'},{status:404}));
- const attempt=await f.run('google',{});
+ const attempt=await f.run('google',{captchaToken});
  const res=await f.run('exchange',{auth_code:'unknown-test-code'},{cookie:pairs(attempt)});
  assert.equal(res.status,404);assert.deepEqual(await res.json(),{code:'service_refused'});
 });
@@ -85,7 +93,7 @@ test('PKCE binds email signup and recovery to the original same callback and sel
   const computed=createHash('sha256').update(body.code_verifier).digest('base64url');
   return computed===challenges[body.auth_code]?Response.json(session):Response.json({error_code:'bad_code_verifier'},{status:400});
  });
- const google=await f.run('google',{}),signup=await f.run('signup',{...pass,data:{adult_requested:true,terms_requested:'test',privacy_requested:'test',marketing_requested:false}}),
+ const google=await f.run('google',{captchaToken}),signup=await f.run('signup',{...pass,data:{adult_requested:true,terms_requested:'test',privacy_requested:'test',marketing_requested:false}}),
    recover=await f.run('recover',{email:user.email});
  const cookie=[google,signup,recover].map(pairs).join('; ');
  const exchanged=await f.run('exchange',{auth_code:'recover'},{cookie});
@@ -94,6 +102,29 @@ test('PKCE binds email signup and recovery to the original same callback and sel
  assert.ok(!pairs(exchanged).includes('__Host-koda-google')&&!pairs(exchanged).includes('__Host-koda-signup'));
  const desktop=await f.run('exchange',{auth_code:'desktop'},{cookie});
  assert.equal(desktop.status,409);assert.equal((await desktop.json()).code,'unmatched_attempt');assert.equal(desktop.headers.getSetCookie().length,0);
+});
+test('Google starts only after server verification for this hostname and action',async()=>{
+ const noNetwork=()=>assert.fail('unexpected outbound request');
+ const invalid=fixture(noNetwork,noNetwork);
+ for(const body of [{},{captchaToken:''},{captchaToken:'x'.repeat(2049)},{captchaToken,desktop:'true'},{captchaToken,secret:'client-override'}]){
+  const r=await invalid.run('google',body);assert.equal(r.status,400);assert.deepEqual(r.headers.getSetCookie(),[]);
+ }
+ const unconfigured=await fixture(noNetwork,noNetwork,{}).run('google',{captchaToken});
+ assert.equal(unconfigured.status,503);assert.deepEqual(await unconfigured.json(),{code:'captcha_unavailable'});
+ for(const [verified,status] of [[{...captchaOk,hostname:'elsewhere.example'},403],[{...captchaOk,action:'signup'},403],
+  [{'success':false,'error-codes':['timeout-or-duplicate']},403],[{'success':false,'error-codes':['invalid-input-secret']},503]]){
+  const r=await fixture(noNetwork,()=>Response.json(verified)).run('google',{captchaToken});
+  assert.equal(r.status,status);assert.equal(r.headers.getSetCookie().length,0);assert.ok(!(await r.text()).includes(captchaSecret));
+ }
+ const redirect=await fixture(noNetwork,()=>new Response(null,{status:302,headers:{Location:'https://evil.example'}})).run('google',{captchaToken});
+ assert.equal(redirect.status,503);assert.deepEqual(redirect.headers.getSetCookie(),[]);
+ let verifications=0;
+ const f=fixture(noNetwork,()=>{verifications++;return Response.json(captchaOk);});
+ const web=await f.run('google',{captchaToken});assert.equal(web.status,200);
+ assert.match((await web.json()).challenge,/^[A-Za-z0-9_-]{43}$/);assert.equal(web.headers.getSetCookie().length,1);
+ const native=await f.run('google',{captchaToken,desktop:true});
+ assert.equal(native.status,200);assert.deepEqual(await native.json(),{verified:true});
+ assert.deepEqual(native.headers.getSetCookie(),[]);assert.equal(verifications,2);
 });
 test('expired or revoked sessions cannot act; a transient outage cannot clear an active session',async()=>{
  for(const status of [400,503]){
