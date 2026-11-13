@@ -9,6 +9,8 @@ import { PolicySummary, useDataPolicy } from './DataPolicy';
 import { Field, KeyValue, Notice } from './shared';
 
 export interface PacketContext {
+ compactedTurns?:number; omittedTurns?:number;
+ autoSkill?:string;
  context:unknown;digest:string;bytes:number;notice?:string;endpoint:string;sourceFilesIncluded:boolean;
  dataReview:DataReviewRef|null;canSend:boolean;reasonCodes:string[];
  packetPreview:{schema:'openkoda.ai-packet-preview.v1';operation:string;model:string;endpoint:string;requestEndpoint:string;prompts:{index:number;perspective?:string;prompt:string;instructions:string;maxOutputTokens:number}[];selection:unknown;policyVersions:unknown;credentialRef:unknown;requiresSensitiveConfirmation:boolean};

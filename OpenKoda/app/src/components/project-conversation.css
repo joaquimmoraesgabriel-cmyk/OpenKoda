@@ -161,3 +161,10 @@
   :root:not([data-motion="reduced"]) :is(.chat-model-dialog,.composer-menu):popover-open { animation: chat-pop-in .12s ease-out; }
 }
 @keyframes chat-pop-in { from { opacity: 0; } to { opacity: 1; } }
+.chat-skills { max-height:18rem; overflow:auto; padding:.8rem; border:1px solid var(--line); border-radius:.6rem; background:var(--surface); }
+.chat-skills>div { display:grid; gap:.25rem; margin:.4rem 0; }
+.chat-skills p { margin:.15rem 0; }
+.chat-skills pre { white-space:pre-wrap; overflow-wrap:anywhere; }
+.chat-skills button { justify-self:start; }
+.reasoning-control { display:grid; gap:.1rem; min-width:6rem; font-size:.72rem; }
+.reasoning-control input { max-width:8rem; accent-color:var(--accent); }

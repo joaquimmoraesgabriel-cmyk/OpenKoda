@@ -3,24 +3,24 @@ use serde_json::{json, Value};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
-pub enum ProviderId { OpenAI, OpenRouter, Groq, Anthropic, Gemini, DeepSeek, Xai }
+pub enum ProviderId { OpenAI, OpenRouter, Groq, Anthropic, Gemini, DeepSeek, Xai, OpenKoda }
 
 impl ProviderId {
     pub const ALL: [Self; 7] = [Self::OpenAI, Self::OpenRouter, Self::Groq, Self::Anthropic, Self::Gemini, Self::DeepSeek, Self::Xai];
     pub fn parse(id: &str) -> Result<Self, String> {
-        Self::ALL.into_iter().find(|p| p.id() == id)
+        Self::ALL.into_iter().chain([Self::OpenKoda]).find(|p| p.id() == id)
             .ok_or_else(|| "Provedor de IA não suportado.".into())
     }
     pub fn from_endpoint(endpoint: &str) -> Result<Self, String> {
-        Self::ALL.into_iter().find(|p| p.endpoint() == endpoint)
+        Self::ALL.into_iter().chain([Self::OpenKoda]).find(|p| p.endpoint() == endpoint)
             .ok_or_else(|| "O destino da conexão não corresponde a um provedor suportado.".into())
     }
     pub fn id(self) -> &'static str { match self {
         Self::OpenAI => "openai", Self::OpenRouter => "openrouter", Self::Groq => "groq",
-        Self::Anthropic => "anthropic", Self::Gemini => "gemini", Self::DeepSeek => "deepseek", Self::Xai => "xai",
+        Self::Anthropic => "anthropic", Self::Gemini => "gemini", Self::DeepSeek => "deepseek", Self::Xai => "xai", Self::OpenKoda => "openkoda",
     }}
     pub fn slot(self) -> i64 { match self { Self::OpenAI => 1, Self::OpenRouter => 2, Self::Groq => 3,
-        Self::Anthropic => 4, Self::Gemini => 5, Self::DeepSeek => 6, Self::Xai => 7 } }
+        Self::Anthropic => 4, Self::Gemini => 5, Self::DeepSeek => 6, Self::Xai => 7, Self::OpenKoda => 8 } }
     pub fn endpoint(self) -> &'static str { match self {
         Self::OpenAI => "https://api.openai.com/v1",
         Self::OpenRouter => "https://openrouter.ai/api/v1",
@@ -29,6 +29,7 @@ impl ProviderId {
         Self::Gemini => "https://generativelanguage.googleapis.com/v1beta/openai",
         Self::DeepSeek => "https://api.deepseek.com",
         Self::Xai => "https://api.x.ai/v1",
+        Self::OpenKoda => crate::commercial::EDGE,
     }}
     pub fn catalog_url(self) -> String {
         if self == Self::Gemini { return "https://generativelanguage.googleapis.com/v1beta/models".into(); }
@@ -57,6 +58,7 @@ impl ProviderId {
         Ok((catalog(body)?, next))
     }
     pub fn inference_url(self) -> String {
+        if self == Self::OpenKoda { return self.endpoint().into(); }
         format!("{}{}", self.endpoint(), match self {
             Self::OpenAI => "/responses", Self::Anthropic => "/messages", _ => "/chat/completions"
         })
@@ -110,7 +112,11 @@ impl ProviderId {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct AiSelection { pub provider: ProviderId, pub model: String }
+pub struct AiSelection { pub provider: ProviderId, pub model: String, #[serde(default,skip_serializing_if="Option::is_none")] pub reasoning: Option<Reasoning> }
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Reasoning { Low, Medium, High }
 
 /// A missing selection for a matching, older key preserves its original catalog behavior.
 /// A newer key must complete setup before it can use any of the previous key's models.
@@ -138,6 +144,7 @@ impl ProviderModelPreference {
 impl AiSelection {
     pub fn validate(&self) -> Result<(), String> {
         if !valid_model(&self.model) { return Err("Identificador de modelo inválido.".into()); }
+        if self.reasoning.is_some() && self.provider != ProviderId::OpenKoda { return Err("O nível de raciocínio requer um modelo da assinatura.".into()); }
         Ok(())
     }
 }

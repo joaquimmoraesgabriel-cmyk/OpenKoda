@@ -156,6 +156,31 @@ mod tests {
         assert!(reopened.handle("ai.context",json!({"assessmentId":f.aid,"operation":"ask","evidenceIds":[],"chatImage":"aW52YWxpZA==","categories":["human_text"],"credentialReferenceId":credential,"message":"foto","messageSensitivity":"internal","packageSensitivity":"internal"}),&f.store).is_err());
     }
     #[test]
+    fn compacted_context_reopens_without_sending_and_revocation_blocks_an_old_review() {
+        let f=Fixture::new();
+        let credential=f.ai.test_data_authority(&f.store,&f.aid);
+        let prepare=|ai:&AiService,message:&str,compact:bool|ai.handle("ai.context",json!({"assessmentId":f.aid,"operation":"ask","message":message,"credentialReferenceId":credential,
+            "categories":["human_text"],"includeChatHistory":true,"compactHistory":compact,"messageSensitivity":"internal","packageSensitivity":"internal"}),&f.store);
+        for i in 0..6{
+            let message=format!("Synthetic fact {i}");let preview=prepare(&f.ai,&message,false).unwrap();
+            f.ai.handle("ai.ask",json!({"assessmentId":f.aid,"message":message,"contextDigest":preview["digest"],"dataReview":preview["dataReview"],"allowRemote":true,"evidenceIds":[]}),&f.store).unwrap();
+        }
+        let reopened=AiService::with_provider(f._dir.path().into(),f.fake.clone()).unwrap();
+        let preview=prepare(&reopened,"Next",true).unwrap();
+        assert!(preview["compactedTurns"].as_u64().unwrap()>0);
+        let packet:Value=serde_json::from_str(preview["packetPreview"]["prompts"][0]["prompt"].as_str().unwrap()).unwrap();
+        assert!(packet["payload"].as_str().unwrap().contains("Review synthetic package only"));
+        assert!(packet["selection"]["origins"][0]["scopeRef"].is_object());
+        assert_eq!(packet["conversationHistory"][0]["firstAuthorizedUserTurn"]["excerpt"],"Synthetic fact 0");
+        let invoke=json!({"assessmentId":f.aid,"message":"Next","contextDigest":preview["digest"],"dataReview":preview["dataReview"],"allowRemote":true,"evidenceIds":[]});
+        let pid=&f.store.snapshot().unwrap().assessments[0].project_id;
+        let status=reopened.data_policy.handle("data.policy.status",json!({"projectId":pid}),&f.store,&reopened.data_redactor(),&CanonicalOnly,None).unwrap();
+        reopened.data_policy.handle("data.policy.revoke",json!({"projectId":pid,"expectedStateDigest":status["stateDigest"],"idempotencyKey":model::id(),"acknowledgeRevocation":true}),&f.store,&reopened.data_redactor(),&CanonicalOnly,None).unwrap();
+        assert!(reopened.handle("ai.ask",invoke,&f.store).is_err());
+        assert_eq!(f.fake.calls.load(Ordering::SeqCst),6);
+        assert_eq!(reopened.handle("ai.history",json!({"assessmentId":f.aid}),&f.store).unwrap()["messages"].as_array().unwrap().len(),12);
+    }
+    #[test]
     fn chat_attachments_are_bound_to_one_send_and_never_replayed_as_history() {
         use base64::Engine;
         let f=Fixture::new();
@@ -252,6 +277,9 @@ pub(super) struct AiDataOptions {
     pub operation:String,
     #[serde(default,skip_serializing_if="Option::is_none")] pub chat_image:Option<String>,
     #[serde(default,skip_serializing_if="std::ops::Not::not")] pub include_chat_history:bool,
+    #[serde(default,skip_serializing_if="std::ops::Not::not")] pub compact_history:bool,
+    #[serde(default,skip_serializing_if="Option::is_none")] pub skill_id:Option<String>,
+    #[serde(default)] pub disable_auto_skill:bool,
     pub message_sensitivity:Sensitivity,
     pub package_sensitivity:Sensitivity,
     pub categories:Vec<DataCategory>,
@@ -306,6 +334,11 @@ impl AiService {
         let db=self.db.lock().map_err(failure)?;
         snapshot.provider_slots.iter().map(|slot|{
             let p=ProviderId::parse(&slot.provider)?;
+            if p==ProviderId::OpenKoda {
+                let revision=self.account.identity_revision()?;
+                return Ok(crate::credential_refs::ProviderCredentialIdentity{slot_id:slot.id.clone(),available:revision.is_some(),
+                    connection_verified:revision.is_some(),revision:revision.unwrap_or_default(),model:String::new(),endpoint:p.endpoint().into()});
+            }
             let row:Option<(String,Option<String>)>=db.query_row(
                 "SELECT v.revision,c.model FROM vault v LEFT JOIN connection_check c ON c.id=v.id AND c.revision=v.revision AND c.endpoint=?2 WHERE v.id=?1",
                 params![p.slot(),p.endpoint()],|r|Ok((r.get(0)?,r.get(1)?))).optional().map_err(failure)?;
@@ -324,7 +357,7 @@ impl AiService {
         let slot=crate::credential_refs::provider_slot(state,provider).ok_or("credential_reference_changed: configure a credencial deste provedor.")?;
         let revision=self.revision(provider)?;
         let db=self.db.lock().map_err(failure)?;
-        let verified:bool=db.query_row("SELECT EXISTS(SELECT 1 FROM connection_check WHERE model=?1 AND endpoint=?2 AND revision=?3)",params![cfg.model,cfg.endpoint.trim_end_matches('/'),revision.as_deref().unwrap_or("")],|r|r.get(0)).map_err(failure)?;
+        let verified:bool=if provider==ProviderId::OpenKoda{revision.is_some()}else{db.query_row("SELECT EXISTS(SELECT 1 FROM connection_check WHERE model=?1 AND endpoint=?2 AND revision=?3)",params![cfg.model,cfg.endpoint.trim_end_matches('/'),revision.as_deref().unwrap_or("")],|r|r.get(0)).map_err(failure)?};
         Ok(crate::credential_refs::ProviderCredentialIdentity{slot_id:slot.id.clone(),revision:revision.clone().unwrap_or_default(),available:revision.is_some(),model:cfg.model.clone(),endpoint:cfg.endpoint.trim_end_matches('/').into(),connection_verified:verified})
     }
 
@@ -338,7 +371,14 @@ impl AiService {
         let review=self.data_policy.prepare_use(store,packet.spec.clone())?;
         let endpoint=packet.spec.destination_context["endpoint"].as_str().ok_or("Destino da revisão ausente.")?;
         let provider=ProviderId::from_endpoint(endpoint)?;
-        let public=json!({"context":packet.context["context"],"digest":packet.context["digest"],"bytes":packet.prompts.iter().map(|p|p.0.len()).sum::<usize>(),"endpoint":endpoint,"sourceFilesIncluded":packet.context["sourceFilesIncluded"],"dataReview":if review.decision.allowed{json!(review.review_ref)}else{Value::Null},"packetPreview":{"schema":"openkoda.ai-packet-preview.v1","operation":options.operation,"model":packet.spec.destination_context["model"],"endpoint":endpoint,"requestEndpoint":provider.inference_url(),"prompts":packet.prompts.iter().enumerate().map(|(i,(prompt,instructions,max))|json!({"index":i,"perspective":options.perspectives.get(i),"prompt":prompt,"instructions":instructions,"maxOutputTokens":max})).collect::<Vec<_>>(),"selection":packet.spec.selection,"policyVersions":review.decision.versions,"credentialRef":packet.spec.credential,"requiresSensitiveConfirmation":review.requires_sensitive_confirmation},"canSend":review.decision.allowed,"reasonCodes":review.decision.reason_codes});
+        let mut public=json!({"context":packet.context["context"],"digest":packet.context["digest"],"bytes":packet.prompts.iter().map(|p|p.0.len()).sum::<usize>(),"endpoint":endpoint,"sourceFilesIncluded":packet.context["sourceFilesIncluded"],"dataReview":if review.decision.allowed{json!(review.review_ref)}else{Value::Null},"packetPreview":{"schema":"openkoda.ai-packet-preview.v1","operation":options.operation,"model":packet.spec.destination_context["model"],"endpoint":endpoint,"requestEndpoint":provider.inference_url(),"prompts":packet.prompts.iter().enumerate().map(|(i,(prompt,instructions,max))|json!({"index":i,"perspective":options.perspectives.get(i),"prompt":prompt,"instructions":instructions,"maxOutputTokens":max})).collect::<Vec<_>>(),"selection":packet.spec.selection,"policyVersions":review.decision.versions,"credentialRef":packet.spec.credential,"requiresSensitiveConfirmation":review.requires_sensitive_confirmation},"canSend":review.decision.allowed,"reasonCodes":review.decision.reason_codes});
+        if review.decision.allowed{
+            public["compactedTurns"]=json!(packet.context["compactedTurns"].as_u64().unwrap_or(0));
+            public["omittedTurns"]=json!(packet.context["omittedTurns"].as_u64().unwrap_or(0));
+        }
+        if review.decision.allowed && packet.spec.destination_context["skill"]["automatic"]==true{
+            public["autoSkill"]=packet.spec.destination_context["skill"]["id"].clone();
+        }
         if review.decision.allowed {
             let metadata_bytes=serde_json::to_vec(&packet.spec).map_err(failure)?.len().saturating_add(serde_json::to_vec(&options).map_err(failure)?.len()).saturating_add(1024);
             let prepared=PreparedAiData{review:review.review_ref.clone(),options,spec:packet.spec,assessment_id:packet.context["context"]["assessmentId"].as_str().ok_or("Avaliação ausente do pacote.")?.into(),context_digest:packet.context["digest"].as_str().unwrap_or_default().into(),raw_message_sha256:packet.raw_message_sha256,projected_message_sha256:digest(&packet.message),metadata_bytes};
@@ -404,6 +444,14 @@ impl AiService {
         if !options.categories.contains(&DataCategory::TargetMetadata){for key in ["target","kind","targets"]{object.remove(key);}}
         if !options.categories.contains(&DataCategory::ExecutionSummary){for key in ["coverage","status"]{object.remove(key);}}
         if options.include_chat_history && options.categories.contains(&DataCategory::ExecutionSummary){
+            let now=chrono::Utc::now();
+            let pending:Vec<_>=state.plans.iter().filter(|plan|{
+                plan.assessment_id==assessment.id && plan.scope_ref==spec.scope_ref
+                    && matches!(plan.status.as_str(),"proposed"|"approved")
+                    && chrono::DateTime::parse_from_rfc3339(&plan.expires_at).is_ok_and(|end|end>now)
+                    && match &plan.target_ref { Some(target)=>target_refs.contains(target),None=>target_refs.is_empty() }
+            }).map(|plan|json!({"planId":plan.id,"method":plan.adapter,"status":plan.status})).collect();
+            if !pending.is_empty(){object.insert("pendingPlans".into(),json!(pending));}
             let runs=state.executions.iter().rev().filter(|run|run.assessment_id==assessment.id).filter_map(|run|{
                 let plan=state.plans.iter().find(|plan|plan.id==run.plan_id)?;
                 if plan.target_ref.as_ref().is_some_and(|target|!target_refs.contains(target)) || (!target_refs.is_empty() && plan.target_ref.is_none()){return None;}
@@ -416,6 +464,9 @@ impl AiService {
         context["digest"]=json!(digest(&context["context"].to_string()));
         spec.human_text=vec![HumanTextDecision{field:"message".into(),sensitivity:options.message_sensitivity,input_sha256:digest(&raw_message),projected_sha256:digest(&projected.text),bytes:projected.text.len() as u64}];
         spec.destination_context=json!({"model":identity.model,"endpoint":identity.endpoint,"credentialRef":credential.reference,"credentialRevision":credential.revision});
+        if let Some(reasoning)=assessment.ai_selection.as_ref().and_then(|selection|selection.reasoning){
+            spec.destination_context["reasoning"]=json!(reasoning);
+        }
         let raw_prompts=match operation {
             DataOperation::AiAsk=>{
                 if !options.allowed_adapters.is_empty()||!options.perspectives.is_empty()||options.operation_target_ref.is_some()||options.max_output_tokens_per_request.is_some()||options.max_total_tokens.is_some(){return Err("Campos de outra operação na revisão de conversa.".into());}
@@ -447,45 +498,84 @@ impl AiService {
             if !bytes.starts_with(&[0xff,0xd8,0xff]) || !bytes.ends_with(&[0xff,0xd9]){return Err("Imagem JPEG inválida.".into());}
             spec.destination_context["chatImageSha256"]=json!(format!("{:x}",Sha256::digest(&bytes)));
         }
+        let commercial_chat=operation==DataOperation::AiAsk && ProviderId::from_endpoint(&identity.endpoint)?==ProviderId::OpenKoda;
+        let automatic=if commercial_chat && options.skill_id.is_none() && !options.disable_auto_skill{
+            let catalog=self.account.edge("skills",json!({}))?;
+            super::chat_skill_match::match_id(&projected.text,&catalog)
+        }else{None};
+        let skill=if let Some(id)=options.skill_id.as_ref().or(automatic.as_ref()){
+            if operation!=DataOperation::AiAsk||ProviderId::from_endpoint(&identity.endpoint)?.id()!="openkoda"{
+                return Err("Escolha um modelo da assinatura para utilizar uma skill.".into());
+            }
+            let package=self.account.skill_context(id)?;
+            if automatic.is_some() && package["invocation"]!="automatic_or_explicit"{return Err("A modalidade de invocação da skill mudou. Revise o pacote.".into());}
+            spec.destination_context["skill"]=json!({"id":id,"revision":package["revision"],"digest":digest(&package.to_string()),"automatic":automatic.is_some()});
+            Some(package)
+        }else{None};
         let mut history=Vec::new();
+        let mut compacted=0;
         if options.include_chat_history {
+            // A byte is a conservative token upper bound for the text retained
+            // here. Reserve space for the native instructions, skill and output.
+            let mut history_budget=10000usize;
+            if ProviderId::from_endpoint(&identity.endpoint)?.id()=="openkoda" {
+                let catalog=self.account.edge("models",json!({}))?;
+                let selected=catalog["models"].as_array().and_then(|rows|rows.iter().find(|row|row["id"]==identity.model))
+                    .ok_or("O modelo da assinatura não está disponível.")?;
+                let limit=selected["contextLength"].as_u64().and_then(|v|usize::try_from(v).ok()).ok_or("Janela de contexto indisponível.")?;
+                let fixed=raw_prompts.iter().map(|(prompt,instructions,max)|prompt.len()+instructions.len()+*max as usize).max().unwrap_or(0)
+                    +skill.as_ref().map_or(0,|v|v.to_string().len())+512;
+                let remaining=limit.saturating_mul(85)/100;
+                // The host does not know an exact tokenizer; the server checks
+                // the full outgoing request with its own conservative limit.
+                history_budget=history_budget.min(remaining.saturating_sub(fixed));
+            }
             let policy=state.data_policies.iter().find(|p|p.project_id==assessment.project_id);
             let binding=state.data_bindings.iter().find(|b|b.assessment_id==assessment.id);
             let db=self.db.lock().map_err(failure)?;
-            let mut q=db.prepare("SELECT id,details FROM requests WHERE assessment=?1 ORDER BY rowid DESC LIMIT 4").map_err(failure)?;
+            let mut q=db.prepare("SELECT id,details FROM requests WHERE assessment=?1 ORDER BY rowid DESC").map_err(failure)?;
             let rows=q.query_map([&assessment.id],|r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?))).map_err(failure)?;
-            let mut used=0;
+            let mut entries=Vec::new();
             'turns:for row in rows {
                 let (request_id,details)=row.map_err(failure)?;
                 let details:Value=serde_json::from_str(&details).map_err(failure)?;
                 let Some(receipt)=state.data_use_receipts.iter().rev().find(|receipt|receipt.effect.kind=="request"&&receipt.effect.id==request_id)else{break;};
                 // Older rich packets may contain original evidence, sensitive files or
                 // a different target. Never silently replay them as a plain message.
-                if receipt.operation!=DataOperation::AiAsk || !receipt.policy_versions.first().is_some_and(|v|policy.is_some_and(|p|p.active&&p.generation==v.generation&&p.activation_generation==v.activation_generation)&&binding.is_some_and(|b|Some(b.generation)==v.binding_generation&&Some(&b.policy_ref)==v.policy_ref.as_ref()))
-                    || receipt.scope_ref!=spec.scope_ref || receipt.subjects!=spec.subjects
+                let derived=DataSubject::Derived{assessment_id:assessment.id.clone(),producer:crate::data_policy::DerivedProducer::AiRequest,object_id:request_id.clone()};
+                if crate::data_policy::current_classification(&state,&derived).is_some_and(|c|c.secret_material
+                    || c.sensitivity==Sensitivity::Unclassified || c.sensitivity>options.package_sensitivity)
+                    || !crate::data_host::local_chat_allowed(&state,&assessment.id,Some(receipt))
+                    || receipt.operation!=DataOperation::AiAsk || !receipt.policy_versions.first().is_some_and(|v|policy.is_some_and(|p|p.active&&p.generation==v.generation&&p.activation_generation==v.activation_generation)&&binding.is_some_and(|b|Some(b.generation)==v.binding_generation&&Some(&b.policy_ref)==v.policy_ref.as_ref()))
+                    || receipt.scope_ref!=spec.scope_ref || receipt.subjects!=spec.subjects || receipt.credential!=spec.credential
                     || receipt.selection.origins!=spec.selection.origins || !receipt.selection.evidence_ids.is_empty()
                     || receipt.selection.categories.iter().any(|c|!spec.selection.categories.contains(c)||matches!(c,DataCategory::EvidenceExcerpt|DataCategory::SourceExcerpt))
                     || receipt.selection.package_sensitivity!=options.package_sensitivity
                     || receipt.human_text.iter().any(|text|text.sensitivity!=options.message_sensitivity){break;}
                 let Some(ids)=details["chatMessageIds"].as_array().filter(|ids|ids.len()==2)else{break;};
                 let mut turn=Vec::new();
-                for id in ids.iter().rev(){
+                for id in ids {
                     let id=id.as_str().ok_or("Identidade de mensagem inválida.")?;
                     let (role,text):(String,String)=db.query_row("SELECT role,text FROM messages WHERE assessment=?1 AND id=?2",params![assessment.id,id],|r|Ok((r.get(0)?,r.get(1)?))).map_err(failure)?;
                     let projected=redactor.redact(&text);
-                    if projected.secret_material || used+projected.text.len()>12000{break 'turns;}
-                    used+=projected.text.len();
+                    if projected.secret_material {break 'turns;}
                     turn.push(json!({"role":role,"text":projected.text}));
                 }
-                history.extend(turn);
+                entries.push((request_id,turn));
             }
-            history.reverse();
+            entries.reverse();
+            (history,compacted)=super::chat_compaction::project(&db,&assessment.id,&entries,options.compact_history,history_budget)?;
+        }
+        if compacted>0{
+            context["compactedTurns"]=json!(compacted);
+            context["omittedTurns"]=history[0]["omittedTurns"].clone();
         }
         let policy_refs=state.data_bindings.iter().find(|b|b.assessment_id==assessment.id).map(|b|vec![b.policy_ref.clone()]).unwrap_or_default();
         let prompts=raw_prompts.into_iter().enumerate().map(|(index,(payload,instructions,maximum))|{
             let mut envelope=json!({"schema":"openkoda.reviewed-data.v1","policyRefs":policy_refs,"selection":spec.selection,"payload":payload});
             if !history.is_empty(){envelope["conversationHistory"]=json!(history);}
             if let Some(image)=&options.chat_image{envelope["reviewedJpeg"]=json!(image);}
+            if let Some(skill)=&skill{envelope["selectedSkill"]=skill.clone();}
             let prompt=envelope.to_string();
             spec.requests.push(RequestFingerprint{index:index as u8,input_sha256:digest(&payload),output_sha256:digest(&prompt),input_bytes:payload.len() as u64,output_bytes:prompt.len() as u64});
             (prompt,instructions,maximum)

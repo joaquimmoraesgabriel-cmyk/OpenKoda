@@ -64,7 +64,7 @@ impl Terminal {
     fn failure(message:&str)->Self{Self{status:"failed".into(),data:None,error:Some(message.into())}}
 }
 struct Scope {repo:PathBuf,targets:Vec<String>,deadline:Instant,_locks:Vec<crate::source_scan::MetadataLease>}
-struct Job<'a> {id:String,aid:String,prompt:String,objective_digest:String,acknowledge_sensitive:bool,scope:Scope,provider:ProviderId,model:String,cap:f64,key:Zeroizing<String>,cancel:Arc<AtomicBool>,_inference:std::sync::MutexGuard<'a,()>}
+struct Job<'a> {id:String,aid:String,prompt:String,objective_digest:String,acknowledge_sensitive:bool,scope:Scope,provider:ProviderId,model:String,reasoning:Option<crate::ai_provider::Reasoning>,cap:f64,key:Zeroizing<String>,revision:String,cancel:Arc<AtomicBool>,_inference:std::sync::MutexGuard<'a,()>}
 struct Active {aid:String,cancel:Arc<AtomicBool>}
 pub(crate) struct Service{transport:Arc<dyn ScanTransport>,active:Mutex<Option<Active>>}
 
@@ -420,7 +420,7 @@ impl Service {
         let (provider,model,_)=ai.security_selection(store,Some(&input.assessment_id))?;
         let objective_digest=core::hash(prompt);
         check_disclosure(&state,&input.assessment_id,provider,&objective_digest,input.acknowledge_sensitive)?;
-        let key=ai.security_key(store,&input.assessment_id,provider,&model)?;
+        let (key,revision)=ai.security_key(store,&input.assessment_id,provider,&model)?;
         use crate::data_projection::{DataRedactor,RedactionMode};
         let redactor=ai.data_redactor();
         if redactor.mode()==RedactionMode::MetadataOnly{return Err("Credenciais indisponíveis para revisar o objetivo da varredura.".into());}
@@ -440,7 +440,8 @@ impl Service {
         let receipt=match receipt{Ok(v)=>v,Err(e)=>{ai.security_not_sent(&id)?;return Err(e);}};
         let cancel=Arc::new(AtomicBool::new(false));
         *active=Some(Active{aid:input.assessment_id.clone(),cancel:cancel.clone()});
-        Ok((receipt,Some(Job{id,aid:input.assessment_id,prompt,objective_digest,acknowledge_sensitive:input.acknowledge_sensitive,scope,provider,model,cap:input.max_cost_usd,key,cancel,_inference:inference})))
+        let reasoning=lookup(&state,&input.assessment_id)?.ai_selection.as_ref().and_then(|s|s.reasoning);
+        Ok((receipt,Some(Job{id,aid:input.assessment_id,prompt,objective_digest,acknowledge_sensitive:input.acknowledge_sensitive,scope,provider,model,reasoning,cap:input.max_cost_usd,key,revision,cancel,_inference:inference})))
     }
     pub(crate) fn start_worker(&self,store:&Store,ai:&AiService,input:Value,ready:&mpsc::SyncSender<Result<Value,String>>)->Result<(),String>{
         let (receipt,job)=self.prepare(store,ai,decode(input)?)?;
@@ -511,7 +512,7 @@ mod tests {
     struct OfflineReview;
     impl ScanTransport for OfflineReview {
         fn model_settings(&self,_:&AiService,_:ProviderId,_:&str,_:&str)->Result<crate::ai::ScanModel,String>{Ok(crate::ai::ScanModel::text(crate::ai::ScanRates{input:1_000_000,output:2_000_000}))}
-        fn review(&self,_:ProviderId,_:&str,key:&str,input:&str,_:&str,_:u32,_:crate::ai::ScanModel,stop:&AtomicBool,_:Instant)->Result<Value,String>{
+        fn review(&self,_:ProviderId,_:&str,key:&str,input:&str,_:&str,_:u32,_:crate::ai::ScanModel,_:&str,_:Option<crate::ai_provider::Reasoning>,stop:&AtomicBool,_:Instant)->Result<Value,String>{
             assert!(!input.contains(key));
             assert!(!input.contains("fake-private-key-of-second-configured-provider"));
             assert!(!input.contains("UNSELECTED_SOURCE_CANARY"));

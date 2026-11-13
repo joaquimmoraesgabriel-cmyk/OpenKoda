@@ -9,6 +9,7 @@ const PUBLIC_BYTES: usize = 128 * 1024;
 pub(in crate::ai) struct Progress {
     connected: Option<Instant>,
     text: String,
+    pub(in crate::ai) generation_id: Option<String>,
 }
 
 impl Progress {
@@ -63,6 +64,14 @@ impl Stream {
         let event:Value=serde_json::from_str(raw).map_err(|_|"Evento inválido na resposta da IA.")?;
         if event.get("error").is_some_and(|e|!e.is_null())||event["type"]=="error" {
             return Err("O provedor interrompeu a resposta.".into());
+        }
+        if self.provider == ProviderId::OpenRouter && self.message["id"].is_null() {
+            if let Some(id) = event["id"].as_str().filter(|id| {
+                id.len() <= 128 && id.strip_prefix("gen-").is_some_and(|suffix|
+                    !suffix.is_empty() && suffix.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-'))
+            }) {
+                self.progress.lock().map_err(failure)?.generation_id = Some(id.to_owned());
+            }
         }
         let delta=match self.provider {
             ProviderId::OpenAI=>match event["type"].as_str() {
@@ -157,9 +166,10 @@ mod tests{
     fn a_disconnection_or_in_band_error_cannot_commit_a_partial_reply(){
         let progress=Arc::new(Mutex::new(Progress::default()));
         let mut stream=Stream::new(ProviderId::OpenRouter,progress.clone());
-        stream.push(b"data: {\"choices\":[{\"delta\":{\"content\":\"hello \"}}]}\n\n").unwrap();
+        stream.push(b"data: {\"id\":\"gen-123-fixture\",\"choices\":[{\"delta\":{\"content\":\"hello \"}}]}\n\n").unwrap();
         assert_eq!(progress.lock().unwrap().visible(),"hello");
         assert!(stream.finish().is_err());
+        assert_eq!(progress.lock().unwrap().generation_id.as_deref(),Some("gen-123-fixture"));
         let mut stream=Stream::new(ProviderId::OpenRouter,progress);
         assert!(stream.push(b"data: {\"error\":{\"message\":\"private details\"}}\n\n").is_err());
     }

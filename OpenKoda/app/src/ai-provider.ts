@@ -5,6 +5,8 @@ import anthropicLogo from './assets/providers/anthropic.svg';
 import geminiLogo from './assets/providers/gemini.svg';
 import deepseekLogo from './assets/providers/deepseek.svg';
 import xaiLogo from './assets/providers/xai.svg';
+import kodaLogo from '../src-tauri/icons/32x32.png';
+import type {Reasoning} from './commercial';
 
 // Provider-published artwork bundled locally. No requests to brand sites at runtime.
 export const providers = {
@@ -15,10 +17,12 @@ export const providers = {
   gemini: {name: 'Google Gemini', endpoint: 'https://generativelanguage.googleapis.com/v1beta/openai', logo: geminiLogo},
   deepseek: {name: 'DeepSeek', endpoint: 'https://api.deepseek.com', logo: deepseekLogo},
   xai: {name: 'xAI', endpoint: 'https://api.x.ai/v1', logo: xaiLogo},
+  openkoda: {name:'OpenKoda · Assinatura',endpoint:'https://ynjcyvnrfxsrijrwpaye.supabase.co/functions/v1/openkoda',logo:kodaLogo},
 } as const;
 
 export type ProviderId = keyof typeof providers;
-export type AiSelection = {provider: ProviderId; model: string};
+export const personalProviders=(Object.keys(providers) as ProviderId[]).filter(id=>id!=='openkoda');
+export type AiSelection = {provider: ProviderId; model: string; reasoning?:Reasoning};
 export type ProviderStatus = {
   provider?: ProviderId; hasApiKey: boolean; verified: boolean;
   checkedAt?: string; model: string; endpoint: string;

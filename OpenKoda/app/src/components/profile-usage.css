@@ -1,4 +1,11 @@
 /* Profile and usage share the workspace surfaces and reserve color for identity and data. */
+.commercial-account { min-width:0; }
+.commercial-account form,.account-services { display:grid; gap:.7rem; }
+.commercial-account form { max-width:34rem; }
+.commercial-account label:not(:has(input[type=checkbox])) { display:grid; gap:.25rem; }
+.commercial-account :is(form,.account-services) input:not([type=checkbox]),.commercial-account textarea { width:100%; min-width:0; }
+.commercial-account .account-services details { padding:.4rem 0; }
+.commercial-account summary { cursor:pointer; }
 .profile-page .profile-toolbar { display:flex; justify-content:space-between; align-items:center; gap:16px; }
 .profile-page .profile-toolbar, .profile-content { width: min(100%, 54rem); margin-inline: auto; }
 .profile-content { padding-bottom: var(--space-5); display: grid; min-width: 0; }

@@ -10,6 +10,7 @@ import './profile-usage.css';
 import './usage-history.css';
 
 import UsageHistory from './UsageHistory';
+import { CommercialAccount } from './CommercialAccount';
 
 const sections = ['Histórico', 'Análises'] as const;
 
@@ -33,6 +34,7 @@ export default function AiBudgetSettings({action,busy,assessments,onOpenAssessme
   async function resolve(){if(!charge||!ackUnknown||pendingRef.current)return;pendingRef.current=true;setPending(true);setError('');setMessage('');setAckUnknown(false);try{await action('ai.budget.resolveUnknown',{chargeId:charge.chargeId,assumedChargeUsd:assumed,note:note.trim(),acknowledgeUnknownCharge:true});await reload();setChargeId('');setMessage('Estimativa conservadora debitada no controle local. Uso e cobrança reais continuam desconhecidos; nenhuma chamada foi repetida.');}catch(e){setError(errorMessage(e));await reload().catch(()=>{});}finally{pendingRef.current=false;setPending(false);}}
   async function consult(){if(pendingRef.current)return;pendingRef.current=true;setPending(true);setError('');setReview(undefined);setAckUnknown(false);try{await reload(true);}catch(e){setError(errorMessage(e));}finally{pendingRef.current=false;setPending(false);}}
   return <section className="ai-budget-settings" onKeyDown={e=>{if(e.key==='Enter'&&(e.target as HTMLElement).tagName==='INPUT' && (e.target as HTMLInputElement).type!=='radio')e.preventDefault();}}>
+    <CommercialAccount summary/>
     <div className="usage-view-nav" role="group" aria-label="Seções do histórico de uso">
         {sections.map(name=><button key={name} type="button" aria-pressed={section===name} onClick={()=>setSection(name)}>{name}</button>)}
         {section === 'Análises' && native && <button type="button" className="usage-refresh" aria-label="Atualizar orçamento e preços" disabled={disabled} onClick={()=>void consult()}><RefreshCw size={15} aria-hidden="true"/>Atualizar</button>}

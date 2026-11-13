@@ -17,6 +17,7 @@ import { ConversationTimeline, type ChatMessage } from './ConversationTimeline';
 import { ConversationText } from './ConversationText';
 import { ChatModelPicker } from './ChatModelPicker';
 import { ChatComposerMenus } from './ChatComposerMenus';
+import { ChatSkills } from './ChatSkills';
 import ChatCodeAnalysis from './ChatCodeAnalysis';
 import SecurityScanPanel, { useSecurityScan } from './SecurityScan';
 import { scanActive, scanStateLabel } from '../security-scan';
@@ -27,11 +28,18 @@ type Turn=Awaited<ReturnType<typeof prepareChat>>&{budget?:BudgetReview;selectio
 type Props={draftKey?:string;unsaved?:boolean;analysisSource?:Assessment;onAnalysisAdmitted?:(id:string)=>void;prepareConversation?:()=>Promise<Assessment>;onDraftSelection?:(selection:AiSelection)=>Promise<void>;sourceOnly?:boolean;assessment:Assessment;settings:Settings;plans?:ExecutionPlan[];action:Action;busy:boolean;onAdvanced?:()=>void;onModels?:()=>void};
 export default function ProjectConversation(props:Props){return <Conversation key={props.draftKey??props.assessment.id} {...props}/>;}
 
+function compactionMessage(covered:number,omitted=0){
+  const summary=covered===1?'O resumo inclui um turno anterior.':`O resumo inclui ${covered} turnos anteriores.`;
+  if(!omitted)return summary;
+  return summary+' '+(omitted===1?'Um turno autorizado ficou fora do contexto por falta de espaço.':`${omitted} turnos autorizados ficaram fora do contexto por falta de espaço.`);
+}
+
 function Conversation({draftKey,unsaved=false,analysisSource,onAnalysisAdmitted,prepareConversation,onDraftSelection,sourceOnly=false,assessment,plans,action,busy,onAdvanced,onModels}:Props){
   const inputId=draftKey??assessment.id;
   const [messages,setMessages]=useState<ChatMessage[]>([]);
   const [acceptedMessage,setAcceptedMessage]=useState<string>();
-  const {text:draft,attachment,proposing:requestedProposal}=useChatDraft(inputId);
+  const {text:draft,attachment,skill,proposing:requestedProposal}=useChatDraft(inputId);
+  const [skillsOpen,setSkillsOpen]=useState(false);
   const proposing=!sourceOnly&&requestedProposal;
   const [mode,setMode]=useState<ApprovalMode>(()=>{
     try{const saved=localStorage.getItem('openkoda.chat.approval.'+assessment.id);return saved==='always'||saved==='scope'?saved:'risk';}catch{return 'risk';}
@@ -43,6 +51,8 @@ function Conversation({draftKey,unsaved=false,analysisSource,onAnalysisAdmitted,
   const scroll=useRef<HTMLDivElement>(null),transcript=useRef<HTMLDivElement>(null),stick=useRef(true),input=useRef<HTMLTextAreaElement>(null);
   const [awayFromEnd,setAwayFromEnd]=useState(false);
   const [analyzing,setAnalyzing]=useState(false);
+  const [compactionNotice,setCompactionNotice]=useState('');
+  const [compactNext,setCompactNext]=useState(false);
   const sel:AiSelection|null=assessment.aiSelection??null;
   const scanner=useSecurityScan(assessment,!unsaved);
   const scanRunning=!!scanner.scan && scanActive(scanner.scan.status);
@@ -155,7 +165,7 @@ function Conversation({draftKey,unsaved=false,analysisSource,onAnalysisAdmitted,
     if(!turn.opening)finishDraft(inputId,turn.draft);
     if(mount.current)await refresh();
   }
-  async function prepare(line:string,opening=false){
+  async function prepare(line:string,opening=false,disableAutoSkill=false){
     if(job.current||!native||!line.trim()||!sel)return;
     const controller=new AbortController();job.current=controller;
     const active=()=>!controller.signal.aborted&&mount.current;
@@ -168,7 +178,9 @@ function Conversation({draftKey,unsaved=false,analysisSource,onAnalysisAdmitted,
       if(new TextEncoder().encode(message).byteLength>8000)throw new Error('A mensagem e o texto anexado podem ter até 8.000 bytes. Envie um trecho menor.');
       const target=prepareConversation?await prepareConversation():assessment;
       if(!active())return;
-      const prepared=await prepareChat(target,sel,message,{image:picked?.image,file:!!picked,signal:controller.signal,propose:proposing&&!opening});
+      const prepared=await prepareChat(target,sel,message,{image:picked?.image,file:!!picked,signal:controller.signal,propose:proposing&&!opening,compact:compactNext,skillId:opening?undefined:skill?.id,disableAutoSkill});
+      setCompactionNotice(prepared.context.compactedTurns?compactionMessage(prepared.context.compactedTurns,prepared.context.omittedTurns):'');
+      setCompactNext(false);
       if(!active())return;
       const budget=await request<BudgetStatus>('ai.budget.status',{assessmentId:target.id});
       if(!budget||typeof budget.enabled!=='boolean'||budget.degraded)throw new Error('Verifique o orçamento nas configurações antes de enviar.');
@@ -180,7 +192,7 @@ function Conversation({draftKey,unsaved=false,analysisSource,onAnalysisAdmitted,
       }
       if(!active())return;
       const turn={...prepared,selection:sel,budget:estimate,line,opening,draft:submittedDraft,image:picked?.image,signal:controller.signal};
-      if(estimate||prepared.context.packetPreview.requiresSensitiveConfirmation||(!opening&&(mode==='always'||(mode==='risk'&&!!picked)))){
+      if(estimate||prepared.context.autoSkill||disableAutoSkill||prepared.context.packetPreview.requiresSensitiveConfirmation||(!opening&&(mode==='always'||(mode==='risk'&&(!!picked||!!skill))))){
         waiting=true;setPhase('');setApproval(turn);
       }else await dispatch(turn);
     }catch(e){if(active()){
@@ -208,6 +220,17 @@ function Conversation({draftKey,unsaved=false,analysisSource,onAnalysisAdmitted,
   function discard(){
     job.current?.abort();job.current=undefined;setApproval(undefined);setPendingLine('');setPhase('');
   }
+  async function reviewWithoutSkill(){
+    if(!approval?.context.autoSkill||phase)return;
+    const current=approval;
+    setPhase('Removendo a skill sugerida…');
+    try{
+      await request('data.review.cancel',{review:current.context.dataReview});
+      if(current.signal.aborted||!mount.current)return;
+      discard();
+      await prepare(current.line,current.opening,true);
+    }catch(e){if(!current.signal.aborted&&mount.current){setPhase('');setError(errorMessage(e));}}
+  }
   async function stop(){
     if(stopping)return;
     setStopping(true);
@@ -230,6 +253,21 @@ function Conversation({draftKey,unsaved=false,analysisSource,onAnalysisAdmitted,
   const disabled=busy||running||!!approval||loadingFile;
   const shortcut=composerShortcut();
   const canSend=native && !disabled && !!sel && !!draft.trim();
+  const slash=sel?.provider==='openkoda'&&!skill&&/^\/[\w-]*$/.test(draft);
+  async function compact(){
+    if(!sel||job.current||disabled||unsaved)return;
+    const controller=new AbortController();job.current=controller;setPhase('Compactando o contexto…');setError('');
+    try{
+      const result=await prepareChat(assessment,sel,'Compactação local do contexto da conversa.',{compact:true,disableAutoSkill:true,signal:controller.signal});
+      await request('data.review.cancel',{review:result.context.dataReview});
+      if(mount.current){
+        const count=result.context.compactedTurns??0;
+        setCompactionNotice(count?compactionMessage(count,result.context.omittedTurns):'Nenhum turno autorizado para compactar.');
+        setCompactNext(count>0);
+      }
+    }catch(e){if(mount.current)setError(errorMessage(e));}
+    finally{if(job.current===controller)job.current=undefined;if(mount.current)setPhase('');}
+  }
   function changeApproval(next:ApprovalMode){
     setMode(next);
     try{localStorage.setItem('openkoda.chat.approval.'+assessment.id,next);}catch{/* The choice still applies to this conversation. */}
@@ -262,16 +300,22 @@ function Conversation({draftKey,unsaved=false,analysisSource,onAnalysisAdmitted,
       {partial&&<article className="project-chat-turn assistant" data-live-answer={remote.requestId} aria-label="Resposta em andamento"><header><strong>OpenKoda</strong></header><ConversationText text={partial}/></article>}
       {workLabel&&<p className="chat-progress" role="status"><LoaderCircle size={16}/>{workLabel}</p>}
       {approval&&<section className="chat-approval"><ShieldCheck size={20}/><h3>Autorizar envio para {providers[approval.selection.provider].name}?</h3><p>{approval.selection.model} · {approval.context.bytes.toLocaleString('pt-BR')} bytes preparados{approval.budget?' · reserva de '+usd(approval.budget.reservedUsd):''}.</p>{approval.image&&<img alt="Imagem selecionada para envio" src={'data:image/jpeg;base64,'+approval.image}/>}
+        {approval.context.autoSkill&&<p>Skill sugerida para esta mensagem: <strong>/{approval.context.autoSkill}</strong>. As instruções estão no conteúdo do envio.</p>}
         <details><summary>Ver conteúdo do envio</summary>{approval.context.packetPreview.prompts.map(p=><pre key={p.index}>{p.instructions}{'\n'}{p.prompt.replace(/"reviewedJpeg":"[A-Za-z0-9+/=]+"/g,'"imagem":"Prévia acima"')}</pre>)}</details>
         {approval.context.packetPreview.requiresSensitiveConfirmation&&<p>Esta autorização inclui os dados sensíveis identificados no pacote.</p>}
-        <div><button type="button" className="button" onClick={discard}>Recusar</button><button type="button" className="button primary" onClick={()=>void confirm()}>Autorizar envio</button></div></section>}
+        <div><button type="button" className="button" onClick={discard}>Recusar</button>{approval.context.autoSkill&&<button type="button" className="button" disabled={!!phase} onClick={()=>void reviewWithoutSkill()}>Revisar sem a skill</button>}<button type="button" className="button primary" disabled={!!phase} onClick={()=>void confirm()}>Autorizar envio</button></div></section>}
       </div></div>
     <div className="project-chat-bottom">
       {awayFromEnd&&<button type="button" className="chat-jump" aria-label="Voltar à mensagem mais recente" title="Voltar à mensagem mais recente" onClick={followEnd}><ArrowDown size={17}/></button>}
       {error&&<div className="chat-error" role="alert">{error}{onAdvanced&&<button type="button" onClick={onAdvanced}>Revisar avaliação</button>}</div>}
+      {compactionNotice&&<p role="status">{compactionNotice}</p>}
+      {sel?.provider==='openkoda'&&(skillsOpen||slash)&&<ChatSkills query={slash?draft.slice(1):''}
+        onSelect={item=>{updateDraft(inputId,{skill:item,...(slash?{text:''}:{})});setSkillsOpen(false);input.current?.focus();}}
+        onClose={()=>{setSkillsOpen(false);if(slash)updateDraft(inputId,{text:''});}}/>}
       {analyzing&&sel&&onAnalysisAdmitted?<ChatCodeAnalysis draftId={inputId} source={analysisSource} selection={sel} projectId={assessment.projectId}
         newConversation={!unsaved} action={action} onClose={()=>setAnalyzing(false)} onAdmitted={onAnalysisAdmitted}/>:
       <><form className="project-composer" onSubmit={e=>{e.preventDefault();if(canSend)void prepare(draft);}}>
+        {skill&&<div className="chat-attachment"><span>/{skill.id} · {skill.name}</span><button type="button" aria-label="Remover skill" disabled={disabled} onClick={()=>updateDraft(inputId,{skill:undefined})}><X size={14}/></button></div>}
         {attachment&&<div className="chat-attachment">{attachment.image?<img alt="Anexo selecionado" src={'data:image/jpeg;base64,'+attachment.image}/>:<FileText size={16}/>}<span>{attachment.name}</span><button type="button" disabled={disabled} onClick={()=>updateDraft(inputId,{attachment:undefined})} aria-label="Remover anexo"><X size={14}/></button></div>}
         {proposing&&<div className="chat-attachment"><ListChecks size={16}/><span>Verificação</span><button type="button" disabled={disabled} aria-label="Voltar à conversa" onClick={()=>updateDraft(inputId,{proposing:false})}><X size={14}/></button></div>}
         <textarea ref={input} aria-label="Mensagem da conversa" rows={2} maxLength={8000} value={draft} disabled={!!approval} onChange={e=>updateDraft(inputId,{text:e.target.value})} placeholder={proposing?'O que você quer verificar neste alvo?':'Envie uma mensagem sobre o projeto…'} onKeyDown={e=>{
@@ -281,6 +325,8 @@ function Conversation({draftKey,unsaved=false,analysisSource,onAnalysisAdmitted,
         }}/>
         <div className="project-composer-tools"><input type="file" hidden ref={file} onChange={e=>{void attach(e.target.files?.[0]);e.currentTarget.value='';}}/>
           <ChatComposerMenus mode={mode} onMode={changeApproval} proposing={proposing} hasAttachment={!!attachment} disabled={disabled} canPropose={native&&!sourceOnly}
+            onCompact={native&&!unsaved&&messages.length>0?()=>void compact():undefined}
+            onSkills={native&&sel?.provider==='openkoda'?()=>setSkillsOpen(true):undefined}
             onAnalyze={sourceOnly&&native&&sel&&onAnalysisAdmitted?()=>setAnalyzing(true):undefined}
             onAttach={()=>file.current?.click()} onPropose={()=>updateDraft(inputId,{proposing:!proposing})}/>
           <ChatModelPicker value={sel} disabled={disabled} onModels={onModels} onChange={async choice=>{if(onDraftSelection){await onDraftSelection(choice);return;}await action('ai.selection.save',{assessmentId:assessment.id,aiSelection:choice});}}/>

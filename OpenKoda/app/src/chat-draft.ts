@@ -5,6 +5,7 @@ import type { Attachment } from './project-chat';
 export interface ChatDraft {
   text: string;
   attachment?: Attachment;
+  skill?: import('./commercial').Skill;
   proposing: boolean;
 }
 
@@ -30,7 +31,7 @@ export function useChatDraft(id: string) {
 export function updateDraft(id: string, patch: Partial<ChatDraft>) {
   id = savedIds.get(id) ?? id;
   const next = { ...readDraft(id), ...patch };
-  if (next.text || next.attachment || next.proposing) drafts.set(id, next);
+  if (next.text || next.attachment || next.proposing || next.skill) drafts.set(id, next);
   else drafts.delete(id);
   listeners.forEach(notify => notify());
 }
@@ -38,7 +39,7 @@ export function updateDraft(id: string, patch: Partial<ChatDraft>) {
 export function finishDraft(id: string, sent: ChatDraft) {
   const current = readDraft(id);
   // Another conversation can be open, or the next message already in the composer.
-  if (current === sent) updateDraft(id, { ...empty, attachment: undefined });
+  if (current === sent) updateDraft(id, { ...empty, attachment: undefined, skill:undefined });
   else if (sent.attachment && current.attachment === sent.attachment) updateDraft(id, { attachment: undefined });
 }
 

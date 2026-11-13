@@ -16,7 +16,7 @@ const INSTRUCTIONS: &str = concat!(
 Registre em findings cada candidato que tenha uma entrada controlável e um efeito sustentados pelos trechos. Preencha primeiro os candidatos e depois resuma a revisão em summary. Se o código permite uma operação perigosa, registre o candidato com o trecho literal e descreva em description as condições ainda desconhecidas. Use findings vazio quando não encontrar um candidato sustentado.
 Formato final: {"findings":[{"path":"caminho exato fornecido","line":1,"excerpt":"substring literal da linha indicada","title":"título","severity":"high","description":"fluxo, impacto, condições e como validar"}],"summary":"resumo da revisão em português"}. Em sources, lines contém pares [número da linha, texto literal]. Copie o número do par em line e o código da mesma linha em excerpt, sem reticências, tradução, numeração ou marcas de Markdown. Use apenas low, medium, high ou critical para severity.
 Se contextRoundsRemaining for positivo e faltar material para verificar uma relação, você pode pedir até duas consultas à cópia em memória usando {"queries":[{"op":"search","query":"símbolo literal"},{"op":"read","path":"caminho relativo exato","line":1}]}. Use read para obter até 24 linhas e search para até seis correspondências. Quando contextRoundsRemaining for zero, envie o relatório final agora.
-Retorne exatamente um objeto JSON. Preserve as chaves em inglês e os nomes e trechos literais do código. Escreva o restante em português, sem Markdown ou comentários."#
+Retorne exatamente um objeto JSON. Quando o esquema pedir a chave decision, coloque o objeto de consulta ou relatório dentro dela. Preserve as chaves em inglês e os nomes e trechos literais do código. Escreva o restante em português, sem Markdown ou comentários."#
 );
 const BATCH_BYTES: usize = 20 * 1024;
 const MAX_OUTPUT: u32 = 1536;
@@ -151,6 +151,13 @@ enum Decision {
     Report(Reply),
 }
 
+#[derive(Deserialize)]
+#[serde(untagged, deny_unknown_fields)]
+enum ReviewOutput {
+    Structured { decision: Decision },
+    Direct(Decision),
+}
+
 fn decision(response: &Value) -> Result<Decision, String> {
     const INVALID: &str =
         "A resposta não trouxe um relatório estruturado válido para estes trechos.";
@@ -187,12 +194,16 @@ fn decision(response: &Value) -> Result<Decision, String> {
     } else {
         text
     };
-    serde_json::from_str(json).map_err(|e| match e.classify() {
-        serde_json::error::Category::Data => {
-            "O JSON devolvido não contém os campos ou tipos exigidos para a revisão.".into()
-        }
-        _ => INVALID.into(),
-    })
+    serde_json::from_str::<ReviewOutput>(json)
+        .map(|output| match output {
+            ReviewOutput::Structured { decision } | ReviewOutput::Direct(decision) => decision,
+        })
+        .map_err(|e| match e.classify() {
+            serde_json::error::Category::Data => {
+                "O JSON devolvido não contém os campos ou tipos exigidos para a revisão.".into()
+            }
+            _ => INVALID.into(),
+        })
 }
 fn validated(
     reply: Reply,
@@ -366,7 +377,7 @@ pub(super) fn run(
                 batches.len(),
                 excerpts.len()
             );
-            let authorize = || -> Result<(), String> {
+            let authorize = || -> Result<Zeroizing<String>, String> {
                 let state = store.snapshot()?;
                 scope::check_new_local_input(&state, &job.aid)?;
                 check_disclosure(
@@ -376,24 +387,18 @@ pub(super) fn run(
                     &job.objective_digest,
                     job.acknowledge_sensitive,
                 )?;
-                if ai
-                    .security_key(store, &job.aid, job.provider, &job.model)?
-                    .as_str()
-                    != job.key.as_str()
-                {
+                let (key,revision)=ai.security_key(store, &job.aid, job.provider, &job.model)?;
+                if revision != job.revision {
                     return Err("A credencial selecionada mudou.".into());
                 }
-                Ok(())
+                Ok(key)
             };
-            {
+            let key = {
                 let _guard = store
                     .scope_gate
                     .lock()
                     .map_err(|_| "Escopo indisponível.")?;
-                if let Err(reason) = authorize() {
-                    stopped = Some(reason);
-                    break 'batch;
-                }
+                let key=match authorize(){Ok(key)=>key,Err(reason)=>{stopped=Some(reason);break 'batch;}};
                 if job.cancel.load(Ordering::Acquire) || Instant::now() >= job.scope.deadline {
                     cancelled = true;
                     break 'batch;
@@ -401,15 +406,18 @@ pub(super) fn run(
                 progress("review", &label)?;
                 usage.begin(ai, &job.id)?;
                 *dispatched = true;
-            }
+                key
+            };
             let response = match transport.review(
                 job.provider,
                 &job.model,
-                &job.key,
+                &key,
                 &payload,
                 INSTRUCTIONS,
                 MAX_OUTPUT,
                 settings,
+                &crate::scope_targets::derived_id("openkoda.subscription.review.v1",&[&job.id,&i.to_string(),&round.to_string()]),
+                job.reasoning,
                 &job.cancel,
                 job.scope.deadline,
             ) {
@@ -579,6 +587,20 @@ mod tests {
     fn parses_a_single_fenced_report_and_rejects_ambiguous_content() {
         let envelope = |s: &str| json!({"status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":s}]}]});
         let report = r#"{"summary":"Revisado","findings":[]}"#;
+        assert!(matches!(
+            decision(&envelope(&format!(r#"{{"decision":{report}}}"#))),
+            Ok(Decision::Report(_))
+        ));
+        assert!(matches!(
+            decision(&envelope(
+                r#"{"decision":{"queries":[{"op":"read","path":"api.py","line":1}]}}"#
+            )),
+            Ok(Decision::Context { .. })
+        ));
+        assert!(decision(&envelope(
+            r#"{"decision":{"queries":[]},"summary":"partial","findings":[]}"#
+        ))
+        .is_err());
         assert!(matches!(
             decision(&envelope(&format!("Relatório\n```JSON\r\n{report}\n```"))),
             Ok(Decision::Report(_))

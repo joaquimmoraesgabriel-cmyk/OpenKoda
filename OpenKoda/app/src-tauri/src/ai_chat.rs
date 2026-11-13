@@ -107,6 +107,33 @@ fn interruptible_response(task:reqwest::RequestBuilder,provider:ProviderId,stop:
     }
 }
 
+pub(super) fn commercial_chat(id:&str,model:&str,key:&str,prompt:&str,instructions:&str,maximum:u32,
+    reasoning:Option<&str>,stop:&AtomicBool,progress:Arc<Mutex<Progress>>)->Result<Value,String>{
+    let body=commercial_body(id,model,prompt,instructions,maximum,reasoning)?;
+    let client=reqwest::Client::builder().no_proxy().https_only(true).redirect(reqwest::redirect::Policy::none())
+        .timeout(Duration::from_secs(90)).connect_timeout(Duration::from_secs(15)).build().map_err(network_error)?;
+    let task=client.post(crate::commercial::EDGE).header("apikey",crate::commercial::PUBLISHABLE).bearer_auth(key).json(&body);
+    interruptible_response(task,ProviderId::OpenKoda,stop,progress)
+}
+
+fn commercial_body(id:&str,model:&str,prompt:&str,instructions:&str,maximum:u32,reasoning:Option<&str>)->Result<Value,String>{
+    let mut body=json!({"action":"chat","requestId":id,"model":model,"instructions":instructions,
+        "messages":[{"role":"user","content":prompt}],"maxTokens":maximum});
+    if let Some(level)=reasoning{body["reasoning"]=json!(level);}
+    // Strip the reviewed JPEG from text, exactly as for personal provider delivery.
+    if let Ok(mut packet)=serde_json::from_str::<Value>(prompt){
+        if let Some(encoded)=packet.as_object_mut().and_then(|p|p.remove("reviewedJpeg")){
+            use base64::Engine;
+            let data=encoded.as_str().ok_or("Imagem revisada inválida.")?;
+            let bytes=base64::engine::general_purpose::STANDARD.decode(data).map_err(|_|"Imagem revisada inválida.")?;
+            if bytes.len()>60*1024 || !bytes.starts_with(&[255,216,255]) || !bytes.ends_with(&[255,217]){return Err("Imagem revisada inválida.".into());}
+            body["messages"][0]["content"]=json!(packet.to_string());
+            body["attachments"]=json!([{"name":"imagem.jpg","mediaType":"image/jpeg","data":data}]);
+        }
+    }
+    Ok(body)
+}
+
 fn chat_body(provider:ProviderId,model:&str,prompt:&str,instructions:&str,maximum:u32)->Result<Value,String>{
     let mut envelope:Value=serde_json::from_str(prompt).map_err(|_|"Pacote de conversa inválido.")?;
     // Only the host creates this top-level key while hashing the exact reviewed packet.
@@ -132,6 +159,21 @@ fn chat_body(provider:ProviderId,model:&str,prompt:&str,instructions:&str,maximu
 mod tests {
     use super::*;
     use std::{io::Read, net::TcpListener, thread, time::Instant};
+
+    #[test]
+    fn subscription_chat_uses_the_reviewed_packet_and_admitted_request_id(){
+        let id=crate::model::id();
+        let prompt=json!({"message":"fixture","reviewedJpeg":"/9j/AP/Z"}).to_string();
+        let body=commercial_body(&id,"test/model",&prompt,"instructions",128,Some("low")).unwrap();
+        assert_eq!(body["action"],"chat");
+        assert_eq!(body["requestId"],id);
+        assert_eq!(body["reasoning"],"low");
+        assert_eq!(body["attachments"][0]["data"],"/9j/AP/Z");
+        assert_eq!(body["messages"][0]["content"],r#"{"message":"fixture"}"#);
+        assert!(body.get("provider").is_none());
+        assert!(commercial_body(&id,"test/model","plain","fixture",128,None).unwrap().get("reasoning").is_none());
+        assert_eq!(ProviderId::OpenKoda.inference_url(),crate::commercial::EDGE);
+    }
 
     #[test]
     fn admission_status_identifies_the_exact_review_and_durable_message_only_after_commit(){

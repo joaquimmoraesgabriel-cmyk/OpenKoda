@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Check, ChevronRight, Eye, EyeOff, Plus, Search, X } from 'lucide-react';
 import { native, request } from '../api';
-import { knownProvider, providers, type ProviderId, type ProviderStatus } from '../ai-provider';
+import { knownProvider, providers, personalProviders, type ProviderId, type ProviderStatus } from '../ai-provider';
 import { type Action, type Settings, errorMessage, shortDate } from '../types';
 import { Field, Notice } from './shared';
 import AiBudgetReview, { useBudgetReview } from './AiBudgetReview';
@@ -9,7 +9,7 @@ import './provider-models.css';
 import './provider-setup.css';
 
 type Props = {saved: Settings; draft: Settings; change: (key: 'provider'|'endpoint'|'model', value: string) => void; action: Action; busy: boolean};
-const ids = Object.keys(providers) as ProviderId[];
+const ids = personalProviders;
 const fold = (value: string) => value.trim().toLocaleLowerCase('pt-BR');
 type StatusMap = Partial<Record<ProviderId, ProviderStatus>>;
 

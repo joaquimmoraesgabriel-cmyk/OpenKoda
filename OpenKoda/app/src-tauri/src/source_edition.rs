@@ -81,7 +81,8 @@ fn admit(
         | "ai.investigation.list" => return Ok(()),
         _ => {}
     }
-    if crate::data_policy::DataPolicyService::supports(action)
+    if crate::commercial::supports(action)
+        || crate::data_policy::DataPolicyService::supports(action)
         || crate::recovery::supports(action)
         || crate::activation::supports(action)
         || crate::project_purge::supports(action)

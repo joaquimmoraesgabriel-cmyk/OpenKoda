@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Boxes, Database, HardDriveDownload, History, Layers, LifeBuoy, Monitor, RefreshCw, Search, Settings2, ShieldCheck, SlidersHorizontal } from 'lucide-react';
 import { version } from '../../package.json';
-import { native } from '../api';
+import { native,request } from '../api';
+import { accountChanged,site } from '../commercial';
+import { SupportTickets } from './SupportTickets';
 import { appearanceFrom, appearanceKeys, saveAppearance, useDeviceAppearance, type DeviceAppearance } from '../appearance';
 import { Action, Assessment, Project, Settings as SettingsModel, errorMessage } from '../types';
 import { Field, Notice, KeyValue } from './shared';
@@ -31,12 +33,26 @@ const groups = [
     { name: 'IA e modelos', icon: Layers }, {name: 'Histórico de uso', icon: History},
   ]},
   { name: 'Instalação', items: [
-    { name: 'Diagnóstico e suporte', icon: LifeBuoy }, { name: 'Atualizações', icon: RefreshCw },
+    { name: 'Diagnóstico e suporte', icon: LifeBuoy }, {name:'Relatar um erro',icon:LifeBuoy}, { name: 'Atualizações', icon: RefreshCw },
   ]},
 ] as const;
 
 type Section = typeof groups[number]['items'][number]['name'];
 type Draft = SettingsModel & DeviceAppearance;
+function BugReport(){
+  const [signed,setSigned]=useState(false),[error,setError]=useState('');
+  useEffect(()=>{
+    let active=true;
+    function refresh(){if(native)void request<{user:unknown}>('account.session').then(value=>{if(active)setSigned(!!value.user);}).catch(()=>{if(active)setSigned(false);});}
+    refresh();window.addEventListener(accountChanged,refresh);
+    return()=>{active=false;window.removeEventListener(accountChanged,refresh);};
+  },[]);
+  return <section><p>Descreva a tela, o modelo e os passos que reproduzem o erro. Remova chaves e dados pessoais antes de enviar.</p>
+    {signed?<SupportTickets/>:<p>Entre no seu perfil para registrar e acompanhar um chamado, ou use o contato da página de suporte.</p>}
+    {native?<button className="button" onClick={()=>void site('support').catch(e=>setError(errorMessage(e)))}>Abrir site de suporte</button>:
+      <a className="button" href="https://openkoda-desktop.steelyrowan1.chatgpt.site/suporte/" target="_blank" rel="noopener noreferrer">Abrir site de suporte</a>}
+    {error&&<p role="alert">{error}</p>}</section>;
+}
 type EditableKey = Exclude<keyof Draft, 'hasApiKey'>;
 const fields: Partial<Record<Section, EditableKey[]>> = {
   'Aparência': ['theme', ...appearanceKeys],
@@ -176,6 +192,7 @@ export default function Settings({settings, projects, action, busy, dataRequest=
         </>}
         {section === 'Backup e recuperação' && <Recovery projects={projects} action={action} busy={busy}/>}
         {section === 'Diagnóstico e suporte' && <><SecurityRuntimeStatus/><SupportPackage/></>}
+        {section === 'Relatar um erro' && <BugReport/>}
         {section === 'Atualizações' && <>
           <div className="installed-version"><Boxes size={25} aria-hidden="true"/><div><strong>OpenKoda</strong><p>Versão {version}</p></div></div>
           <KeyValue label="Canal">Distribuição local</KeyValue>

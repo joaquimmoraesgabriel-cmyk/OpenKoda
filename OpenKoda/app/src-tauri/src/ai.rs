@@ -14,6 +14,10 @@ const AI_METHOD:&str="ai.remote-review.v1";
 
 #[path = "ai_chat.rs"]
 mod chat;
+#[path = "chat_compaction.rs"]
+mod chat_compaction;
+#[path = "chat_skill_match.rs"]
+mod chat_skill_match;
 #[path = "investigation.rs"]
 mod investigation;
 #[path = "ai_planning.rs"]
@@ -47,7 +51,7 @@ const ENDPOINT: &str = "https://api.openai.com/v1";
 const MAX_RESPONSE: u64 = 2 * 1024 * 1024;
 const MAX_CONTEXT: usize = 48 * 1024;
 
-pub struct AiService { chat:chat::ChatControl, db: Mutex<Connection>, inference: Mutex<()>, provider:Arc<dyn Provider>, investigation_active:Mutex<Option<investigation::Active>>, budget:budget::Ledger, data_policy:Arc<crate::data_policy::DataPolicyService>, data_reviews:Mutex<std::collections::HashMap<String,data::PreparedAiData>>, local_closure_reviews:Mutex<std::collections::HashMap<String,local_closure::PreparedClosure>>, arbiter:Arc<crate::work_supervisor::WorkArbiter> }
+pub struct AiService { pub(crate) account:crate::commercial::Account, chat:chat::ChatControl, db: Mutex<Connection>, inference: Mutex<()>, provider:Arc<dyn Provider>, investigation_active:Mutex<Option<investigation::Active>>, budget:budget::Ledger, data_policy:Arc<crate::data_policy::DataPolicyService>, data_reviews:Mutex<std::collections::HashMap<String,data::PreparedAiData>>, local_closure_reviews:Mutex<std::collections::HashMap<String,local_closure::PreparedClosure>>, arbiter:Arc<crate::work_supervisor::WorkArbiter> }
 
 pub(crate) const VAULT_SCHEMA:&str="CREATE TABLE vault (id INTEGER PRIMARY KEY CHECK(id IN (1,2,3)), cipher BLOB NOT NULL, revision TEXT NOT NULL)";
 pub(crate) const CHECK_SCHEMA:&str="CREATE TABLE connection_check (id INTEGER PRIMARY KEY CHECK(id IN (1,2,3)), model TEXT NOT NULL, endpoint TEXT NOT NULL, revision TEXT NOT NULL, checked TEXT NOT NULL)";
@@ -78,6 +82,12 @@ trait Provider:Send+Sync {
     fn response(&self,provider:ProviderId,model:&str,key:&str,prompt:&str,instructions:&str,max_output_tokens:u32)->Result<Value,String>;
     fn chat_response(&self,provider:ProviderId,model:&str,key:&str,prompt:&str,instructions:&str,maximum:u32,_stop:&std::sync::atomic::AtomicBool,_progress:Arc<Mutex<chat::Progress>>)->Result<Value,String>{self.response(provider,model,key,prompt,instructions,maximum)}
     fn models(&self,provider:ProviderId,key:&str,scan_prices:Option<&std::collections::HashSet<String>>)->Result<Vec<String>,String>{
+        if provider == ProviderId::OpenKoda {
+            let catalog = commercial_models(key)?;
+            return catalog["models"].as_array().ok_or("Catálogo da assinatura inválido.")?.iter()
+                .map(|row| row["id"].as_str().filter(|id|crate::ai_provider::valid_model(id)).map(str::to_owned)
+                    .ok_or_else(||"Modelo da assinatura inválido.".into())).collect();
+        }
         let client=client()?;
         let mut models=std::collections::BTreeSet::new();
         let mut cursors=std::collections::HashSet::new();
@@ -121,6 +131,11 @@ trait Provider:Send+Sync {
     }
 }
 struct HttpProvider;
+fn commercial_models(key:&str)->Result<Value,String>{
+    let response=client()?.post(crate::commercial::EDGE).header("apikey",crate::commercial::PUBLISHABLE)
+        .bearer_auth(key).json(&json!({"action":"models"})).send().map_err(network_error)?;
+    read_bounded_response(response,2*1024*1024)
+}
 impl Provider for HttpProvider {
     fn chat_response(&self,provider:ProviderId,model:&str,key:&str,prompt:&str,instructions:&str,maximum:u32,stop:&std::sync::atomic::AtomicBool,progress:Arc<Mutex<chat::Progress>>)->Result<Value,String>{chat::http_chat(provider,model,key,prompt,instructions,maximum,stop,progress)}
     fn response(&self,provider:ProviderId,model:&str,key:&str,prompt:&str,instructions:&str,max_output_tokens:u32)->Result<Value,String>{
@@ -205,7 +220,7 @@ impl AiService {
         let details_column:i64=db.query_row("SELECT COUNT(*) FROM pragma_table_info('requests') WHERE name='details'",[],|r|r.get(0)).map_err(failure)?;
         if details_column==0 {db.execute("ALTER TABLE requests ADD COLUMN details TEXT NOT NULL DEFAULT '{}'",[]).map_err(failure)?;}
         db.execute("UPDATE requests SET details=json_set(details,'$.operationProposal.status','interrupted') WHERE json_type(details,'$.operationProposal')='object' AND json_extract(details,'$.operationProposal.status')='pending'",[]).map_err(failure)?;
-        let service=Self { chat:chat::ChatControl::default(), db: Mutex::new(db), inference: Mutex::new(()), provider, investigation_active:Mutex::new(None), budget, data_policy:Arc::new(crate::data_policy::DataPolicyService::new()), data_reviews:Mutex::new(std::collections::HashMap::new()), local_closure_reviews:Mutex::new(std::collections::HashMap::new()), arbiter:Arc::new(crate::work_supervisor::WorkArbiter::default()) };
+        let service=Self { account:crate::commercial::Account::new(&root), chat:chat::ChatControl::default(), db: Mutex::new(db), inference: Mutex::new(()), provider, investigation_active:Mutex::new(None), budget, data_policy:Arc::new(crate::data_policy::DataPolicyService::new()), data_reviews:Mutex::new(std::collections::HashMap::new()), local_closure_reviews:Mutex::new(std::collections::HashMap::new()), arbiter:Arc::new(crate::work_supervisor::WorkArbiter::default()) };
         service.recover_investigations()?;
         Ok(service)
     }
@@ -220,6 +235,7 @@ impl AiService {
         match requested {Some(p)=>Ok(p),None=>ProviderId::parse(&self.config_for(store,None,false)?.provider)}
     }
     fn revision(&self,provider:ProviderId)->Result<Option<String>,String>{
+        if provider==ProviderId::OpenKoda{return self.account.identity_revision();}
         self.db.lock().map_err(failure)?.query_row("SELECT revision FROM vault WHERE id=?1",[provider.slot()],|r|r.get(0)).optional().map_err(failure)
     }
     pub fn has_selected_key(&self,store:&Store)->bool{
@@ -279,6 +295,7 @@ impl AiService {
                 let _lease=self.inference.try_lock().map_err(|_|"Aguarde a solicitação em andamento antes de trocar a credencial.".to_string())?;
                 let input: KeyInput = decode(payload)?;
                 let provider=self.selected_provider(input.provider,store)?;
+                if provider==ProviderId::OpenKoda{return Err("Use a sessão da conta para acessar a assinatura.".into());}
                 let pasted = Zeroizing::new(input.key);
                 let key = pasted.trim();
                 if key.len() < 16 || key.len() > 512 || !key.bytes().all(|c| c.is_ascii_graphic()) { return Err("Informe uma chave de API válida, sem espaços.".into()); }
@@ -307,6 +324,7 @@ impl AiService {
                 let _lease=self.inference.try_lock().map_err(|_|"Aguarde a solicitação em andamento antes de remover a credencial.".to_string())?;
                 let input:ProviderInput=decode(payload)?;
                 let provider=self.selected_provider(input.provider,store)?;
+                if provider==ProviderId::OpenKoda{return Err("Use a opção Sair na conta da assinatura.".into());}
                 let mut db = self.db.lock().map_err(failure)?;
                 let tx = db.transaction().map_err(failure)?;
                 tx.execute("DELETE FROM vault WHERE id=?1", [provider.slot()]).map_err(failure)?;
@@ -318,6 +336,7 @@ impl AiService {
                 let _lease = self.inference.try_lock().map_err(|_| "Aguarde a solicitação em andamento antes de ativar os modelos.".to_string())?;
                 let input: ConfigureProvider = decode(payload)?;
                 let provider = input.provider;
+                if provider==ProviderId::OpenKoda{return Err("Escolha o modelo da assinatura no projeto.".into());}
                 if self.revision(provider)?.as_deref() != Some(input.credential_revision.as_str()) {
                     return Err("A chave mudou. Consulte os modelos novamente antes de ativar o provedor.".into());
                 }
@@ -348,6 +367,7 @@ impl AiService {
                 let input:AssessmentSelection=decode(payload)?;
                 if let Some(selection)=&input.ai_selection {
                     selection.validate()?;
+                    if selection.provider==ProviderId::OpenKoda {crate::credential_refs::ensure_provider_slot(store,selection.provider)?;}
                     self.require_enabled_model(&store.snapshot()?, selection.provider, &selection.model)?;
                 }
                 store.mutate(|state|{
@@ -371,6 +391,7 @@ impl AiService {
                 let input:TestInput=decode(payload)?;
                 let cfg = self.config_for(store,None,true)?;
                 let provider=ProviderId::parse(&cfg.provider)?;
+                if provider==ProviderId::OpenKoda{return Err("A conexão da assinatura é verificada pela sessão da conta.".into());}
                 let (key, revision) = self.provider_credential(provider)?;
                 let answer = self.complete_locked(provider,&cfg.model, &key, &revision, "connection-test", budget::TEST_PROMPT, budget::TEST_INSTRUCTIONS, None,2048,None,json!({}),input.budget_review.as_ref(),0,None,None,work::RequestWork::Live(work.as_deref_mut().ok_or("work_owned_operation")?))?;
                 // Never attach a successful result to settings or credentials changed during the request.
@@ -442,6 +463,7 @@ impl AiService {
         Ok(Zeroizing::new(String::from_utf8(clear.to_vec()).map_err(|_|"Credencial inválida no vault.")?))
     }
     fn provider_credential(&self,provider:ProviderId)->Result<(Zeroizing<String>,String),String>{
+        if provider==ProviderId::OpenKoda{return self.account.credential();}
         let record:Option<(Vec<u8>,String)>=self.db.lock().map_err(failure)?.query_row(
             "SELECT cipher,revision FROM vault WHERE id=?1",[provider.slot()],|r|Ok((r.get(0)?,r.get(1)?))).optional().map_err(failure)?;
         let (cipher,revision)=record.ok_or("Configure uma chave para este provedor nas Configurações.")?;
@@ -455,12 +477,12 @@ impl AiService {
         let provider=ProviderId::parse(&cfg.provider)?;
         Ok((provider,cfg.model,self.revision(provider)?.is_some()))
     }
-    pub(crate) fn security_key(&self,store:&Store,assessment:&str,expected:ProviderId,model:&str)->Result<Zeroizing<String>,String>{
+    pub(crate) fn security_key(&self,store:&Store,assessment:&str,expected:ProviderId,model:&str)->Result<(Zeroizing<String>,String),String>{
         let cfg=self.config_for(store,Some(assessment),true)?;
         if cfg.provider!=expected.id()||cfg.model!=model{
             return Err("O provedor ou modelo mudou. Revise a seleção desta avaliação.".into());
         }
-        self.provider_credential(expected).map(|(key,_)|key)
+        self.provider_credential(expected)
     }
     pub(crate) fn security_lease(&self)->Result<std::sync::MutexGuard<'_,()>,String>{
         self.inference.try_lock().map_err(|_|"Aguarde a operação de IA antes de iniciar o SDK.".into())
@@ -655,13 +677,25 @@ impl AiService {
             if let (Some((store,_,_)),Some(receipt))=(authority,receipt.as_ref()){self.data_policy.finish(store,receipt,crate::data_policy::DataUseOutcome::NotSent,vec![])?;}
             return Err(error);
         }
+        let mut interrupted_generation = None;
         let raw_result=if matches!(operation,"ask"|"operation_proposal"){
             self.chat.start(assessment,&id,data.as_ref().map(|data|data.review)).and_then(|live|{
                 live.admit(admitted_message_id.clone())?;
-                self.provider.chat_response(provider,model,key,prompt,instructions,max_output_tokens,&live.token,live.progress.clone())
+                let result=if provider==ProviderId::OpenKoda {
+                    chat::commercial_chat(&id,model,key,prompt,instructions,max_output_tokens,
+                        data.as_ref().and_then(|d|d.spec.destination_context["reasoning"].as_str()),&live.token,live.progress.clone())
+                }else{self.provider.chat_response(provider,model,key,prompt,instructions,max_output_tokens,&live.token,live.progress.clone())};
+                if result.is_err() {
+                    interrupted_generation=live.progress.lock().map_err(failure)?.generation_id.clone();
+                }
+                result
             })
+        }else if provider==ProviderId::OpenKoda {
+            let progress=Arc::new(Mutex::new(chat::Progress::default()));
+            chat::commercial_chat(&id,model,key,prompt,instructions,max_output_tokens,
+                data.as_ref().and_then(|d|d.spec.destination_context["reasoning"].as_str()),&std::sync::atomic::AtomicBool::new(false),progress)
         }else{self.provider.response(provider,model,key,prompt,instructions,max_output_tokens)};
-        let result=self.commit_response(&id,assessment,key,history_message,raw_result);
+        let result=self.commit_response(&id,assessment,key,history_message,interrupted_generation.as_deref(),raw_result);
         if let (Some((store,_,_)),Some(receipt))=(authority,receipt.as_ref()){
             let status:String=self.db.lock().map_err(failure)?.query_row("SELECT status FROM requests WHERE id=?1",[&id],|r|r.get(0)).map_err(failure)?;
             let outcome=match status.as_str(){"completed"=>crate::data_policy::DataUseOutcome::Completed,"unknown"|"pending"=>crate::data_policy::DataUseOutcome::Unknown,_=>crate::data_policy::DataUseOutcome::Failed};
@@ -685,12 +719,13 @@ impl AiService {
         tx.commit().map_err(failure)?;Ok(Some(message_id))
     }
 
-    fn commit_response(&self,id:&str,assessment:&str,key:&str,history_message:Option<&str>,raw_result:Result<Value,String>)->Result<Value,String> {
+    fn commit_response(&self,id:&str,assessment:&str,key:&str,history_message:Option<&str>,interrupted_generation:Option<&str>,raw_result:Result<Value,String>)->Result<Value,String> {
         // A provider can consume/bill tokens even when no complete visible answer exists.
         // A transport timeout does not prove the provider canceled the request.
         let (input,output)=raw_result.as_ref().ok().map(|v|(v["usage"]["input_tokens"].as_i64(),v["usage"]["output_tokens"].as_i64())).unwrap_or((None,None));
         let accounting=self.budget.settle(id,input,output);
         let mut details=raw_result.as_ref().ok().map(|v|json!({"responseId":v["id"],"providerStatus":v["status"],"incomplete":v["incomplete_details"],"endedAt":model::now()})).unwrap_or(json!({"endedAt":model::now(),"usageUnknown":true}));
+        if let Some(id)=interrupted_generation { details["responseId"]=json!(id); }
         let provider_incomplete=raw_result.as_ref().ok().is_some_and(|v|v["status"]=="incomplete");
         let provider_not_terminal=raw_result.as_ref().ok().is_some_and(|v|!matches!(v["status"].as_str(),Some("completed"|"incomplete"|"failed"|"cancelled")));
         let transport_unknown=raw_result.as_ref().err().is_some_and(|e:&String|e.starts_with("Falha de conexão")||e.starts_with("Resposta"));
@@ -787,7 +822,7 @@ pub fn redact(text:&str, key:Option<&str>)->String {
 }
 
 #[cfg(windows)]
-fn protect(bytes:&[u8], decrypt:bool)->Result<Vec<u8>,String> {
+pub(crate) fn protect(bytes:&[u8], decrypt:bool)->Result<Vec<u8>,String> {
     use windows_sys::Win32::{Security::Cryptography::{CryptProtectData,CryptUnprotectData,CRYPT_INTEGER_BLOB,CRYPTPROTECT_UI_FORBIDDEN},Foundation::LocalFree};
     let input=CRYPT_INTEGER_BLOB {cbData:bytes.len() as u32,pbData:bytes.as_ptr() as *mut u8};
     let mut output=CRYPT_INTEGER_BLOB {cbData:0,pbData:std::ptr::null_mut()};
@@ -799,7 +834,7 @@ fn protect(bytes:&[u8], decrypt:bool)->Result<Vec<u8>,String> {
     Ok(value)
 }
 #[cfg(not(windows))]
-fn protect(_: &[u8], _:bool)->Result<Vec<u8>,String> {Err("Vault DPAPI disponível somente no Windows.".into())}
+pub(crate) fn protect(_: &[u8], _:bool)->Result<Vec<u8>,String> {Err("Vault DPAPI disponível somente no Windows.".into())}
 
 #[cfg(test)]
 mod tests {
@@ -844,17 +879,18 @@ mod tests {
     }
     #[test] fn incomplete_usage_and_uncertain_transport_are_durable() {
         let dir=tempfile::tempdir().unwrap();let ai=AiService::new(dir.path().to_owned()).unwrap();pending(&ai,"incomplete");pending(&ai,"network");
-        assert!(ai.commit_response("incomplete","fixture","sentinel",None,Ok(json!({"id":"fixture-response","status":"incomplete","incomplete_details":{"reason":"max_output_tokens"},"usage":{"input_tokens":42,"output_tokens":2048}}))).is_err());
-        assert!(ai.commit_response("network","fixture","sentinel",None,Err("Falha de conexão com o provedor de IA.".into())).is_err());
+        assert!(ai.commit_response("incomplete","fixture","sentinel",None,None,Ok(json!({"id":"fixture-response","status":"incomplete","incomplete_details":{"reason":"max_output_tokens"},"usage":{"input_tokens":42,"output_tokens":2048}}))).is_err());
+        assert!(ai.commit_response("network","fixture","sentinel",None,Some("gen-123-fixture"),Err("Falha de conexão com o provedor de IA.".into())).is_err());
         let db=ai.db.lock().unwrap();
         let row:(String,i64,i64)=db.query_row("SELECT status,input_tokens,output_tokens FROM requests WHERE id='incomplete'",[],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?))).unwrap();assert_eq!(row,("incomplete".into(),42,2048));
-        assert_eq!(db.query_row("SELECT status FROM requests WHERE id='network'",[],|r|r.get::<_,String>(0)).unwrap(),"unknown");
+        let interrupted:(String,String,bool,Option<i64>,Option<i64>)=db.query_row("SELECT status,json_extract(details,'$.responseId'),json_extract(details,'$.usageUnknown'),input_tokens,output_tokens FROM requests WHERE id='network'",[],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?))).unwrap();
+        assert_eq!(interrupted,("unknown".into(),"gen-123-fixture".into(),true,None,None));
     }
     #[test] fn failed_history_commit_cannot_claim_completed_request() {
         let dir=tempfile::tempdir().unwrap();let ai=AiService::new(dir.path().to_owned()).unwrap();pending(&ai,"atomic");
         ai.db.lock().unwrap().execute_batch("CREATE TRIGGER fail_history BEFORE INSERT ON messages BEGIN SELECT RAISE(ABORT,'fixture full disk'); END;").unwrap();
         let body=json!({"status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":"fixture answer"}]}],"usage":{"input_tokens":1,"output_tokens":2}});
-        assert!(ai.commit_response("atomic","fixture","sentinel",Some("fixture question"),Ok(body)).is_err());
+        assert!(ai.commit_response("atomic","fixture","sentinel",Some("fixture question"),None,Ok(body)).is_err());
         assert_eq!(ai.db.lock().unwrap().query_row("SELECT status FROM requests WHERE id='atomic'",[],|r|r.get::<_,String>(0)).unwrap(),"pending");
     }
     #[cfg(windows)]

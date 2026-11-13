@@ -1,7 +1,8 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { Check, ChevronDown, Grid2X2, Plus, Search, X } from 'lucide-react';
 import { native, request } from '../api';
-import { providers, type AiSelection, type ProviderId, type ProviderStatus } from '../ai-provider';
+import { personalProviders, providers, type AiSelection, type ProviderId, type ProviderStatus } from '../ai-provider';
+import { type CommercialModel, type Reasoning, accountChanged } from '../commercial';
 import { errorMessage } from '../types';
 
 type Group = { provider: ProviderId; models: string[] };
@@ -25,6 +26,25 @@ export function ChatModelPicker({ value, onChange, disabled, onModels, forAnalys
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [commercial,setCommercial]=useState<CommercialModel[]>([]);
+  const [sessionRevision,setSessionRevision]=useState(0);
+  useEffect(()=>{
+    const reset=()=>{setCommercial([]);setSessionRevision(n=>n+1);};
+    window.addEventListener(accountChanged,reset);return ()=>window.removeEventListener(accountChanged,reset);
+  },[]);
+  useEffect(()=>{
+    if(!native||!open&&value?.provider!=='openkoda')return;
+    let active=true;
+    async function catalog(){
+      try{
+        const session=await request<{user:{id:string}|null}>('account.session');
+        if(!session?.user){if(active)setCommercial([]);return;}
+        const result=await request<{models:CommercialModel[]}>('account.models');
+        if(active)setCommercial(Array.isArray(result.models)?result.models:[]);
+      }catch{if(active)setCommercial([]);}
+    }
+    void catalog();return ()=>{active=false;};
+  },[open,value?.provider,sessionRevision]);
   const [error, setError] = useState('');
 
   useLayoutEffect(() => {
@@ -67,7 +87,7 @@ export function ChatModelPicker({ value, onChange, disabled, onModels, forAnalys
       const result: Group[] = [];
       let incomplete = false;
       // Native catalog requests share an inference lock across providers.
-      for (const provider of Object.keys(providers) as ProviderId[]) {
+      for (const provider of personalProviders) {
         if (!active) return;
         try {
           const status = await request<ProviderStatus>('ai.status', { provider });
@@ -97,7 +117,10 @@ export function ChatModelPicker({ value, onChange, disabled, onModels, forAnalys
     if (restoreFocus) trigger.current?.focus({ preventScroll: true });
   }
   const term = query.toLocaleLowerCase().trim();
-  const visible = groups.filter(g => !filter || g.provider === filter).map(g => ({
+  const allGroups:Group[]=commercial.length?[{provider:'openkoda',models:commercial.map(m=>m.id)},...groups]:groups;
+  const levels=value?.provider==='openkoda'?commercial.find(m=>m.id===value.model)?.reasoningLevels??[]:[];
+  const levelLabel:Record<Reasoning,string>={low:'Leve',medium:'Médio',high:'Alto'};
+  const visible = allGroups.filter(g => !filter || g.provider === filter).map(g => ({
     ...g, models: g.models.filter(m => (m + ' ' + providers[g.provider].name).toLocaleLowerCase().includes(term)),
   })).filter(g => g.models.length);
 
@@ -138,7 +161,7 @@ export function ChatModelPicker({ value, onChange, disabled, onModels, forAnalys
       <div className="chat-model-columns">
         <nav aria-label="Filtrar por provedor">
           <button type="button" title="Todos os provedores" aria-label="Todos" aria-pressed={!filter} onClick={() => setFilter(undefined)}><Grid2X2 size={17}/></button>
-          {groups.map(g => <button key={g.provider} type="button" title={providers[g.provider].name} aria-label={providers[g.provider].name} aria-pressed={filter === g.provider} onClick={() => setFilter(g.provider)}>
+          {allGroups.map(g => <button key={g.provider} type="button" title={providers[g.provider].name} aria-label={providers[g.provider].name} aria-pressed={filter === g.provider} onClick={() => setFilter(g.provider)}>
             <img src={providers[g.provider].logo} alt="" width="19" height="19"/>
           </button>)}
         </nav>
@@ -148,7 +171,10 @@ export function ChatModelPicker({ value, onChange, disabled, onModels, forAnalys
           {visible.map(g => <section key={g.provider}><h4>{providers[g.provider].name}</h4>
             {g.models.map(m => {
               const selected = value?.provider === g.provider && value.model === m;
-              return <button key={m} type="button" disabled={saving} aria-pressed={selected} onClick={() => void choose({ provider: g.provider, model: m })}>
+              return <button key={m} type="button" disabled={saving} aria-pressed={selected} onClick={() => {
+                const effort=g.provider==='openkoda'?commercial.find(row=>row.id===m)?.reasoningLevels[0]:undefined;
+                void choose({provider:g.provider,model:m,...(effort?{reasoning:effort}:{})});
+              }}>
                 <span>{m}</span>{selected && <Check size={15}/>}
               </button>;
             })}
@@ -158,5 +184,9 @@ export function ChatModelPicker({ value, onChange, disabled, onModels, forAnalys
       {error && <p role="alert">{error}</p>}
       {onModels && <footer><button type="button" disabled={saving} onClick={() => { close(false); onModels(); }}><Plus size={15}/>Configurar modelos</button></footer>}
     </div>
+    {value?.provider==='openkoda'&&levels.length>0&&<label className="reasoning-control">Raciocínio · {levelLabel[value.reasoning??levels[0]]}
+      <input aria-label="Nível de raciocínio" type="range" min={0} max={levels.length-1} step={1} disabled={disabled||saving||levels.length===1}
+        value={Math.max(0,levels.indexOf(value.reasoning??levels[0]))} aria-valuetext={levelLabel[value.reasoning??levels[0]]}
+        onChange={event=>void choose({...value,reasoning:levels[event.target.valueAsNumber]})}/></label>}
   </>;
 }

@@ -49,6 +49,7 @@ mod capture_access_tests;
 
 use std::sync::Arc;
 use tauri::Manager;
+mod commercial;
 use core::{Request, Store};
 
 struct Services { close_gate: Arc<close_guard::CloseGate>, security:security_scan::Service, github:github_repository::Service, ai: ai::AiService, environment: Arc<environment::EnvironmentManager>, executor: executor::Executor, recovery:recovery::RecoveryService, kali:kali_bridge::KaliBridge, remediation:remediation::RemediationService, activation:activation::ActivationService, retention:retention::RetentionService, project_purge:project_purge::ProjectPurgeService, data_policy:Arc<data_policy::DataPolicyService>, workflow:workflow::WorkflowService, supervisor:work_supervisor::WorkSupervisor, work_wakeup:work_runtime::WakeGate, environment_gate: std::sync::RwLock<()> }
@@ -95,6 +96,13 @@ async fn request(
         let _admission = admission;
         if request.action == "host.connectivity" {
             return environment::connectivity::observe(&request.payload);
+        }
+        if commercial::supports(&request.action) {
+            let result=services.ai.account.handle(&request.action,request.payload)?;
+            if matches!(request.action.as_str(),"account.signIn"|"account.google"|"account.models") {
+                crate::credential_refs::ensure_provider_slot(&store,crate::ai_provider::ProviderId::parse("openkoda")?)?;
+            }
+            return Ok(result);
         }
         // Support is an allowlisted metadata-only document, even when the credential vault is unavailable.
         if matches!(request.action.as_str(), "support.review" | "support.export") {

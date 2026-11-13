@@ -4,6 +4,7 @@ import { native } from '../api';
 import { avatarColors, saveIdentity, useIdentity, type Identity } from '../profile-identity';
 import type { Snapshot } from '../types';
 import './profile-usage.css';
+import { CommercialAccount } from './CommercialAccount';
 
 const dateFormat = new Intl.DateTimeFormat('pt-BR', {day: 'numeric', month: 'short', year: 'numeric'});
 
@@ -77,6 +78,7 @@ export default function WorkspaceProfile({ snapshot, onSettings, onUsageHistory 
           <div className="person-actions"><button type="button" className="button" onClick={endEdit}>Cancelar</button><button type="submit" className="button primary">Salvar perfil</button></div>
         </form> : <><h2>{identity.name || 'Meu perfil'}</h2><p>Sua área de trabalho neste dispositivo</p></>}
       </section>
+      <CommercialAccount/>
       <dl className="profile-metrics">
         <div><dt>Projetos ativos</dt><dd>{snapshot.projects.length - archived}</dd></div>
         <div><dt>Projetos arquivados</dt><dd>{archived}</dd></div>

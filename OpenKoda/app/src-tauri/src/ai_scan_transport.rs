@@ -31,6 +31,7 @@ enum ReviewFormat {
     Text,
     JsonObject,
     FinalReportSchema,
+    DecisionSchema,
 }
 
 impl ReviewModel {
@@ -43,38 +44,56 @@ impl ReviewModel {
 
     pub(crate) fn for_batch(mut self, final_report: bool) -> Self {
         if !final_report && matches!(self.format, ReviewFormat::FinalReportSchema) {
-            self.format = ReviewFormat::JsonObject;
+            self.format = ReviewFormat::DecisionSchema;
         }
         self
     }
 
     fn response_format(self) -> Option<Value> {
-        match self.format {
-            ReviewFormat::Text => None,
-            ReviewFormat::JsonObject => Some(json!({"type":"json_object"})),
-            ReviewFormat::FinalReportSchema => Some(json!({
-                "type":"json_schema",
-                "json_schema":{"name":"source_review","strict":true,"schema":{
-                    "type":"object","additionalProperties":false,
-                    "properties":{
-                        "findings":{"type":"array","items":{
-                            "type":"object","additionalProperties":false,
-                            "properties":{
-                                "path":{"type":"string"},
-                                "line":{"type":"integer"},
-                                "excerpt":{"type":"string"},
-                                "title":{"type":"string"},
-                                "severity":{"type":"string","enum":["low","medium","high","critical"]},
-                                "description":{"type":"string"}
-                            },
-                            "required":["path","line","excerpt","title","severity","description"]
-                        }},
-                        "summary":{"type":"string"}
-                    },
-                    "required":["findings","summary"]
-                }}
-            })),
-        }
+        let report = || {
+            json!({
+                        "type":"object","additionalProperties":false,
+                        "properties":{
+                            "findings":{"type":"array","items":{
+                                "type":"object","additionalProperties":false,
+                                "properties":{
+                                    "path":{"type":"string"},
+                                    "line":{"type":"integer"},
+                                    "excerpt":{"type":"string"},
+                                    "title":{"type":"string"},
+                                    "severity":{"type":"string","enum":["low","medium","high","critical"]},
+                                    "description":{"type":"string"}
+                                },
+                                "required":["path","line","excerpt","title","severity","description"]
+                            }},
+                            "summary":{"type":"string"}
+                        },
+                        "required":["findings","summary"]
+            })
+        };
+        let schema = match self.format {
+            ReviewFormat::Text => return None,
+            ReviewFormat::JsonObject => return Some(json!({"type":"json_object"})),
+            ReviewFormat::FinalReportSchema => report(),
+            ReviewFormat::DecisionSchema => {
+                // Structured Outputs requires an object at the root. Nest the
+                // choice so a report and a lookup are mutually exclusive.
+                let read = json!({"type":"object","additionalProperties":false,
+                    "properties":{"op":{"type":"string","enum":["read"]},"path":{"type":"string"},"line":{"type":"integer"}},
+                    "required":["op","path","line"]});
+                let search = json!({"type":"object","additionalProperties":false,
+                    "properties":{"op":{"type":"string","enum":["search"]},"query":{"type":"string"}},
+                    "required":["op","query"]});
+                let context = json!({"type":"object","additionalProperties":false,
+                    "properties":{"queries":{"type":"array","items":{"anyOf":[read,search]}}},
+                    "required":["queries"]});
+                json!({"type":"object","additionalProperties":false,
+                    "properties":{"decision":{"anyOf":[context,report()]}},"required":["decision"]})
+            }
+        };
+        Some(
+            json!({"type":"json_schema","json_schema":{"name":"source_review","strict":true,"schema":schema}}),
+        )
     }
 
     pub(crate) fn format_bytes(self) -> usize {
@@ -100,6 +119,8 @@ pub(crate) trait ScanTransport: Send + Sync {
         instructions: &str,
         maximum: u32,
         settings: ReviewModel,
+        request_id: &str,
+        reasoning: Option<crate::ai_provider::Reasoning>,
         stop: &AtomicBool,
         deadline: Instant,
     ) -> Result<Value, String>;
@@ -248,6 +269,15 @@ impl ScanTransport for HttpScan {
         model: &str,
         key: &str,
     ) -> Result<ReviewModel, String> {
+        if provider==ProviderId::OpenKoda {
+            let catalog=commercial_models(key)?;
+            let row=catalog["models"].as_array().and_then(|rows|rows.iter().find(|row|row["id"]==model))
+                .ok_or("Modelo ausente no catálogo atual da assinatura.")?;
+            let rate=|field:&str|row[field].as_f64().filter(|v|v.is_finite() && *v > 0. && *v <= 100.)
+                .map(|v|(v*1_000_000.).ceil() as u64).ok_or(NO_RATE);
+            return Ok(ReviewModel{rates:Rates{input:rate("inputUsdPerMillion")?,output:rate("outputUsdPerMillion")?},
+                format:if row["structured"]==true{ReviewFormat::FinalReportSchema}else{ReviewFormat::JsonObject}});
+        }
         if provider == ProviderId::OpenRouter {
             let response = authenticate(
                 client()?
@@ -276,6 +306,8 @@ impl ScanTransport for HttpScan {
         instructions: &str,
         maximum: u32,
         settings: ReviewModel,
+        request_id: &str,
+        reasoning: Option<crate::ai_provider::Reasoning>,
         stop: &AtomicBool,
         deadline: Instant,
     ) -> Result<Value, String> {
@@ -301,15 +333,23 @@ impl ScanTransport for HttpScan {
         } else {
             request.bearer_auth(key)
         };
-        let request = request.json(&scan_body(
+        let request = if provider==ProviderId::OpenKoda {
+            let mut body=json!({"action":"scan","model":model,"requestId":request_id,"instructions":instructions,
+                "messages":[{"role":"user","content":prompt}],"maxTokens":maximum,
+                "format":if matches!(settings.format,ReviewFormat::DecisionSchema){"decision"}else{"report"}});
+            if let Some(level)=reasoning{body["reasoning"]=json!(level);}
+            request.header("apikey",crate::commercial::PUBLISHABLE).json(&body)
+        }else{request.json(&scan_body(
             provider,
             model,
             prompt,
             instructions,
             maximum,
             settings,
-        ));
+        ))};
         let (send, receive) = std::sync::mpsc::sync_channel(1);
+        let expected_model=model.to_owned();
+        let expected_request=request_id.to_owned();
         let task = tauri::async_runtime::spawn(async move {
             let result=async{
                 let mut response=request.send().await.map_err(network_error)?;
@@ -324,6 +364,14 @@ impl ScanTransport for HttpScan {
                     bytes.extend_from_slice(&chunk);
                 }
                 let body:Value=serde_json::from_slice(&bytes).map_err(|_|"Resposta do provedor inválida.")?;
+                if provider==ProviderId::OpenKoda {
+                    if body["status"]!="completed" || body["model"]!=expected_model || body["requestId"]!=expected_request {
+                        return Err("O recibo de inferência não corresponde à etapa da análise.".into());
+                    }
+                    return Ok(json!({"id":body["usage"]["id"],"status":"completed","model":body["model"],
+                        "reportedCostUsd":body["usage"]["costUsd"],"usage":{"input_tokens":body["usage"]["inputTokens"],"output_tokens":body["usage"]["outputTokens"]},
+                        "output":[{"type":"message","content":[{"type":"output_text","text":body["text"]}]}]}));
+                }
                 let cost=if provider==ProviderId::OpenRouter {body["usage"]["cost"].as_f64().filter(|v|v.is_finite()&&*v>=0.)}else{None};
                 let mut result=provider.normalize(body)?;
                 result["reportedCostUsd"]=json!(cost);
@@ -395,7 +443,7 @@ mod tests {
         );
         assert_eq!(
             structured.for_batch(false).response_format().unwrap()["type"],
-            "json_object"
+            "json_schema"
         );
         catalog["data"][0]["supported_parameters"] = json!([]);
         let plain = router_model(&catalog, "brand/model").unwrap();

@@ -3,7 +3,7 @@ import { AssessmentModelContext } from '../assessment-model-context';
 import { Check, LoaderCircle, RefreshCw } from 'lucide-react';
 import { native, request } from '../api';
 import { errorMessage, type Assessment, type Settings } from '../types';
-import { knownProvider, providers, selectionLabel, type AiSelection, type ProviderId, type ProviderStatus } from '../ai-provider';
+import { knownProvider, providers, personalProviders, selectionLabel, type AiSelection, type ProviderId, type ProviderStatus } from '../ai-provider';
 import { Field } from './shared';
 import './provider-models.css';
 
@@ -18,7 +18,7 @@ export function ProviderField({value, onChange, disabled, label = 'Provedor', on
         else if (e.target.value === 'compatible') onCompatible?.();
       }}>
         {available && !available.includes(value) && <option value={value} disabled>{providers[value].name} · indisponível</option>}
-        {(available ?? Object.keys(providers) as ProviderId[]).map(id => <option key={id} value={id}>{providers[id].name}</option>)}
+        {(available ?? personalProviders).map(id => <option key={id} value={id}>{providers[id].name}</option>)}
         {onCompatible && <option value="compatible">Provedor compatível</option>}
       </select>
       <img src={providers[value].logo} alt="" width="24" height="24"/>
@@ -116,7 +116,7 @@ function ActiveProviderFields({value, onChange, disabled}: {value: AiSelection; 
   useEffect(() => {
     if (!native) return;
     let active = true;
-    const ids = Object.keys(providers) as ProviderId[];
+    const ids = personalProviders;
     async function read() {
       await Promise.resolve();
       if (!active) return;

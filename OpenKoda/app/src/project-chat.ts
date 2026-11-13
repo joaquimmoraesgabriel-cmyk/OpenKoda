@@ -78,7 +78,7 @@ export async function prepareScanMetadata(projectId:string,assessmentId:string,s
 
 // Set up only missing settings. Existing policies, classifications and revocations
 // belong to the project and are rechecked by the native core before each HTTP call.
-export async function prepareChat(assessment:Assessment,selection:AiSelection,message:string,options:{image?:string;file?:boolean;signal?:AbortSignal;propose?:boolean}={}){
+export async function prepareChat(assessment:Assessment,selection:AiSelection,message:string,options:{image?:string;file?:boolean;signal?:AbortSignal;propose?:boolean;compact?:boolean;skillId?:string;disableAutoSkill?:boolean}={}){
   const {id:assessmentId,projectId}=assessment;
   const {scope,combined,refs}=await conversationScope(assessmentId);
   const targets=combined?{contextTargetRefs:[refs[0].targetRef]}:{};
@@ -103,7 +103,8 @@ export async function prepareChat(assessment:Assessment,selection:AiSelection,me
   const base={assessmentId,evidenceIds:[],...targets,...proposalOptions,message};
   const context=await request<unknown>('ai.context',{...base,operation,credentialReferenceId:ref.id,messageSensitivity:'internal',packageSensitivity:'internal',
     categories:(options.file||options.image)?chatCategories:chatCategories.filter(c=>c!=='source_excerpt'),
-    includeChatHistory:!options.propose,...(options.image?{chatImage:options.image}:{})});
+    includeChatHistory:!options.propose,...(options.compact?{compactHistory:true}:{}),...(options.image?{chatImage:options.image}:{}),...(options.skillId?{skillId:options.skillId}:{}),
+    ...(options.disableAutoSkill?{disableAutoSkill:true}:{})});
   if(!validPacketContext(context)||!context.canSend||!context.dataReview)throw new Error(validPacketContext(context)?context.reasonCodes.map(dataReason).join(' '):'O núcleo não autorizou este pacote.');
   if(context.packetPreview.model!==selection.model||context.packetPreview.endpoint!==providers[selection.provider].endpoint)throw new Error('O modelo mudou durante a preparação.');
   return {context,operation,allowedAdapters,scopeRef:currentScopeRef(scope),payload:{...base,contextDigest:context.digest,dataReview:context.dataReview}};
