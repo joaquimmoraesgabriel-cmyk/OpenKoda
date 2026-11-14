@@ -121,32 +121,32 @@
   border: 2px solid transparent;
   box-shadow: inset 0 0 0 1px #00000009;
   border-radius: 15px;
-  background: #e9e9eb;
+  background: #ebeee4;
   transition: border-color 150ms ease, transform 150ms ease;
 }
 .theme-option:hover .theme-sample { transform: translateY(-2px); }
 .theme-option input:checked + .theme-sample { border-color: var(--text); }
-.theme-sample-dark { background: #232324; }
-.theme-sample-system { background: linear-gradient(111deg, #e9e9eb 50%, #232324 50%); }
+.theme-sample-dark { background: #102019; }
+.theme-sample-system { background: linear-gradient(111deg, #ebeee4 50%, #102019 50%); }
 .theme-window {
   position: absolute; inset: 13% 8%;
   display: grid; grid-template-columns: 28% 1fr;
   border-radius: 7px; overflow: hidden;
-  background: #fafafa; box-shadow: 0 2px 8px #12121615;
+  background: #fafbf6; box-shadow: 0 2px 8px #12121615;
 }
 .theme-window-nav, .theme-window-body {
   display: flex; flex-direction: column; justify-content: center; align-items: flex-start;
   gap: 12%; padding: 0 14%;
 }
-.theme-window-nav { background: #f2f2f3; }
-.theme-window i { height: 7%; border-radius: 9px; background: #d7d7da; width: 72%; }
-.theme-window-nav i:first-child { width: 82%; background: #bcbcbf; }
+.theme-window-nav { background: #dce9c8; }
+.theme-window i { height: 7%; border-radius: 9px; background: #9aa99c; width: 72%; }
+.theme-window-nav i:first-child { width: 82%; background: #496653; }
 .theme-window-body i:first-child { width: 47%; height: 14%; }
 .theme-window-body i:nth-child(2) { width: 100%; }
-.theme-window-dark { background: #303032; }
-.theme-window-dark .theme-window-nav { background: #444446; }
-.theme-window-dark i { background: #606063; }
-.theme-window-dark .theme-window-nav i:first-child { background: #818184; }
+.theme-window-dark { background: #192b22; }
+.theme-window-dark .theme-window-nav { background: #304837; }
+.theme-window-dark i { background: #708b79; }
+.theme-window-dark .theme-window-nav i:first-child { background: #d9f49a; }
 .theme-sample-system .theme-window-dark { clip-path: polygon(66% 0, 100% 0, 100% 100%, 36% 100%); }
 .theme-check {
   display: none; position: absolute; right: 5px; top: 5px;

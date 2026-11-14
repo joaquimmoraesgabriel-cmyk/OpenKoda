@@ -18,6 +18,7 @@ export function Rail({view,navigate,sourceOnly=false}:{view:View;navigate:(v:Vie
     <div className="rail-brand" aria-label="OpenKoda"><KMark/></div>
     {destinations.filter(item=>!sourceOnly || item.id!=='kali').map(({id,label,icon:Icon})=><button key={id} type="button" className={'rail-button rail-'+id} aria-label={label} aria-current={view===id?'page':undefined} onClick={()=>navigate(id)}>
       {id==='profile' && identity.name ? <span className="rail-avatar" data-color={identity.color}>{identity.name.trim().split(/\s+/).slice(0,2).map(s=>s[0]).join('').toUpperCase()}</span> : <Icon size={20} strokeWidth={1.65}/>}
+      <span className="rail-label" aria-hidden="true">{label}</span>
       <span className="rail-hint" aria-hidden="true">{label}</span>
     </button>)}
   </nav>;

@@ -8,7 +8,7 @@ export interface DeviceAppearance {
   uiFontSize: number;
   codeFont: string;
   codeFontSize: number;
-  palette: 'neutral' | 'slate' | 'sand';
+  palette: 'koda' | 'neutral' | 'slate' | 'sand';
   wallpaper: 'none' | 'mist' | 'dunes' | 'custom';
   wallpaperImage: string;
   wallpaperOpacity: number;
@@ -22,7 +22,7 @@ export const appearanceStorageKey = 'openkoda.appearance.v1';
 const changeEvent = 'openkoda:appearance';
 export const defaultAppearance: DeviceAppearance = {
   interfaceScale: 100, density: 'comfortable', motion: 'system', uiFont: '', uiFontSize: 16,
-  codeFont: '', codeFontSize: 12, palette: 'neutral', wallpaper: 'none', wallpaperImage: '',
+  codeFont: '', codeFontSize: 12, palette: 'koda', wallpaper: 'none', wallpaperImage: '',
   wallpaperOpacity: 12, wallpaperMotion: 'static', listStyle: 'preview', sidebarStyle: 'auto',
 };
 export const appearanceKeys = Object.keys(defaultAppearance) as (keyof DeviceAppearance)[];
@@ -50,7 +50,7 @@ export function parseAppearance(raw: string | null): DeviceAppearance {
       uiFontSize: bounded(value.uiFontSize, 12, 24, 16),
       codeFont: typeof value.codeFont === 'string' && validFontFamily(value.codeFont) ? value.codeFont.trim() : '',
       codeFontSize: bounded(value.codeFontSize, 10, 24, 12),
-      palette: value.palette === 'slate' || value.palette === 'sand' ? value.palette : 'neutral',
+      palette: value.palette === 'neutral' || value.palette === 'slate' || value.palette === 'sand' ? value.palette : defaultAppearance.palette,
       wallpaper: value.wallpaper === 'mist' || value.wallpaper === 'dunes' || (value.wallpaper === 'custom' && image) ? value.wallpaper : 'none',
       wallpaperImage: image,
       wallpaperOpacity: bounded(value.wallpaperOpacity, 0, 20, 12),
@@ -100,6 +100,8 @@ export function useApplyAppearance(theme?: string) {
     root.style.setProperty('--interface-scale', String(appearance.interfaceScale / 100));
     root.style.fontSize = appearance.uiFontSize + 'px';
     root.style.fontFamily = appearance.uiFont ? '"' + appearance.uiFont + '", system-ui, sans-serif' : '';
+    if (appearance.uiFont) root.style.setProperty('--display-font', 'inherit');
+    else root.style.removeProperty('--display-font');
     root.style.setProperty('--code-font', appearance.codeFont ? '"' + appearance.codeFont + '", monospace' : 'Consolas, "Cascadia Code", monospace');
     root.style.setProperty('--code-font-size', appearance.codeFontSize + 'px');
     root.style.setProperty('--wallpaper-strength', appearance.wallpaperOpacity + '%');

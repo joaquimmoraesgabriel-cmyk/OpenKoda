@@ -1,11 +1,5 @@
-/* Shared workspace proportions, following the observed Codex desktop shell. */
+/* Surface and ink tokens inherit the device palette, including in project panels. */
 .app-shell.project-shell {
-  --surface: light-dark(#ffffff, #202021);
-  --subtle: light-dark(#f7f7f8, #19191a);
-  --selection: light-dark(#ebebed, #303032);
-  --line: light-dark(#e7e7e9, #38383b);
-  --control-line: light-dark(#c1c1c6, #65656a);
-  --muted: light-dark(#63636b, #b5b5bc);
   --panel-radius: 18px;
   background: var(--subtle);
 }
@@ -14,11 +8,43 @@
   border-block-start: 1px solid var(--line);
 }
 .project-shell .project-rail {
-  background: var(--subtle);
+  color: var(--rail-fg);
+  background: var(--rail-bg);
   border-inline-end: 0;
   gap: 7px;
 }
-.project-shell .rail-button { border-radius: 11px; }
+.project-shell .rail-button {
+  color: var(--rail-fg);
+  border-radius: 11px;
+}
+.project-shell .rail-button:hover {
+  background: color-mix(in srgb, var(--rail-fg) 13%, var(--rail-bg));
+}
+.project-shell .rail-button[aria-current] { color: var(--rail-selected-fg); background: var(--rail-selected); }
+.project-shell .rail-button:focus-visible { outline-color: var(--rail-fg); }
+.rail-label { display: none; }
+@media (min-width: 1181px) {
+  :root[data-sidebar-style="auto"] .project-shell { grid-template-columns: 9.5rem minmax(0, 1fr); }
+  :root[data-sidebar-style="auto"] .project-rail { padding-inline: .55rem; align-items: stretch; }
+  :root[data-sidebar-style="auto"] .rail-brand { width: auto; justify-content: start; padding-inline-start: .6rem; }
+  :root[data-sidebar-style="auto"] .rail-button { width: auto; min-height: 40px; height: auto; justify-content: start; padding: .45rem .6rem; }
+  :root[data-sidebar-style="auto"] .rail-label { display: inline; font-size: .8125rem; overflow-wrap: anywhere; text-align: start; }
+  :root[data-sidebar-style="auto"] .rail-hint { display: none; }
+  :root[data-sidebar-style="icons"] .app-shell.project-shell { grid-template-columns: 56px minmax(0, 1fr); }
+}
+.project-shell :is(.welcome-content h1, .launch-page h1, .workspace-heading h1, .detail-heading h1,
+    .person-hero h2, .desk-welcome h2, .settings-sheet .settings-section-title, .chat-heading h2) {
+  font-family: var(--display-font);
+  font-weight: 500;
+  letter-spacing: -.035em;
+}
+.project-shell .project-composer-tools .chat-send { background: var(--accent); color: var(--surface); }
+.project-shell .project-composer-tools .chat-send:enabled:hover { background: var(--accent-hover); }
+.project-shell .welcome-type { background: var(--selection); border-radius: .65rem; color: var(--text); }
+.project-shell .tree-brand { color: var(--text); }
+@media (forced-colors: active) {
+  .project-shell .rail-button[aria-current] { outline: 1px solid Highlight; }
+}
 .project-shell .rail-button[aria-current]::before { display: none; }
 .project-shell .project-tree { padding-block: 16px; }
 .tree-brand { padding: 0 10px 18px; font-size: 1.05rem; font-weight: 640; letter-spacing: -.035em; }
@@ -47,7 +73,6 @@
 }
 .project-shell .settings-group button[aria-current=page]::after { display: none; }
 .project-shell .settings-sheet { padding-block: clamp(24px, 4vh, 48px); }
-.project-shell .settings-section-title { font-weight: 620; }
 .project-shell .workspace-status { background: var(--surface); }
 .project-shell .workspace-projection { border-bottom: 1px solid var(--line); }
 .project-shell :is(.dashboard-panel,.profile-hero,.usage-summary-card) { border: 1px solid var(--line); }

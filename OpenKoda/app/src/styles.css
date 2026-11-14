@@ -49,15 +49,20 @@ details[open] > summary::after { background-size: 100% 2px, 0 0; }
   :root[data-theme="system"] { color-scheme: dark; }
 }
 :root {
-  --surface: light-dark(#fff, #242426);
-  --subtle: light-dark(#efeff1, #161618);
-  --text: light-dark(#161617, #f5f5f5);
-  --muted: light-dark(#57575d, #b5b5ba);
-  --line: light-dark(#dedee1, #414144);
-  --control-line: light-dark(#848489, #77777d);
-  --accent: light-dark(#181819, #efeff1);
-  --accent-hover: light-dark(#363638, #d6d6d9);
-  --selection: light-dark(#e9e9ec, #363639);
+  --display-font: Georgia, "Times New Roman", serif;
+  --surface: light-dark(#fafbf6, #192b22);
+  --subtle: light-dark(#ebeee4, #102019);
+  --text: light-dark(#18251e, #f2f5eb);
+  --muted: light-dark(#4f5a52, #b7ccc0);
+  --line: light-dark(#d2d6cb, #3c5045);
+  --control-line: light-dark(#78857a, #7e9485);
+  --accent: light-dark(#162b23, #d9f49a);
+  --accent-hover: light-dark(#304b3e, #e7f9c3);
+  --selection: light-dark(#dce9c8, #304837);
+  --rail-bg: light-dark(#162b23, #102019);
+  --rail-fg: #edf2e8;
+  --rail-selected: #d9f49a;
+  --rail-selected-fg: #18251e;
   --warning: light-dark(#fff5e4, #3e3222);
   --danger: light-dark(#9e2b2b, #ffb4aa);
 }

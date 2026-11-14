@@ -78,7 +78,7 @@ export function AppearanceCustomization({draft, change}: Props) {
     <section className="pref-group">
       <h3>Tema de cores</h3>
       <div className="palette-options" role="radiogroup" aria-label="Tema de cores">
-        {([['neutral','Neutro'],['slate','Ardósia'],['sand','Areia']] as const).map(([id,name]) => <label key={id}>
+        {([['koda','OpenKoda'],['neutral','Neutro'],['slate','Ardósia'],['sand','Areia']] as const).map(([id,name]) => <label key={id}>
           <input type="radio" name="palette" checked={draft.palette === id} onChange={() => change('palette',id)}/>
           <i aria-hidden="true" data-palette-sample={id}/>{name}</label>)}
       </div>
