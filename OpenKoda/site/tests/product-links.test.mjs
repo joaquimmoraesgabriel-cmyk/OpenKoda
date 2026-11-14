@@ -24,6 +24,10 @@ test('a navegação pública resolve páginas, recursos e seções da compilaç�
  execFileSync(process.execPath,[build]);
  const pages=new Map();
  await collectPages(dist,pages);
+ // The interactive panel must ship its styles as well as its script. A missing
+ // link still passes a generic broken-link check but exposes an unstyled app.
+ assert.match(pages.get('/'),/<link rel="stylesheet" href="\/demo\.css">/);
+ assert.match(pages.get('/'),/<script type="module" src="\/demo\.js"><\/script>/);
  for(const expected of ['/guias/','/guias/primeiro-projeto/','/guias/conversas/','/guias/relatorios/','/guias/uso/','/guias/skills/','/guias/conta/','/perguntas/','/seguranca/']){
   assert.ok(pages.has(expected),expected);
  }
