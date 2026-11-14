@@ -4,6 +4,8 @@
 
 ## Cobertura
 
+Em uma segunda visita, o navegador integrado também exibiu a página inicial brasileira da OpenAI e seus cartões após a rolagem. No OpenBot, a rolagem revelou uma conversa interativa; no Hermes, a aba Windows trocou a instrução exibida; na SpaceX, a segunda seção alternou para uma imagem de missão com legenda e ação. As decisões para aproveitar esses padrões e as capturas de preços enviadas pelo responsável estão em [Referências visuais de preços](./REFERENCIAS-VISUAIS-PRECOS.md).
+
 A leitura estrutural registrou títulos, seções, tipo de conteúdo ou trechos do corpo de cada endereço. A leitura editorial acompanhou percursos completos de apresentação, descoberta de recursos, download, preços e consulta de políticas. A observação de movimento usou o Edge em uma janela de 1.280 × 820 pixels, com rolagem de 560 pixels, além da inspeção dos estados de animações e vídeos. Essas observações descrevem as interfaces dos fornecedores. A eficácia das propostas para os usuários do OpenKoda requer observação do próprio produto.
 
 | Referência | Inventário e alcance |

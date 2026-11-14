@@ -1,0 +1,26 @@
+/* Semantic colours follow the browser even when scripting/storage is unavailable. */
+:root {
+  color-scheme: light dark;
+  --ink:light-dark(#18251e,#edf3e7);
+  --muted:light-dark(#4f5a52,#b8c6b9);
+  --line:light-dark(#d2d6cb,#52665a);
+  --surface:light-dark(#ebeee4,#25352c);
+  --paper:light-dark(#fafbf6,#16231c);
+  --focus:light-dark(#1665b2,#9cd8ff);
+  --light:light-dark(#eef5cb,#2b412e);
+  --on-action:light-dark(#fff,#16251c);
+  --action-hover:light-dark(#334a3b,#d6ecbc);
+}
+:root[data-appearance="light"] {color-scheme:light}
+:root[data-appearance="dark"] {color-scheme:dark}
+.site-appearance{display:none}
+.appearance-ready .site-appearance{display:inline-flex;align-items:center;gap:.6rem;font-size:.9rem;color:var(--muted)}
+.site-appearance select{color:var(--ink);background:var(--paper);border:1px solid var(--line);border-radius:.4rem;padding:.5rem;font:inherit;min-height:2.75rem}
+.login,.primary,#account button:not(.secondary),#cookie-box button,.demo-nav button[aria-pressed=true],.demo-nav button[aria-pressed=true]:hover{color:var(--on-action)}
+.login:hover,.primary:hover,#account button:not(.secondary):hover,#cookie-box button:hover{background:var(--action-hover);color:var(--on-action)}
+.demo-nav button:not([aria-pressed=true]):hover{background:var(--paper)}
+.code-plate,.code-plate figcaption span:first-child,.story-code{color:#fafbf6}
+#cookie-box,#account .secondary{background:var(--paper)}
+#account .danger button,#account .danger button:hover{background:#862727;color:white}
+#account input::placeholder,#account textarea::placeholder{color:var(--muted);opacity:1}
+#account .plan-choice input[type=radio]{accent-color:var(--ink)}
