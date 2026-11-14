@@ -51,7 +51,7 @@ jobs:
       - name: Install locked frontend dependencies
         run: npm ci
       - name: Build the unsigned Windows installer
-        run: ./scripts/package-windows.ps1 -Jobs 4
+        run: ./scripts/package-windows.ps1 -Jobs 4 -SkipUpdaterSigning
       - name: Install, start twice, and uninstall
         run: ./scripts/sandbox-release-guest.ps1 -GitHubHosted
       - name: Record installation receipt

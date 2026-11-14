@@ -89,7 +89,8 @@ export function useApplyAppearance(theme?: string) {
   const appearance = useDeviceAppearance();
   useEffect(() => {
     const root = document.documentElement;
-    root.dataset.theme = theme ?? 'light';
+    root.dataset.theme = theme ?? root.dataset.theme ?? 'light';
+    if(theme&&['light','dark','system'].includes(theme))try{localStorage.setItem('openkoda.boot-theme.v1',theme);}catch{/* The current theme does not depend on this startup hint. */}
     root.dataset.density = appearance.density;
     root.dataset.motion = appearance.motion;
     root.dataset.palette = appearance.palette;

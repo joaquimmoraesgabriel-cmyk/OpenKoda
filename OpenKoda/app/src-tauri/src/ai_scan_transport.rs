@@ -191,6 +191,9 @@ pub(super) fn router_settings(row: &Value) -> Result<ReviewModel, String> {
     {
         return Err("Selecione um modelo que produza texto para a análise.".into());
     }
+    if row["endpoints"].as_array().is_some_and(|paths| !paths.iter().any(|p|p=="/api/v1/chat/completions")) {
+        return Err("Este modelo não oferece o endpoint de texto usado pela análise.".into());
+    }
     let pricing = &row["pricing"];
     let rate = |name: &str| -> Result<u64, String> {
         let amount = pricing[name]
@@ -273,22 +276,14 @@ impl ScanTransport for HttpScan {
             let catalog=commercial_models(key)?;
             let row=catalog["models"].as_array().and_then(|rows|rows.iter().find(|row|row["id"]==model))
                 .ok_or("Modelo ausente no catálogo atual da assinatura.")?;
+            if row["analysis"]==false{return Err("Este modelo está disponível para chat, mas não para análise estruturada.".into());}
             let rate=|field:&str|row[field].as_f64().filter(|v|v.is_finite() && *v > 0. && *v <= 100.)
                 .map(|v|(v*1_000_000.).ceil() as u64).ok_or(NO_RATE);
             return Ok(ReviewModel{rates:Rates{input:rate("inputUsdPerMillion")?,output:rate("outputUsdPerMillion")?},
                 format:if row["structured"]==true{ReviewFormat::FinalReportSchema}else{ReviewFormat::JsonObject}});
         }
         if provider == ProviderId::OpenRouter {
-            let response = authenticate(
-                client()?
-                    .get(provider.catalog_url())
-                    .timeout(Duration::from_secs(15)),
-                provider,
-                key,
-            )
-            .send()
-            .map_err(network_error)?;
-            return router_model(&read_bounded_response(response, 16 * 1024 * 1024)?, model);
+            return router_model(&super::catalog::router_catalog(key)?, model);
         }
         let rates = ai
             .budget

@@ -71,6 +71,21 @@ test('auth fails closed and identity, limits and secrets cannot be supplied by c
   assert.ok(!f.calls.some(call=>call.path.endsWith('ai_admit')));
 });
 
+test('internal simulation derives its owner, validates states, and never invokes a paid provider',async()=>{
+  const f=fixture({rpc:(name,args)=>name==='simulation'?json({status:'active',grantsProductionCredit:false,owner:args.p_user}):null});
+  const input={action:'simulation',plan:'plus',requestId,outcome:'activate'};
+  assert.equal((await f.ask({...input,p_user:'someone-else'})).status,400);
+  assert.equal((await f.ask({...input,outcome:'paid'})).status,400);
+  assert.equal((await f.ask({...input,plan:'unlimited'})).status,400);
+  assert.equal((await f.ask({...input,requestId:'duplicate'})).status,400);
+  assert.deepEqual(await (await f.ask(input)).json(),{status:'active',grantsProductionCredit:false,owner:userId});
+  const rpc=f.calls.filter(c=>c.path.endsWith('/openkoda_simulation'));
+  assert.equal(rpc.length,1);assert.deepEqual(rpc[0].body,{p_user:userId,p_plan:'plus',p_request:requestId,p_outcome:'activate'});
+  assert.ok(!f.calls.some(c=>c.path.startsWith('/api/v1/')));
+  const denied=fixture({rpc:name=>name==='simulation'?json({message:'simulation_not_allowed'},403):null});
+  assert.equal((await denied.ask(input)).status,403);
+});
+
 test('only approved origin is allowed; account results and errors are not cacheable',async () => {
   const f = fixture();
   assert.equal((await f.ask({action:'account'},{origin:'https://unknown.test'})).status,403);

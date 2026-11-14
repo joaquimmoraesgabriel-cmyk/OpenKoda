@@ -20,7 +20,7 @@ export function demoSecurityHeaders(origin) {
 const projectOrigin='https://ynjcyvnrfxsrijrwpaye.supabase.co';
 // Supabase publishable key. The bridge operates only as the authenticated user.
 const publishableKey='sb_publishable_7HcLt5Ibu4dnsyj6DvvW9A_8OOCuI3N';
-const publicActions=new Set(['account','consent','consent_initial','marketing','checkout','cancel','support','support_list','export','delete']);
+const publicActions=new Set(['account','consent','consent_initial','marketing','checkout','simulation','cancel','support','support_list','export','delete']);
 const accessCookie='__Host-koda-access',refreshCookie='__Host-koda-refresh';
 const attemptKeys={google:'__Host-koda-google',signup:'__Host-koda-signup',recover:'__Host-koda-recover'};
 const cookieLifetime=60*60*24*30;

@@ -5,6 +5,9 @@ import type { Locator, Page } from '@playwright/test';
  * It proves renderer behavior, never native policy enforcement or secret handling. */
 export async function installDataFixture(page:Page){
  await page.addInitScript(()=>{
+  // Existing workflow fixtures exercise a user who has explicitly chosen local use.
+  // First-run and session-restoration behavior have their own desktop-entry suite.
+  localStorage.setItem('openkoda.local-workspace.v1','true');
   const w=window as any;w.__dataCalls=[];w.__dataMode??='reviewed';
   const projection={schema:'openkoda.projection.v1',redactorVersion:'openkoda.redactor.v1',mode:'no_credential_configured',redacted:false,omittedFields:[],reasonCodes:[]};
   const categories=['human_text','target_metadata','execution_summary','evidence_excerpt','source_excerpt','finding_text','activity_metadata'];
@@ -36,6 +39,12 @@ export async function installDataFixture(page:Page){
    if(action==='report.commit'){const saved=reviews.get(p.dataReview?.id);if(!saved||saved.generation!==generation)throw new Error('data_review_changed');if(w.__dataMode==='write-error')throw new Error('Falha de disco sintética; pacote incompleto.');return {receiptRef:{id:'report-receipt',digest:'report-receipt-digest'},reportId:'report-fixture',path:'D:/Fixture/report.md',manifestPath:'D:/Fixture/manifest.json',partial:true,completed:true,reviewRequired:true};}
    if(action==='backup.prepare'){const dataReview=ref();reviews.set(dataReview.id,{...p,generation});return {dataReview,backupId:'backup-fixture',projectIds:p.projectIds,inventory:[{name:'openkoda.sqlite',userVersion:6,rows:3,logicalSha256:'backup-logical',logicalBytes:500}],classes:p.projectIds.map((projectId:string)=>({projectId,sensitivities:[p.packageSensitivity],reasonCodes:[]})),exclusions:['Vault de credenciais','Orçamento global'],canBackup:w.__dataMode!=='unreviewed',reasonCodes:w.__dataMode==='unreviewed'?['data_policy_required']:[],requiresSensitiveConfirmation:p.packageSensitivity==='sensitive'};}
    if(action==='backup.commit'){const saved=reviews.get(p.dataReview?.id);if(!saved||saved.generation!==generation)throw new Error('data_review_changed');if(w.__dataMode==='write-error')throw new Error('Falha de disco sintética.');return {verified:true,backupId:'backup-fixture'};}
+   if(action==='account.status'){
+    const result=await original(command,args).catch(()=>null);
+    if(result?.state)return result;
+    const session=await original('request',{request:{action:'account.session',payload:{}}}).catch(()=>({user:null}));
+    return {state:session?.user?'authenticated':'signedOut',user:session?.user??null,account:session?.user?await original('request',{request:{action:'account.overview',payload:{}}}):null};
+   }
    const result=await original(command,args);
    if(action==='snapshot')return snapshotView(result);
    if(action==='evidence.import'||action==='evidence.sourceCapture')return evidenceView(result,p.assessmentId);

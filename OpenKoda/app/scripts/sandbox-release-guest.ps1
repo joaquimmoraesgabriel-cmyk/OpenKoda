@@ -111,6 +111,37 @@ function Invoke-WindowButton($App,[string]$Name,[switch]$Prefix) {
         throw "Cannot activate button '$Name'; available UI Automation patterns: $supported."
     }
 }
+function Enter-LocalSourceWorkspace($App,[bool]$ExpectLocalChoice) {
+    # Version 1.1 waits for account bootstrap and then asks explicitly whether to
+    # continue with a personal API key. Never bypass that choice through storage.
+    $deadline = [DateTime]::UtcNow.AddSeconds(60)
+    $accepted = $false
+    $typeFilter = [System.Windows.Automation.PropertyCondition]::new(
+        [System.Windows.Automation.AutomationElement]::ControlTypeProperty,[System.Windows.Automation.ControlType]::Button)
+    do {
+        $App.Refresh()
+        if ($App.HasExited) { throw 'Installed app exited during account bootstrap.' }
+        if ($App.MainWindowHandle -ne [IntPtr]::Zero) {
+            $window = [System.Windows.Automation.AutomationElement]::FromHandle($App.MainWindowHandle)
+            $buttons = $window.FindAll([System.Windows.Automation.TreeScope]::Descendants,$typeFilter)
+            foreach ($item in $buttons) {
+                if (!$item.Current.IsEnabled) { continue }
+                if ($item.Current.Name -eq 'Continuar com minha chave de API' -and !$accepted) {
+                    if (!$ExpectLocalChoice) { throw 'The explicit local-workspace choice did not survive restart.' }
+                    $item.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+                    $accepted = $true
+                    break
+                }
+                if ($item.Current.Name -eq 'Configurações') {
+                    if ($accepted -ne $ExpectLocalChoice) { throw 'The fresh profile bypassed the explicit local-workspace choice.' }
+                    return $accepted
+                }
+            }
+        }
+        Start-Sleep -Milliseconds 200
+    } until ([DateTime]::UtcNow -ge $deadline)
+    throw 'The account bootstrap did not reach the local workspace.'
+}
 function Read-ProjectFixture([string]$Profile) {
     $reader = @'
 import json, sqlite3, sys
@@ -124,11 +155,13 @@ print(json.dumps({'projects': [{k: p[k] for k in ('name','id','target','kind')} 
     if ($LASTEXITCODE -ne 0) { throw 'Could not read the installed fixture database.' }
     $raw | ConvertFrom-Json
 }
-function Test-InstalledSourceWindow($App,[int]$Iteration,[string]$DataRoot,[string]$Target,[int]$ExpectedTimeout,[bool]$CheckUnifiedUsage) {
+function Test-InstalledSourceWindow($App,[int]$Iteration,[string]$DataRoot,[string]$Target,[int]$ExpectedTimeout,[bool]$CheckUnifiedUsage,[bool]$CheckAccountEntry = $false) {
     Add-Type -AssemblyName UIAutomationClient
     Add-Type -AssemblyName UIAutomationTypes
     $button = [System.Windows.Automation.ControlType]::Button
     $valuePattern = [System.Windows.Automation.ValuePattern]::Pattern
+    $acceptedLocalChoice = $false
+    if ($CheckAccountEntry) { $acceptedLocalChoice = Enter-LocalSourceWorkspace $App ($Iteration -eq 1) }
     $null = Find-WindowControl $App ([System.Windows.Automation.ControlType]::RadioButton) 'Pasta local' -Prefix
     $before = Read-ProjectFixture $DataRoot
     if (@($before.projects).Count -or $before.assessments -ne 0 -or $null -eq $before.timeoutSeconds) { throw 'Unexpected native state in the clean source edition profile.' }
@@ -176,6 +209,7 @@ function Test-InstalledSourceWindow($App,[int]$Iteration,[string]$DataRoot,[stri
     return [pscustomobject]@{
         iteration=$Iteration; view='Permissões'; projects=0; assessments=0; timeoutSeconds=$ExpectedTimeout
         modelRequired=$true; settingsReopened=($Iteration -eq 2); unifiedUsageNavigation=$CheckUnifiedUsage; transport='Windows UI Automation'
+        accountEntryChecked=$CheckAccountEntry; localChoiceAccepted=$acceptedLocalChoice; localChoiceRetained=($CheckAccountEntry -and $Iteration -eq 2)
     }
 }
 function Get-ProjectCreationExpression([string]$Kind,[string]$Target) {
@@ -289,6 +323,7 @@ try {
     $browserCache = Join-Path $cacheRoot ('openkoda-webview-'+[guid]::NewGuid())
     $project = $null
     $sourceEdition = [version]$manifest.version -ge [version]'0.2.0'
+    $accountEntryEdition = [version]$manifest.version -ge [version]'1.1.0'
     $result.projectReopened = $false
     $result.settingsReopened = $false
     $savedTimeout = 0
@@ -298,11 +333,18 @@ try {
     }
     $probe = @'
 (async () => {
+  if (location.hostname !== 'tauri.localhost') return null;
   const main = document.querySelector('main');
-  if (location.hostname !== 'tauri.localhost' || !main || main.getAttribute('aria-busy') !== 'false') return null;
+  const localChoice = main && [...main.querySelectorAll('button')].find(button => button.textContent.trim() === 'Continuar com minha chave de API');
+  if (localChoice && !localChoice.disabled) {
+    localChoice.click();
+    window.__openkodaSmokeLocalEntryAccepted = true;
+    return null;
+  }
+  if (!main || main.getAttribute('aria-busy') !== 'false') return null;
   const request = (action,payload={}) => window.__TAURI_INTERNALS__.invoke('request',{request:{action,payload}});
   const state = await request('snapshot');
-  return {projects:state.projects.map(p=>({id:p.id,name:p.name,kind:p.kind,target:p.target})),heading:main.querySelector('h1')?.textContent??'',assessments:state.assessments.length};
+  return {projects:state.projects.map(p=>({id:p.id,name:p.name,kind:p.kind,target:p.target})),heading:main.querySelector('h1')?.textContent??'',assessments:state.assessments.length,localChoiceAccepted:window.__openkodaSmokeLocalEntryAccepted === true};
 })()
 '@
     foreach ($iteration in 1,2) {
@@ -319,7 +361,7 @@ try {
         if ($GitHubHosted) {
             try {
                 if ($sourceEdition) {
-                    $observation = Test-InstalledSourceWindow $app $iteration $profileRoot $sourceFolder $savedTimeout ([version]$manifest.version -ge [version]'0.2.2')
+                    $observation = Test-InstalledSourceWindow $app $iteration $profileRoot $sourceFolder $savedTimeout ([version]$manifest.version -ge [version]'0.2.2') $accountEntryEdition
                     $savedTimeout = $observation.timeoutSeconds
                     $result.starts += $observation
                     $result.settingsReopened = $observation.settingsReopened
@@ -364,6 +406,7 @@ try {
             if (-not $state) { Start-Sleep -Milliseconds 200 }
         } until ($state -or [DateTime]::UtcNow -gt $deadline)
         if (-not $state -or -not $state.heading -or $state.assessments -ne 0) { throw 'The native app did not return its initial state.' }
+        if ($accountEntryEdition -and $state.localChoiceAccepted -ne ($iteration -eq 1)) { throw 'The explicit local-workspace choice was bypassed or did not survive restart.' }
         if ($iteration -eq 1) {
             if (@($state.projects).Count -ne 0) { throw 'Unexpected projects in new profile.' }
             $kind = if ($sourceEdition) { 'code' } else { 'web' }
@@ -375,7 +418,7 @@ try {
             if (@($state.projects).Count -ne 1 -or $state.projects[0].id -ne $project -or $state.projects[0].name -ne 'Startup fixture' -or $state.projects[0].kind -ne $kind -or ($sourceEdition -and $state.projects[0].target -ne $target)) { throw 'Saved project did not survive release restart.' }
             $result.projectReopened = $true
         }
-        $result.starts += @{iteration=$iteration;heading=$state.heading;projects=@($state.projects).Count}
+        $result.starts += @{iteration=$iteration;heading=$state.heading;projects=@($state.projects).Count;accountEntryChecked=$accountEntryEdition;localChoiceAccepted=$state.localChoiceAccepted;localChoiceRetained=($accountEntryEdition -and $iteration -eq 2)}
         $client.Dispose(); $client = $null
         $app.Kill(); if (-not $app.WaitForExit(10000)) { throw 'Owned process failed to exit.' }; $app.Dispose(); $app = $null
     }

@@ -43,6 +43,16 @@ export function finishDraft(id: string, sent: ChatDraft) {
   else if (sent.attachment && current.attachment === sent.attachment) updateDraft(id, { attachment: undefined });
 }
 
+export function clearDraftSkills() {
+  let changed = false;
+  for (const [id, draft] of drafts) {
+    if (!draft.skill) continue;
+    drafts.set(id, { ...draft, skill: undefined });
+    changed = true;
+  }
+  if (changed) listeners.forEach(notify => notify());
+}
+
 export function bindChatDraft(draftId: string, assessmentId: string) {
   const draft = drafts.get(draftId);
   if (draft) {

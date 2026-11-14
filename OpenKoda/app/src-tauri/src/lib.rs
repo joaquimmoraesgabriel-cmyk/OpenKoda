@@ -1,5 +1,6 @@
 pub mod core;
 mod close_guard;
+mod updater;
 pub mod model;
 pub mod ai_provider;
 pub mod ai;
@@ -93,6 +94,7 @@ async fn request(
     }
     let store = state.inner().clone();
     let services = services.inner().clone();
+    let account_window = window.clone();
     tauri::async_runtime::spawn_blocking(move || {
         let _admission = admission;
         if request.action == "host.connectivity" {
@@ -102,6 +104,11 @@ async fn request(
             let result=services.ai.account.handle(&request.action,request.payload)?;
             if matches!(request.action.as_str(),"account.signIn"|"account.google"|"account.models") {
                 crate::credential_refs::ensure_provider_slot(&store,crate::ai_provider::ProviderId::parse("openkoda")?)?;
+            }
+            if matches!(request.action.as_str(),"account.signIn"|"account.google") {
+                let _ = account_window.show();
+                let _ = account_window.unminimize();
+                let _ = account_window.set_focus();
             }
             return Ok(result);
         }
@@ -418,6 +425,7 @@ async fn request(
 
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .on_window_event(|window, event| {
             if window.label() != "main" { return; }
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
@@ -446,8 +454,10 @@ pub fn run() {
             let legacy = app.path().app_data_dir()?;
             #[cfg(debug_assertions)]
             let override_root = std::env::var_os("OPENKODA_DATA_DIR").map(std::path::PathBuf::from);
-            #[cfg(not(debug_assertions))]
+            #[cfg(all(not(debug_assertions), not(feature="updater-test-harness")))]
             let override_root:Option<std::path::PathBuf> = None;
+            #[cfg(all(not(debug_assertions), feature="updater-test-harness"))]
+            let override_root = Some(std::path::PathBuf::from(env!("OPENKODA_BUILD_TEST_DATA_DIR")));
             let storage=storage::open(&app.path().home_dir()?,&legacy,override_root.as_deref()).map_err(std::io::Error::other)?;
             let store = Store::open(storage.root.clone()).map_err(std::io::Error::other)?;
             app.manage(window_behavior::WindowBehavior::load(&storage.base));
@@ -476,9 +486,10 @@ pub fn run() {
             app.manage(storage);
             app.manage(Arc::new(services));
             app.manage(Arc::new(store));
+            app.manage(Arc::new(updater::UpdateManager::new(app.package_info().version.to_string())));
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![request])
+        .invoke_handler(tauri::generate_handler![request, updater::desktop_update])
         .run(tauri::generate_context!())
         .expect("Não foi possível iniciar o OpenKoda. Dados existentes foram preservados.");
 }

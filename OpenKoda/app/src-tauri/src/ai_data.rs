@@ -213,6 +213,33 @@ mod tests {
         assert_eq!(f.fake.calls.load(Ordering::SeqCst),0);assert_eq!(f.requests(),0);assert_eq!(f.store.snapshot().unwrap().data_use_receipts.len(),before);
         assert_eq!(f.ai.handle("ai.budget.status",json!({}),&f.store).unwrap()["recentCharges"].as_array().unwrap().len(),0);
     }
+    #[test]fn personal_key_skill_is_reviewed_and_account_change_or_expiry_blocks_before_reservation(){
+        for scenario in ["allowed","account_changed","expired"] {
+            let f=Fixture::new();let session=uuid::Uuid::new_v4();
+            f.ai.account.fixture_skill_session(session,true);
+            let credential=f.ai.test_data_authority(&f.store,&f.aid);
+            let mut ask=f.raw_input();
+            let preview=f.ai.handle("ai.context",json!({"assessmentId":f.aid,"evidenceIds":[],"contextTargetRefs":[],"message":ask["message"],
+                "operation":"ask","messageSensitivity":"internal","packageSensitivity":"internal","categories":["human_text","target_metadata","execution_summary","evidence_excerpt","source_excerpt"],
+                "credentialReferenceId":credential,"skillId":"tdd"}),&f.store).unwrap();
+            assert!(preview["packetPreview"]["prompts"][0]["prompt"].as_str().unwrap().contains("SYNTHETIC_SKILL_BODY"));
+            ask["contextDigest"]=preview["digest"].clone();ask["dataReview"]=preview["dataReview"].clone();
+            match scenario {
+                "account_changed"=>f.ai.account.fixture_skill_session(uuid::Uuid::new_v4(),true),
+                "expired"=>f.ai.account.fixture_skill_session(session,false),_=>{},
+            }
+            let result=f.ai.handle("ai.ask",ask,&f.store);
+            if scenario=="allowed"{
+                result.unwrap();assert_eq!(f.fake.calls.load(Ordering::SeqCst),1);
+                let prompts=f.fake.prompts.lock().unwrap();let packet:Value=serde_json::from_str(&prompts[0]).unwrap();
+                assert_eq!(packet["selectedSkill"]["id"],"tdd");
+                assert!(!prompts[0].contains(&session.to_string()));
+            }else{
+                assert!(result.is_err());assert_eq!(f.fake.calls.load(Ordering::SeqCst),0);assert_eq!(f.requests(),0);
+                assert_eq!(f.ai.handle("ai.budget.status",json!({}),&f.store).unwrap()["recentCharges"].as_array().unwrap().len(),0);
+            }
+        }
+    }
     #[test]fn legacy_context_cannot_bypass_explicit_data_review_or_local_read(){
         let f=Fixture::new();let eid=model::id();let content="CANARY-LEGACY-CONTEXT-MUST-NOT-RETURN";
         f.store.mutate(|s|{s.assessments[0].evidence.push(model::Evidence{id:eid.clone(),name:"legacy context fixture".into(),content:content.into(),sha256:digest(content),created_at:model::now()});Ok(())}).unwrap();
@@ -401,6 +428,13 @@ impl AiService {
         Ok(ReviewedAiData{prepared,packet})
     }
 
+    pub(super) fn validate_skill_binding(&self,spec:&DataUseSpec)->Result<(),String>{
+        let Some(skill)=spec.destination_context.get("skill") else{return Ok(());};
+        let revision=skill["accountSessionRevision"].as_str().filter(|value|uuid::Uuid::parse_str(value).is_ok())
+            .ok_or("data_review_changed: a skill não está vinculada à conta. Revise o pacote novamente.")?;
+        self.account.validate_skill_access(revision)
+    }
+
     pub(super) fn build_ai_packet(&self,store:&Store,input:ContextInput,message:&str,options:AiDataOptions)->Result<AiPacket,String>{
         let operation=match options.operation.as_str(){"ask"=>DataOperation::AiAsk,"operation_proposal"=>DataOperation::AiOperationPropose,"investigation"=>DataOperation::AiInvestigation,_=>return Err("Operação de revisão de dados desconhecida.".into())};
         if options.message_sensitivity==Sensitivity::Unclassified||options.package_sensitivity==Sensitivity::Unclassified{return Err("data_classification_required: classifique a mensagem e o pacote.".into());}
@@ -517,12 +551,12 @@ impl AiService {
             super::chat_skill_match::match_id(&projected.text,&catalog)
         }else{None};
         let skill=if let Some(id)=options.skill_id.as_ref().or(automatic.as_ref()){
-            if operation!=DataOperation::AiAsk||ProviderId::from_endpoint(&identity.endpoint)?.id()!="openkoda"{
-                return Err("Escolha um modelo da assinatura para utilizar uma skill.".into());
+            if operation!=DataOperation::AiAsk{
+                return Err("Skills são utilizadas nas conversas revisadas.".into());
             }
-            let package=self.account.skill_context(id)?;
+            let (package,account_revision)=self.account.skill_context_bound(id)?;
             if automatic.is_some() && package["invocation"]!="automatic_or_explicit"{return Err("A modalidade de invocação da skill mudou. Revise o pacote.".into());}
-            spec.destination_context["skill"]=json!({"id":id,"revision":package["revision"],"digest":digest(&package.to_string()),"automatic":automatic.is_some()});
+            spec.destination_context["skill"]=json!({"id":id,"revision":package["revision"],"digest":digest(&package.to_string()),"automatic":automatic.is_some(),"accountSessionRevision":account_revision});
             Some(package)
         }else{None};
         let mut history=Vec::new();

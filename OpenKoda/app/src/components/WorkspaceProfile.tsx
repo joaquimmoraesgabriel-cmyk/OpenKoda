@@ -4,7 +4,9 @@ import { native } from '../api';
 import { avatarColors, saveIdentity, useIdentity, type Identity } from '../profile-identity';
 import type { Snapshot } from '../types';
 import './profile-usage.css';
-import { CommercialAccount } from './CommercialAccount';
+import { useDesktopSession } from '../desktop-session';
+import { accountPlanLabel } from './AccountPages';
+import { AccountAvatar } from './AccountAvatar';
 
 const dateFormat = new Intl.DateTimeFormat('pt-BR', {day: 'numeric', month: 'short', year: 'numeric'});
 
@@ -24,7 +26,8 @@ function activeDays(snapshot: Snapshot, today: Date) {
   });
 }
 
-export default function WorkspaceProfile({ snapshot, onSettings, onUsageHistory }: { snapshot: Snapshot; onSettings: () => void; onUsageHistory: () => void }) {
+export default function WorkspaceProfile({ snapshot, onSettings, onUsageHistory, onAccount, onPlans }: { snapshot: Snapshot; onSettings: () => void; onUsageHistory: () => void; onAccount:()=>void; onPlans:()=>void }) {
+  const session=useDesktopSession();
   const identity = useIdentity();
   const [draft, setDraft] = useState(identity);
   const [editing, setEditing] = useState(false);
@@ -35,7 +38,7 @@ export default function WorkspaceProfile({ snapshot, onSettings, onUsageHistory 
   const days = activeDays(snapshot, new Date());
   const active = days.filter(day => day.count > 0);
   const lastDay = days.filter(day => !day.future).at(-1)!;
-  const initials = (editing ? draft : identity).name.trim().split(/\s+/u).filter(Boolean);
+  const initials = (editing ? draft.name : session.user?.displayName||identity.name).trim().split(/\s+/u).filter(Boolean);
   const letters = (Array.from(initials[0] ?? '')[0] ?? '') + (initials.length > 1 ? Array.from(initials[initials.length - 1])[0] : '');
   function endEdit() {
     setEditing(false);
@@ -55,14 +58,14 @@ export default function WorkspaceProfile({ snapshot, onSettings, onUsageHistory 
   return <div className="workspace-page profile-page">
     <header className="workspace-heading profile-toolbar">
       <h1>Perfil</h1>
-      {!editing && <button ref={editButton} type="button" className="button" onClick={() => {
+      {!editing && !session.user && <button ref={editButton} type="button" className="button" onClick={() => {
         setDraft(identity); setEditing(true); requestAnimationFrame(() => nameField.current?.focus());
       }}><Pencil size={15} aria-hidden="true"/>Editar perfil</button>}
     </header>
     <div className="profile-content">
       <section className="person-hero" aria-label="Identidade do perfil">
         <div className="person-avatar" data-color={editing ? draft.color : identity.color} aria-hidden="true">
-          {letters ? letters.toLocaleUpperCase('pt-BR') : <UserRound size={40} strokeWidth={1.5}/>}
+          <AccountAvatar url={session.user?.avatarUrl} fallback={letters ? letters.toLocaleUpperCase('pt-BR') : <UserRound size={40} strokeWidth={1.5}/>}/>
         </div>
         {editing ? <form className="person-editor" onSubmit={save} onKeyDown={e => { if (e.key === 'Escape') endEdit(); }}>
           <label htmlFor="profile-display-name">Nome de exibição</label>
@@ -76,9 +79,9 @@ export default function WorkspaceProfile({ snapshot, onSettings, onUsageHistory 
           <p>O nome e a cor são salvos neste dispositivo.</p>
           {error && <p role="alert">{error}</p>}
           <div className="person-actions"><button type="button" className="button" onClick={endEdit}>Cancelar</button><button type="submit" className="button primary">Salvar perfil</button></div>
-        </form> : <><h2>{identity.name || 'Meu perfil'}</h2><p>Sua área de trabalho neste dispositivo</p></>}
+        </form> : <><h2>{session.user?.displayName || identity.name || 'Meu perfil'}</h2><p>{session.user?.email||'Sua área de trabalho neste dispositivo'}</p><span className="profile-account-plan">{session.user&&!session.account?'Plano ainda não consultado':accountPlanLabel(session.account)}</span></>}
       </section>
-      <CommercialAccount/>
+      <nav className="profile-shortcuts" aria-label="Gerenciar perfil"><button className="button" onClick={onAccount}>{session.user?'Conta e segurança':'Entrar na minha conta'}</button><button className="button" onClick={onPlans}>Plano e assinatura</button><button className="button" onClick={onUsageHistory}>Histórico de uso</button></nav>
       <dl className="profile-metrics">
         <div><dt>Projetos ativos</dt><dd>{snapshot.projects.length - archived}</dd></div>
         <div><dt>Projetos arquivados</dt><dd>{archived}</dd></div>

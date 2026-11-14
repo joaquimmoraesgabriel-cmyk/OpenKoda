@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::{io::{Read, Write}, net::{TcpListener, TcpStream}, path::{Path, PathBuf},
-    sync::Mutex, time::{Duration, Instant}};
+    sync::{Mutex, atomic::{AtomicBool, Ordering}}, time::{Duration, Instant}};
 use url::Url;
 use uuid::Uuid;
 use zeroize::Zeroizing;
@@ -17,16 +17,31 @@ pub(crate) const EDGE: &str = "https://ynjcyvnrfxsrijrwpaye.supabase.co/function
 pub(crate) const SITE: &str = "https://openkoda-desktop.steelyrowan1.chatgpt.site";
 pub(crate) const PUBLISHABLE: &str = "sb_publishable_7HcLt5Ibu4dnsyj6DvvW9A_8OOCuI3N";
 const SESSION_ERROR: &str = "Entre na sua conta OpenKoda para continuar.";
+const REVOKED: &str = "account_session_expired";
 
 #[derive(Serialize, Deserialize)]
 struct Session { access_token: String, refresh_token: String, expires_at: i64, user: Identity }
 #[derive(Serialize, Deserialize)]
-struct Identity { id: Uuid, email: String }
+struct Identity { id: Uuid, email: String, #[serde(default)] user_metadata: Value }
+impl Identity {
+    fn public(&self)->Value {
+        let name=self.user_metadata["full_name"].as_str().or_else(||self.user_metadata["name"].as_str())
+            .filter(|v|!v.is_empty()&&v.len()<=160&&!v.chars().any(char::is_control));
+        let avatar=self.user_metadata["avatar_url"].as_str().filter(|v|v.len()<=2048).and_then(|v|Url::parse(v).ok())
+            .filter(|u|u.scheme()=="https"&&u.username().is_empty()&&u.password().is_none())
+            .filter(|u|u.host_str().is_some_and(|h|h=="lh3.googleusercontent.com"||h=="lh4.googleusercontent.com"||h=="lh5.googleusercontent.com"||h=="lh6.googleusercontent.com"));
+        let mut value=json!({"id":self.id,"email":self.email});
+        if let Some(name)=name{value["displayName"]=json!(name);}
+        if let Some(avatar)=avatar{value["avatarUrl"]=json!(avatar.to_string());}
+        value
+    }
+}
 
-pub(crate) struct Account { file: PathBuf, guard: Mutex<()> }
+pub(crate) struct Account { file: PathBuf, guard: Mutex<()>, login_cancel: AtomicBool,
+    #[cfg(test)] skill_fixture: Mutex<Option<Value>> }
 
 pub(crate) fn supports(action: &str) -> bool {
-    matches!(action,"account.session"|"account.signIn"|"account.google"|"account.recover"|
+    matches!(action,"account.session"|"account.status"|"account.loginCancel"|"account.simulation"|"account.signIn"|"account.google"|"account.recover"|
         "account.signOut"|"account.site"|"account.overview"|"account.consent"|"account.marketing"|
         "account.checkout"|"account.cancel"|"account.support"|"account.supportList"|"account.export"|
         "account.delete"|"account.models"|"account.skills"|"account.skill")
@@ -59,7 +74,9 @@ fn response(response: Response) -> Result<Value,String> {
 fn auth(path:&str, body:Value, bearer:Option<&str>) -> Result<Value,String> {
     let mut request=client()?.post(format!("{BASE}/auth/v1/{path}")).header("apikey",PUBLISHABLE).json(&body);
     if let Some(token)=bearer {request=request.bearer_auth(token);}
-    response(request.send().map_err(|_|"Não foi possível conectar ao serviço de autenticação.")?)
+    let result=request.send().map_err(|_|"Não foi possível conectar ao serviço de autenticação.")?;
+    if path=="token?grant_type=refresh_token" && matches!(result.status().as_u16(),400|401|403) {return Err(REVOKED.into());}
+    response(result)
 }
 fn parse_session(value:Value) -> Result<Session,String> {
     let session:Session=serde_json::from_value(value).map_err(|_|"A autenticação não devolveu uma sessão válida.")?;
@@ -78,10 +95,11 @@ fn password(value:&Value)->Result<&str,String>{
     value["password"].as_str().filter(|v|!v.is_empty()&&v.len()<=4096).ok_or_else(||"Informe a senha.".into())
 }
 impl Account {
-    pub(crate) fn new(root:&Path)->Self { Self{file:root.join("commercial-account.sqlite3"),guard:Mutex::new(())} }
+    pub(crate) fn new(root:&Path)->Self { Self{file:root.join("commercial-account.sqlite3"),guard:Mutex::new(()),login_cancel:AtomicBool::new(false),
+        #[cfg(test)] skill_fixture:Mutex::new(None)} }
     fn db(&self)->Result<Connection,String> {
         let db=Connection::open(&self.file).map_err(|_|"Cofre da conta indisponível.")?;
-        db.execute_batch("PRAGMA secure_delete=ON; CREATE TABLE IF NOT EXISTS session(id INTEGER PRIMARY KEY CHECK(id=1),cipher BLOB NOT NULL);").map_err(|_|"Não foi possível abrir o cofre da conta.")?;
+        db.execute_batch("PRAGMA secure_delete=ON; CREATE TABLE IF NOT EXISTS session(id INTEGER PRIMARY KEY CHECK(id=1),cipher BLOB NOT NULL); CREATE TABLE IF NOT EXISTS auth_events(id INTEGER PRIMARY KEY,kind TEXT NOT NULL,recorded_at INTEGER NOT NULL);").map_err(|_|"Não foi possível abrir o cofre da conta.")?;
         Ok(db)
     }
     fn session(&self)->Result<Option<Session>,String>{
@@ -97,10 +115,49 @@ impl Account {
         Ok(())
     }
     fn remove(&self)->Result<(),String>{self.db()?.execute("DELETE FROM session WHERE id=1",[]).map_err(|_|"Não foi possível remover a sessão.")?;Ok(())}
+    fn audit(&self,kind:&str) {
+        if let Ok(db)=self.db(){let _=db.execute("INSERT INTO auth_events(kind,recorded_at) VALUES(?1,?2)",rusqlite::params![kind,chrono::Utc::now().timestamp()]);
+            let _=db.execute("DELETE FROM auth_events WHERE recorded_at<?1 OR id NOT IN (SELECT id FROM auth_events ORDER BY id DESC LIMIT 500)",[chrono::Utc::now().timestamp()-30*86400]);}
+    }
+    fn status_with(&self,mut refresh:impl FnMut(&str)->Result<Value,String>,mut verify:impl FnMut(&str)->Result<Identity,String>,mut overview:impl FnMut(&str)->Result<Value,String>)->Result<Value,String>{
+        let _guard=self.guard.lock().map_err(|_|"Sessão indisponível.")?;
+        let Some(mut session)=self.session()? else {return Ok(json!({"state":"signedOut","user":null,"account":null}));};
+        let checked=(||{
+            if session.expires_at<chrono::Utc::now().timestamp()+60 {
+                let updated=parse_session(refresh(&session.refresh_token)?)?;
+                if updated.user.id!=session.user.id{return Err(REVOKED.into());}
+                self.save(&updated)?;session=updated;self.audit("session_refreshed");
+            }
+            let identity=match verify(&session.access_token){
+                Err(reason) if reason==REVOKED=>{
+                    let updated=parse_session(refresh(&session.refresh_token)?)?;
+                    if updated.user.id!=session.user.id{return Err(REVOKED.into());}
+                    self.save(&updated)?;session=updated;self.audit("session_refreshed");verify(&session.access_token)?
+                }, result=>result?,
+            };
+            if identity.id!=session.user.id{return Err(REVOKED.into());}
+            session.user=identity;self.save(&session)?;
+            overview(&session.access_token)
+        })();
+        match checked{
+            Ok(account)=>Ok(json!({"state":"authenticated","user":session.user.public(),"account":account})),
+            Err(reason) if reason==REVOKED=>{self.remove()?;self.audit("session_expired");Ok(json!({"state":"expired","user":null,"account":null,"message":"Sua sessão expirou. Entre novamente; seus projetos continuam neste computador."}))},
+            Err(_)=>{self.audit("session_restore_unavailable");Ok(json!({"state":"offline","user":session.user.public(),"account":null,"message":"Não foi possível verificar a conta agora. Tente novamente ou continue com seus projetos locais."}))},
+        }
+    }
+    fn status(&self)->Result<Value,String>{
+        self.status_with(|token|auth("token?grant_type=refresh_token",json!({"refresh_token":token}),None),|token|{
+            let result=client()?.get(format!("{BASE}/auth/v1/user")).header("apikey",PUBLISHABLE).bearer_auth(token).send().map_err(|_|"Serviço de conta indisponível.")?;
+            if matches!(result.status().as_u16(),401|403){return Err(REVOKED.into());}
+            serde_json::from_value(response(result)?).map_err(|_|"Identidade inválida.".into())
+        },|token|Self::edge_with(token,"account",&mut json!({})))
+    }
     fn current(&self)->Result<(Zeroizing<String>,String),String>{
         let mut s=self.session()?.ok_or(SESSION_ERROR)?;
         if s.expires_at<chrono::Utc::now().timestamp()+60 {
-            let updated=parse_session(auth("token?grant_type=refresh_token",json!({"refresh_token":s.refresh_token}),None)?)?;
+            let result=auth("token?grant_type=refresh_token",json!({"refresh_token":s.refresh_token}),None);
+            if result.as_ref().is_err_and(|e|e==REVOKED){self.remove()?;self.audit("session_expired");return Err(SESSION_ERROR.into());}
+            let updated=parse_session(result?)?;
             if updated.user.id!=s.user.id{return Err("Identidade da sessão alterada.".into());}
             self.save(&updated)?; s=updated;
         }
@@ -127,8 +184,43 @@ impl Account {
         Ok(id.to_string())
     }
     pub(crate) fn skill_context(&self,id:&str)->Result<Value,String>{
+        self.skill_context_bound(id).map(|(package,_)|package)
+    }
+    pub(crate) fn skill_context_bound(&self,id:&str)->Result<(Value,String),String>{
+        self.skill_access_using(Some(id),None,|token,action,body|self.skill_call(token,action,body))
+    }
+    pub(crate) fn validate_skill_access(&self,revision:&str)->Result<(),String>{
+        self.skill_access_using(None,Some(revision),|token,action,body|self.skill_call(token,action,body)).map(|_|())
+    }
+    fn skill_call(&self,token:&str,action:&str,mut body:Value)->Result<Value,String>{
+        #[cfg(test)] if let Some(fixture)=self.skill_fixture.lock().map_err(|_|"Fixture indisponível.")?.as_ref(){
+            return fixture.get(action).cloned().ok_or_else(||"Fixture sem resposta.".into());
+        }
+        Self::edge_with(token,action,&mut body)
+    }
+    #[cfg(test)]
+    pub(crate) fn fixture_skill_session(&self,session_id:Uuid,enabled:bool){
+        // Compile-time test seam: no network, secrets, or simulator switch exists
+        // in the distributed executable. Tests still use the real DPAPI vault.
+        let _guard=self.guard.lock().unwrap();let user=Uuid::from_u128(1);
+        let claims=URL_SAFE_NO_PAD.encode(json!({"sub":user,"session_id":session_id}).to_string());
+        self.save(&Session{access_token:format!("fixture.{claims}.signature"),refresh_token:"fixture-refresh-only".into(),expires_at:chrono::Utc::now().timestamp()+3600,
+            user:Identity{id:user,email:"fixture@example.invalid".into(),user_metadata:Value::Null}}).unwrap();
+        *self.skill_fixture.lock().unwrap()=Some(json!({"account":{"entitlements":{"skills":enabled}},
+            "skill":{"id":"tdd","name":"TDD fixture","description":"Synthetic skill","license":"MIT","source":"https://example.invalid/skill",
+                "invocation":"explicit","revision":"a".repeat(40),"body":"SYNTHETIC_SKILL_BODY","resources":{}}}));
+    }
+    fn skill_access_using(&self,id:Option<&str>,expected:Option<&str>,mut call:impl FnMut(&str,&str,Value)->Result<Value,String>)->Result<(Value,String),String>{
+        // The commercial session is independent of a personal provider key.
+        // Bind both authorities while account replacement/logout is excluded.
+        let _guard=self.guard.lock().map_err(|_|"Sessão indisponível.")?;
+        let (token,revision)=self.current()?;
+        if expected.is_some_and(|expected|expected!=revision){return Err("data_review_changed: a conta da skill mudou. Revise o pacote novamente.".into());}
+        let account=call(&token,"account",json!({}))?;
+        if account["entitlements"]["skills"]!=true{return Err("A conta não possui acesso vigente às skills. Atualize seu plano ou remova a skill.".into());}
+        let Some(id)=id else{return Ok((Value::Null,revision));};
         if id.is_empty()||id.len()>96||!id.bytes().all(|b|b.is_ascii_lowercase()||b.is_ascii_digit()||b==b'-'){return Err("Skill inválida.".into());}
-        let v=self.edge("skill",json!({"id":id}))?;
+        let v=call(&token,"skill",json!({"id":id}))?;
         if v["id"]!=id||["name","description","license","source","invocation","body","revision"].iter()
             .any(|key|v.get(key).and_then(Value::as_str).is_none())||!v["resources"].is_object(){
             return Err("O catálogo retornou uma skill inválida.".into());
@@ -136,7 +228,7 @@ impl Account {
         let data=json!({"id":id,"name":v["name"],"description":v["description"],"license":v["license"],
             "source":v["source"],"invocation":v["invocation"],"revision":v["revision"],"body":v["body"],"resources":v["resources"]});
         if data.to_string().len()>64000{return Err("A skill excede o limite de contexto.".into());}
-        Ok(data)
+        Ok((data,revision))
     }
     pub(crate) fn edge(&self, action:&str, mut payload:Value)->Result<Value,String>{
         let bearer=self.bearer()?;
@@ -156,10 +248,12 @@ impl Account {
                 _=>return Err("Página desconhecida.".into())};
             open_site(&format!("{SITE}{path}"))?;return Ok(Value::Null);
         }
-        if action=="account.session"{return Ok(json!({"user":self.session()?.map(|s|s.user)}));}
+        if action=="account.session"{return Ok(json!({"user":self.session()?.map(|s|s.user.public())}));}
+        if action=="account.status"{return self.status();}
+        if action=="account.loginCancel"{self.login_cancel.store(true,Ordering::SeqCst);self.audit("login_cancel_requested");return Ok(json!({"canceled":true}));}
         let operation=match action {
             "account.overview"=>"account", "account.consent"=>"consent","account.marketing"=>"marketing",
-            "account.checkout"=>"checkout","account.cancel"=>"cancel","account.support"=>"support",
+            "account.checkout"=>"checkout","account.simulation"=>"simulation","account.cancel"=>"cancel","account.support"=>"support",
             "account.supportList"=>"support_list","account.export"=>"export",
             "account.models"=>"models","account.skills"=>"skills","account.skill"=>"skill",_=>""
         };
@@ -176,7 +270,7 @@ impl Account {
         if action=="account.signOut" {
             if let Some(s)=self.session()?{
                 let revoked=auth("logout?scope=local",json!({}),Some(&s.access_token)).is_ok();
-                self.remove()?;return Ok(json!({"revoked":revoked}));
+                self.remove()?;self.audit("logout");return Ok(json!({"revoked":revoked}));
             }
             return Ok(json!({"revoked":true}));
         }
@@ -185,23 +279,27 @@ impl Account {
             return Ok(Value::Null);
         }
         if self.session()?.is_some(){return Err("Saia da conta atual antes de entrar em outra.".into());}
-        let raw=match action {
+        self.login_cancel.store(false,Ordering::SeqCst);
+        let raw=(||->Result<Value,String>{Ok(match action {
             "account.signIn"=>{
                 let mut credentials=json!({"email":email(&value)?,"password":password(&value)?});
                 match auth("token?grant_type=password",credentials.clone(),None) {
                     Err(reason) if reason=="captcha_required"=>{
-                        credentials["gotrue_meta_security"]=json!({"captcha_token":browser_return("captcha",None)?});
+                        credentials["gotrue_meta_security"]=json!({"captcha_token":browser_return("captcha",None,&self.login_cancel)?});
                         auth("token?grant_type=password",credentials,None)?
                     }
                     result=>result?,
                 }
             },
-            "account.google"=>google()?,
+            "account.google"=>google(&self.login_cancel)?,
             _=>return Err("Operação de conta desconhecida.".into()),
-        };
+        })})();
+        let raw=raw.map_err(|error|{self.audit("login_failed");error})?;
         let session=parse_session(raw)?;
+        if self.login_cancel.load(Ordering::SeqCst){return Err("Login cancelado. Inicie uma nova tentativa quando quiser.".into());}
         self.save(&session)?;
-        Ok(json!({"user":session.user}))
+        self.audit("login_success");
+        Ok(json!({"user":session.user.public()}))
     }
 }
 
@@ -238,18 +336,18 @@ fn callback_stream(mut stream:TcpStream,port:u16,state:&str,field:&str)->Option<
         let n=stream.read(&mut chunk).ok()?;if n==0{return None;}data.extend_from_slice(&chunk[..n]);
     }
     let code=callback(std::str::from_utf8(&data).ok()?,port,state,field);
-    let message=if code.is_some(){"200 OK\r\n\r\nVolte ao OpenKoda para concluir o login."}else{"400 Bad Request\r\n\r\nSolicitacao invalida."};
+    let message=if code.is_some(){"200 OK\r\n\r\n<!doctype html><html lang=pt-BR><meta charset=utf-8><meta name=viewport content=\"width=device-width,initial-scale=1\"><title>Retorno ao OpenKoda</title><main><h1>Retorno recebido</h1><p>O OpenKoda está validando sua conta. Volte à janela do aplicativo para acompanhar o resultado.</p><p>Você pode fechar esta aba. Se a tentativa expirou ou foi cancelada, inicie o login novamente no aplicativo.</p></main></html>"}else{"400 Bad Request\r\n\r\nSolicitacao invalida. Inicie o login novamente pelo OpenKoda."};
     let (status,body)=message.split_once("\r\n\r\n")?;
-    let _=write!(stream,"HTTP/1.1 {status}\r\nContent-Type: text/plain; charset=utf-8\r\nCache-Control: no-store\r\nReferrer-Policy: no-referrer\r\nConnection: close\r\n\r\n{body}");
+    let _=write!(stream,"HTTP/1.1 {status}\r\nContent-Type: text/html; charset=utf-8\r\nContent-Security-Policy: default-src 'none'; frame-ancestors 'none'; base-uri 'none'\r\nX-Content-Type-Options: nosniff\r\nCache-Control: no-store\r\nReferrer-Policy: no-referrer\r\nConnection: close\r\n\r\n{body}");
     code
 }
-fn google()->Result<Value,String>{
+fn google(cancel:&AtomicBool)->Result<Value,String>{
     let verifier=Zeroizing::new(format!("{}{}",Uuid::new_v4().simple(),Uuid::new_v4().simple()));
     let challenge=URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()));
-    let code=browser_return("google",Some(&challenge))?;
+    let code=browser_return("google",Some(&challenge),cancel)?;
     auth("token?grant_type=pkce",json!({"auth_code":code,"code_verifier":verifier.as_str()}),None)
 }
-fn browser_return(intent:&str,challenge:Option<&str>)->Result<String,String>{
+fn browser_return(intent:&str,challenge:Option<&str>,cancel:&AtomicBool)->Result<String,String>{
     let listener=TcpListener::bind(("127.0.0.1",0)).map_err(|_|"Não foi possível preparar o retorno do Google.")?;
     listener.set_nonblocking(true).map_err(|_|"Retorno local indisponível.")?;
     let port=listener.local_addr().map_err(|_|"Porta local indisponível.")?.port();
@@ -259,10 +357,13 @@ fn browser_return(intent:&str,challenge:Option<&str>)->Result<String,String>{
         .append_pair("intent",intent);
     if let Some(hash)=challenge {link.query_pairs_mut().append_pair("code_challenge",hash);}
     open_site(link.as_str())?;
-    let deadline=Instant::now()+Duration::from_secs(180);
+    await_callback(listener,port,&state,if intent=="captcha"{"captcha"}else{"code"},cancel,Instant::now()+Duration::from_secs(180))
+}
+fn await_callback(listener:TcpListener,port:u16,state:&str,field:&str,cancel:&AtomicBool,deadline:Instant)->Result<String,String>{
     while Instant::now()<deadline {
+        if cancel.load(Ordering::SeqCst){return Err("Login cancelado. Inicie uma nova tentativa quando quiser.".into());}
         match listener.accept() {
-            Ok((stream,peer)) if peer.ip().is_loopback()=>if let Some(code)=callback_stream(stream,port,&state,if intent=="captcha"{"captcha"}else{"code"}){
+            Ok((stream,peer)) if peer.ip().is_loopback()=>if let Some(code)=callback_stream(stream,port,state,field){
                 return Ok(code)
             },
             Ok(_)=>{},Err(e) if e.kind()==std::io::ErrorKind::WouldBlock=>std::thread::sleep(Duration::from_millis(100)),
@@ -274,6 +375,37 @@ fn browser_return(intent:&str,challenge:Option<&str>)->Result<String,String>{
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn identity(id:Uuid)->Identity{Identity{id,email:"fixture@example.invalid".into(),user_metadata:json!({"full_name":"Nome da conta","avatar_url":"https://lh3.googleusercontent.com/example"})}}
+    fn stored_session(user:Uuid,expiry:i64)->Session{
+        let claims=URL_SAFE_NO_PAD.encode(json!({"sub":user,"session_id":Uuid::new_v4()}).to_string());
+        Session{access_token:format!("header.{claims}.signature"),refresh_token:"fixture-refresh-value".into(),expires_at:expiry,user:identity(user)}
+    }
+    #[cfg(windows)]
+    #[test]fn restore_distinguishes_unavailable_from_revoked_and_never_returns_offline_entitlements(){
+        let dir=tempfile::tempdir().unwrap();let account=Account::new(dir.path());let id=Uuid::new_v4();
+        account.save(&stored_session(id,chrono::Utc::now().timestamp()-10)).unwrap();
+        let offline=account.status_with(|_|Err("network_unavailable".into()),|_|panic!("no verify without refresh"),|_|panic!("no entitlements offline")).unwrap();
+        assert_eq!(offline["state"],"offline");assert_eq!(offline["user"]["id"],id.to_string());assert!(offline["account"].is_null());
+        assert!(Account::new(dir.path()).session().unwrap().is_some());
+        let expired=account.status_with(|_|Err(REVOKED.into()),|_|panic!(),|_|panic!()).unwrap();
+        assert_eq!(expired["state"],"expired");assert!(expired["user"].is_null());assert!(account.session().unwrap().is_none());
+    }
+    #[cfg(windows)]
+    #[test]fn restore_refreshes_once_persists_identity_and_rejects_account_switch(){
+        let dir=tempfile::tempdir().unwrap();let account=Account::new(dir.path());let id=Uuid::new_v4();
+        account.save(&stored_session(id,chrono::Utc::now().timestamp()-10)).unwrap();let mut refreshes=0;
+        let result=account.status_with(|_|{refreshes+=1;Ok(serde_json::to_value(stored_session(id,chrono::Utc::now().timestamp()+3600)).unwrap())},
+            |_|Ok(identity(id)),|_|Ok(json!({"entitlements":{"reasoning":true}}))).unwrap();
+        assert_eq!(refreshes,1);assert_eq!(result["state"],"authenticated");assert_eq!(result["user"]["displayName"],"Nome da conta");
+        let reopened=Account::new(dir.path());
+        assert_eq!(reopened.status_with(|_|panic!("valid token must not refresh"),|_|Ok(identity(id)),|_|Ok(json!({"plan":null}))).unwrap()["state"],"authenticated");
+        let switched=reopened.status_with(|_|panic!(),|_|Ok(identity(Uuid::new_v4())),|_|panic!("never load another identity")).unwrap();
+        assert_eq!(switched["state"],"expired");assert!(reopened.session().unwrap().is_none());
+    }
+    #[test]fn identity_metadata_cannot_control_authority_or_avatar_origin(){
+        let mut identity=identity(Uuid::new_v4());identity.user_metadata=json!({"plan":"ultra","full_name":"Name","avatar_url":"https://evil.invalid/track"});
+        assert!(identity.public().get("avatarUrl").is_none());assert!(identity.public().get("plan").is_none());
+    }
     #[test]fn callback_binds_origin_state_and_code() {
         let input="GET /openkoda/callback?state=opaque&code=valid-code HTTP/1.1\r\nHost: 127.0.0.1:12345\r\n\r\n";
         assert_eq!(callback(input,12345,"opaque","code").as_deref(),Some("valid-code"));
@@ -283,6 +415,24 @@ mod tests {
             assert!(callback(&other,12345,"opaque","code").is_none());
         }
     }
+    #[test]fn browser_wait_expires_cancels_and_consumes_a_single_valid_return(){
+        let listener=||{let value=TcpListener::bind("127.0.0.1:0").unwrap();value.set_nonblocking(true).unwrap();let port=value.local_addr().unwrap().port();(value,port)};
+        let (expired,port)=listener();
+        assert!(await_callback(expired,port,"state","code",&AtomicBool::new(false),Instant::now()).unwrap_err().contains("expirou"));
+        let (canceled,port)=listener();
+        assert!(await_callback(canceled,port,"state","code",&AtomicBool::new(true),Instant::now()+Duration::from_secs(1)).unwrap_err().contains("cancelado"));
+        let (waiting,port)=listener();
+        let worker=std::thread::spawn(move||await_callback(waiting,port,"binding","code",&AtomicBool::new(false),Instant::now()+Duration::from_secs(5)));
+        for state in ["wrong","binding"] {
+            let mut stream=TcpStream::connect(("127.0.0.1",port)).unwrap();stream.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+            write!(stream,"GET /openkoda/callback?state={state}&code=valid-code HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n").unwrap();
+            let mut response=String::new();stream.read_to_string(&mut response).unwrap();
+            assert!(response.starts_with(if state=="binding"{"HTTP/1.1 200"}else{"HTTP/1.1 400"}));
+            assert!(!response.contains("valid-code"));
+        }
+        assert_eq!(worker.join().unwrap().unwrap(),"valid-code");
+        assert!(TcpStream::connect(("127.0.0.1",port)).is_err());
+    }
     #[cfg(windows)]
     #[test]fn encrypted_session_survives_reopen_and_logout_removes_it(){
         let dir=tempfile::tempdir().unwrap();
@@ -291,7 +441,7 @@ mod tests {
         let token=format!("synthetic-header.{claims}.synthetic-signature");
         let account=Account::new(dir.path());
         account.save(&Session{access_token:token.clone(),refresh_token:"synthetic-refresh-token".into(),
-            expires_at:chrono::Utc::now().timestamp()+600,user:Identity{id:user,email:"fixture@example.invalid".into()}}).unwrap();
+            expires_at:chrono::Utc::now().timestamp()+600,user:Identity{id:user,email:"fixture@example.invalid".into(),user_metadata:Value::Null}}).unwrap();
         assert!(!String::from_utf8_lossy(&std::fs::read(&account.file).unwrap()).contains("synthetic-refresh-token"));
         let reopened=Account::new(dir.path());
         let (bearer,rev)=reopened.credential().unwrap();

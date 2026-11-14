@@ -1,0 +1,75 @@
+name: Signed Windows update candidate
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: windows-update-candidate
+  cancel-in-progress: false
+jobs:
+  candidate:
+    runs-on: windows-2025
+    timeout-minutes: 90
+    environment: desktop-release
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: OpenKoda/app
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          architecture: x64
+      - run: npm ci
+      - name: Check frontend and native tests
+        run: |
+          npm run build
+          if ($LASTEXITCODE -ne 0) { throw 'Frontend build failed' }
+          npm test
+          if ($LASTEXITCODE -ne 0) { throw 'Frontend tests failed' }
+          cargo test --manifest-path src-tauri/Cargo.toml --locked
+          if ($LASTEXITCODE -ne 0) { throw 'Native tests failed' }
+      - name: Build signed Windows installer and signed updater artifact
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          if (!$env:TAURI_SIGNING_PRIVATE_KEY -or !$env:WINDOWS_CERTIFICATE_BASE64 -or !$env:WINDOWS_CERTIFICATE_PASSWORD) { throw 'Release signing credentials are required. No unsigned public candidate is produced.' }
+          $certificatePath=Join-Path $env:RUNNER_TEMP 'openkoda-signing.pfx'
+          try {
+            [IO.File]::WriteAllBytes($certificatePath,[Convert]::FromBase64String($env:WINDOWS_CERTIFICATE_BASE64))
+            $password=ConvertTo-SecureString $env:WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force
+            $certificate=Import-PfxCertificate -FilePath $certificatePath -CertStoreLocation Cert:\CurrentUser\My -Password $password
+            New-Item -ItemType Directory .local -Force | Out-Null
+            @{bundle=@{windows=@{certificateThumbprint=$certificate.Thumbprint;digestAlgorithm='sha256';timestampUrl='http://timestamp.digicert.com'}}} | ConvertTo-Json -Depth 4 | Set-Content .local/signing-config.json
+            ./scripts/package-windows.ps1 -Jobs 4 -AdditionalConfig .local/signing-config.json
+          } finally {
+            if (Test-Path -LiteralPath $certificatePath) { Remove-Item -LiteralPath $certificatePath -Force }
+            if ($certificate) { Remove-Item -LiteralPath "Cert:\CurrentUser\My\$($certificate.Thumbprint)" -Force }
+          }
+      - name: Prepare a 1 percent channel manifest
+        run: |
+          $receipt=Get-Content .local/package-windows.json -Raw | ConvertFrom-Json
+          $env:OPENKODA_VERIFY_UPDATE_FILE=$receipt.files[0].path
+          $env:OPENKODA_VERIFY_UPDATE_VERSION=$receipt.version
+          cargo test --manifest-path src-tauri/Cargo.toml --locked --test updater_signatures updater_verify_packaged_candidate -- --ignored
+          if ($LASTEXITCODE -ne 0) {throw 'Updater signature verification failed'}
+          node scripts/prepare-update-manifest.mjs --rollout 1
+      - name: Keep candidate for review and staged publication
+        uses: actions/upload-artifact@v4
+        with:
+          name: signed-windows-update-candidate
+          path: |
+            OpenKoda/app/src-tauri/target/release/bundle/nsis/*.exe
+            OpenKoda/app/src-tauri/target/release/bundle/nsis/*.sig
+            OpenKoda/app/.local/latest.json
+            OpenKoda/app/.local/package-windows.json
+          retention-days: 30

@@ -139,7 +139,7 @@ test('as quatro paletas chegam aos painéis e acompanham a mudança do sistema',
 
   await choose('Sistema');
   const palettes = [
-    ['OpenKoda', 'rgb(250, 251, 246)', 'rgb(25, 43, 34)'],
+    ['OpenKoda', 'rgb(255, 255, 255)', 'rgb(32, 37, 42)'],
     ['Neutro', 'rgb(255, 255, 255)', 'rgb(36, 36, 38)'],
     ['Ardósia', 'rgb(249, 251, 253)', 'rgb(32, 41, 50)'],
     ['Areia', 'rgb(255, 253, 248)', 'rgb(42, 39, 35)'],
@@ -252,7 +252,7 @@ test('papel de parede, imagem local, movimento, escala e navegação afetam a ja
   await expect(page.getByLabel('Amostra da fonte de código')).toHaveCSS('font-size','19px');
   await page.getByRole('button',{name:'Restaurar fontes'}).click();
   await save.click();
-  await expect(page.getByRole('heading',{name:'Aparência',exact:true})).toHaveCSS('font-family', /Georgia/);
+  await expect(page.getByRole('heading',{name:'Aparência',exact:true})).toHaveCSS('font-family', /Segoe UI/);
 });
 
 

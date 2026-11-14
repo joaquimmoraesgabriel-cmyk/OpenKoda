@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile as write, rename, rm, copyFile, readdir } fr
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { productChapters, publicPages } from './product-pages.mjs';
-import { home, launch, pricing, screenshot, editorialPages, desktopInstaller } from './editorial.mjs';
+import { home, launch, pricing, screenshot, editorialPages, desktopInstaller, desktopVersion } from './editorial.mjs';
 import { interactiveDemo } from './demo.mjs';
 
 import { walkthrough, connections, readingCards, connectionPages } from './showcase.mjs';
@@ -25,7 +25,7 @@ async function writeFile(path,content) {
 const contact = 'joaquimmoraesgabriel@gmail.com';
 const mail = (subject, label) => '<a href="mailto:' + contact + '?subject=' + encodeURIComponent(subject) + '">' + label + '</a>';
 const mark = '<svg viewBox="0 0 26 24" width="26" height="24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 3.5v17M21.5 3.5l-9 8.5 9 8.5"/></svg>';
-const brand = '<a class="brand" href="/" aria-label="OpenKoda, início">'+mark+'<span>OpenKoda 1.0</span></a>';
+const brand = '<a class="brand" href="/" aria-label="OpenKoda, início">'+mark+'<span>OpenKoda '+desktopVersion+'</span></a>';
 const download = '<a class="primary" href="/download/">Baixar para Windows</a>';
 const compatibility = '<section class="resource-shelf" data-motion><div><h2>Escolha a conexão da sua IA.</h2><p>Selecione o modelo adequado ao tipo de trabalho. O catálogo disponível depende do provedor e da sua credencial.</p><a href="/guias/primeiro-projeto/#conexao">Configurar uma conexão</a></div><dl class="capabilities"><dt>Conversa</dt><dd>Um modelo de texto pode explicar o código e responder perguntas sobre os trechos autorizados.</dd><dt>Análise de código</dt><dd>Respostas estruturadas permitem organizar candidatos, arquivos e linhas no relatório.</dd><dt>Imagens</dt><dd>Para conversar sobre uma captura de tela, escolha um modelo que receba entrada visual.</dd></dl></section>';
 const intro = (title, lead) => '<h1>' + title + '</h1><p class="lead">' + lead + '</p>';

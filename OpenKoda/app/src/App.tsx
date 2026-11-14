@@ -14,11 +14,21 @@ import WorkspaceProfile from './components/WorkspaceProfile';
 import ProjectDesk from './components/ProjectDesk';
 import { Rail } from './components/ProjectRail';
 import { useApplyAppearance } from './appearance';
+import { DesktopSessionProvider, useDesktopSession } from './desktop-session';
+import { Startup, WelcomeEntry } from './components/DesktopEntry';
+import { UpdateNotice } from './DesktopUpdater';
 import './workspace.css';
 import './project-desk.css';
 import './codex-workspace.css';
+import './desktop-polish.css';
 
 export default function App() {
+  return <DesktopSessionProvider><Workspace/></DesktopSessionProvider>;
+}
+
+function Workspace() {
+  const session=useDesktopSession();
+  const enteredWorkspace=useRef(false);
   const [snapshot, setSnapshot] = useState<Snapshot>();
   const [view, setView] = useState<View>('overview');
   const [modelsRequest,setModelsRequest]=useState(false);
@@ -39,6 +49,9 @@ export default function App() {
   const dataAssessmentId=view==='overview'?selected:view==='findings'?snapshot?.findings.find(f=>f.id===selectedFinding)?.assessmentId:undefined;
   useEffect(()=>{if(native)void request('data.session.select',{assessmentId:dataAssessmentId||null}).catch(e=>setError(errorMessage(e)));},[dataAssessmentId]);
   const [settingsUsageRequest, setSettingsUsageRequest] = useState(0);
+  const [settingsAccountRequest,setSettingsAccountRequest]=useState<{section:'Conta e segurança'|'Plano e assinatura';revision:number}>();
+  const [settingsUpdateRequest,setSettingsUpdateRequest]=useState(0);
+  function openAccount(section:'Conta e segurança'|'Plano e assinatura') {setSettingsAccountRequest(previous=>({section,revision:(previous?.revision??0)+1}));setView('settings');}
   function openDataSettings(){setSettingsUsageRequest(0);setSettingsDataRequest(value=>value+1);setView('settings');}
   function openUsageHistory(){setSettingsDataRequest(0);setSettingsUsageRequest(value=>value+1);setView('settings');}
 
@@ -126,11 +139,21 @@ export default function App() {
     void refresh().catch(e=>setError(errorMessage(e)));
   }
 
+  if(!snapshot&&(loading||error))return <Startup error={!loading?error:undefined} onRetry={()=>void load()}/>;
+  if(session.loading&&!snapshot)return <Startup onRetry={()=>void session.refresh()}/>;
+  if(session.loading&&!session.user&&!session.local&&!enteredWorkspace.current)return <Startup onRetry={()=>void session.refresh()}/>;
+  if(session.error&&!session.user&&!session.local)return <Startup error={session.error} onRetry={()=>void session.refresh()}/>;
+  if(native&&!session.loading&&!session.user&&!session.local)return <WelcomeEntry/>;
+  if(session.user||session.local)enteredWorkspace.current=true;
+
   return <div className="app-shell workspace-shell project-shell">
     <CloseWorkPrompt onReview={reviewCloseActivity}/>
     <a className="skip-link" href="#main-content">Ir para o conteúdo</a>
     <Rail sourceOnly view={view} navigate={navigate} onUsage={openUsageHistory} activeProvider={snapshot?.assessments.find(a=>a.id===selected)?.aiSelection?.provider??snapshot?.settings.provider}/>
     <main ref={main} id="main-content" tabIndex={-1} className="main-content workspace-main" aria-busy={loading||busy}>
+      <UpdateNotice onOpenSettings={()=>{setSettingsUpdateRequest(value=>value+1);setView('settings');}}/>
+      {session.state==='offline'&&<div className="session-status" role="status"><span>{session.message||'Sem conexão com a conta. Seus projetos locais continuam disponíveis.'}</span><button type="button" disabled={session.loading} onClick={()=>void session.refresh()}>Tentar conectar</button></div>}
+      {session.error&&<div className="session-status" role="status"><span>{session.error}</span><button type="button" disabled={session.loading} onClick={()=>void session.refresh()}>Verificar conta</button></div>}
       {snapshot&&<div className="workspace-projection"><ProjectionNotice projection={snapshot.projection}/></div>}
       {!native&&<div className="preview-banner">Prévia no navegador · Dados locais de demonstração</div>}
       {error&&<div className="app-alert" role="alert"><AlertCircle size={20}/><span>{error}</span><button className="icon-button" title="Fechar aviso" aria-label="Fechar aviso" onClick={()=>setError('')}><X size={18}/></button></div>}
@@ -138,9 +161,9 @@ export default function App() {
       {native&&(purgeError||purgeStatus?.hasUnresolved||purgeStatus?.hasPartialHistory)&&<div className="app-alert project-purge-banner" role="alert"><AlertCircle size={20}/><span>{purgeError?`Não foi possível consultar exclusões de projetos: ${purgeError}`:purgeStatus?.hasUnresolved?'Exclusão de projeto pendente: novas alterações estão bloqueadas. O histórico pode estar parcialmente removido.':'Há exclusão encerrada parcialmente. A trilha do projeto pode estar incompleta; os dados restantes foram preservados.'}</span><button className="button" type="button" onClick={openDataSettings}>Revisar exclusão em Dados</button></div>}
       {loading&&!snapshot?<div className="loading-state" role="status"><LoaderCircle className="spin" size={26}/>Carregando seu trabalho…</div>:!snapshot?<div className="loading-state"><h1>Não foi possível abrir seus dados</h1><p>Os dados existentes foram preservados.</p><button className="button" onClick={()=>void load()}><RefreshCw size={17}/>Tentar novamente</button></div>:<>
         <div className="desk-host" hidden={view!=='overview'}><ProjectDesk sourceOnly snapshot={snapshot} busy={busy} action={action} selected={selected} onSelect={setSelected} onAdvanced={openAssessment} onModels={()=>{navigate('settings');setModelsRequest(true);}} onFinding={openFinding}/></div>
-        {view==='profile'&&<WorkspaceProfile snapshot={snapshot} onSettings={()=>navigate('settings')} onUsageHistory={openUsageHistory}/>}
+        {view==='profile'&&<WorkspaceProfile snapshot={snapshot} onSettings={()=>navigate('settings')} onUsageHistory={openUsageHistory} onAccount={()=>openAccount('Conta e segurança')} onPlans={()=>openAccount('Plano e assinatura')}/>}
         {view==='findings'&&<Findings sourceOnly selected={selectedFinding} onSelect={setSelectedFinding} onOpenAssessment={openAssessment} findings={snapshot.findings} assessments={snapshot.assessments} projects={snapshot.projects} validations={snapshot.validations} action={action} busy={busy}/>}
-        {view==='settings'&&<Settings settings={snapshot.settings} projects={snapshot.projects} assessments={snapshot.assessments} action={action} busy={busy} dataRequest={settingsDataRequest} usageRequest={settingsUsageRequest} initialModels={modelsRequest} onOpenAssessment={openAssessment} onPurgeStatus={value=>{setPurgeStatus(value);setPurgeError('');}}/>}
+        {view==='settings'&&<Settings settings={snapshot.settings} projects={snapshot.projects} assessments={snapshot.assessments} action={action} busy={busy} dataRequest={settingsDataRequest} usageRequest={settingsUsageRequest} accountRequest={settingsAccountRequest} updateRequest={settingsUpdateRequest} initialModels={modelsRequest} onOpenAssessment={openAssessment} onPurgeStatus={value=>{setPurgeStatus(value);setPurgeError('');}}/>}
       </>}
     </main>
   </div>;

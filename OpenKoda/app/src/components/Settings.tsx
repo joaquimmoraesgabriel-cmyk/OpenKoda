@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { Boxes, Database, HardDriveDownload, History, Layers, LifeBuoy, Monitor, RefreshCw, Search, Settings2, ShieldCheck, SlidersHorizontal } from 'lucide-react';
-import { version } from '../../package.json';
+import { CreditCard, Database, HardDriveDownload, History, Layers, LifeBuoy, Monitor, RefreshCw, Search, Settings2, ShieldCheck, SlidersHorizontal, UserRound } from 'lucide-react';
 import { native,request } from '../api';
 import { accountChanged,site } from '../commercial';
 import { SupportTickets } from './SupportTickets';
@@ -19,9 +18,16 @@ import Recovery from './Recovery';
 import Retention from './Retention';
 import SupportPackage from './SupportPackage';
 import SecurityRuntimeStatus from './SecurityRuntimeStatus';
+import { UpdateSettings } from '../DesktopUpdater';
+import { AccountPlans, AccountSecurity } from './AccountPages';
+import { useDesktopSession } from '../desktop-session';
+import { AccountModelCatalog } from './AccountModelCatalog';
 import './settings.css';
 
 const groups = [
+  { name: 'Sua conta', items: [
+    { name: 'Conta e segurança', icon: UserRound }, { name: 'Plano e assinatura', icon: CreditCard },
+  ]},
   { name: 'Preferências', items: [
     { name: 'Geral', icon: Settings2 }, { name: 'Aparência', icon: Monitor },
   ]},
@@ -62,12 +68,14 @@ const fields: Partial<Record<Section, EditableKey[]>> = {
 };
 
 type Props = {
+  accountRequest?:{section:'Conta e segurança'|'Plano e assinatura';revision:number}; updateRequest?:number;
   initialModels?:boolean; onTechnical?:()=>void;
   settings: SettingsModel; projects: Project[]; action: Action; busy: boolean;
   dataRequest?: number; usageRequest?: number; assessments?: Assessment[]; onOpenAssessment?: (id: string) => void; onPurgeStatus: (value: ProjectPurgeStatus) => void;
 };
 
-export default function Settings({settings, projects, action, busy, dataRequest=0, usageRequest=0, assessments, onOpenAssessment, onPurgeStatus,initialModels,onTechnical}: Props) {
+export default function Settings({settings, projects, action, busy, dataRequest=0, usageRequest=0, accountRequest,updateRequest=0, assessments, onOpenAssessment, onPurgeStatus,initialModels,onTechnical}: Props) {
+  const session=useDesktopSession();
   const [section, setSection] = useState<Section>(initialModels?'IA e modelos':'Geral');
   const [search, setSearch] = useState('');
   const normalized = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('pt-BR');
@@ -94,6 +102,8 @@ export default function Settings({settings, projects, action, busy, dataRequest=
     if (dataRequest) {setSearch(''); navigate('Dados e privacidade');}
   }, [dataRequest]);
   useEffect(() => { if (usageRequest) {setSearch(''); navigate('Histórico de uso');} }, [usageRequest]);
+  useEffect(() => { if (accountRequest) {setSearch(''); navigate(accountRequest.section);} }, [accountRequest]);
+  useEffect(() => { if (updateRequest) {setSearch(''); navigate('Atualizações');} }, [updateRequest]);
 
   function change<K extends keyof Draft>(key: K, value: Draft[K]) {
     setEdits(current => ({...current, [key]: value}));
@@ -159,6 +169,8 @@ export default function Settings({settings, projects, action, busy, dataRequest=
     <div className="settings-content" ref={panel} role="region" aria-label={`Conteúdo de ${section}`} tabIndex={0}>
       <section className="settings-sheet" aria-label={section}>
         <h2 className="settings-section-title">{section}</h2>
+        {section === 'Conta e segurança' && <AccountSecurity key={session.user?.id??'local'}/>}
+        {section === 'Plano e assinatura' && <AccountPlans key={session.user?.id??'local'}/>}
         {section === 'Aparência' && <form onSubmit={save}>
           <AppearanceSettings draft={draft} change={change} busy={busy}/>{saveActions}
         </form>}
@@ -168,6 +180,7 @@ export default function Settings({settings, projects, action, busy, dataRequest=
             ? <AiConnection saved={settings} draft={draft} change={change} action={action} busy={busy}/>
             : <form onSubmit={save}><AiConnection saved={settings} draft={draft} change={change} action={action} busy={busy}/>{saveActions}</form>}
           <AiLocalClosure action={action} busy={busy}/>
+          <AccountModelCatalog/>
         </>}
 
         {section === 'Histórico de uso' && <AiBudgetSettings key={usageRequest} action={action} busy={busy} assessments={assessments} onOpenAssessment={onOpenAssessment}/>}
@@ -193,11 +206,7 @@ export default function Settings({settings, projects, action, busy, dataRequest=
         {section === 'Backup e recuperação' && <Recovery projects={projects} action={action} busy={busy}/>}
         {section === 'Diagnóstico e suporte' && <><SecurityRuntimeStatus/><SupportPackage/></>}
         {section === 'Relatar um erro' && <BugReport/>}
-        {section === 'Atualizações' && <>
-          <div className="installed-version"><Boxes size={25} aria-hidden="true"/><div><strong>OpenKoda</strong><p>Versão {version}</p></div></div>
-          <KeyValue label="Canal">Distribuição local</KeyValue>
-          <KeyValue label="Instalação de atualizações">Manual, pelo instalador do OpenKoda</KeyValue>
-        </>}
+        {section === 'Atualizações' && <UpdateSettings/>}
       </section>
       {section === 'Aparência' && <KeyboardTips/>}
     </div>

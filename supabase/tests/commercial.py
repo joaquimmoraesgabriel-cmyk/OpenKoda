@@ -7,6 +7,7 @@ import subprocess
 import sys
 import uuid
 from capacity import exercise_capacity
+from simulation import exercise_simulation
 
 if len(sys.argv) != 2 or sys.argv[1] != "--local":
     raise SystemExit("Usage: python supabase/tests/commercial.py --local")
@@ -90,6 +91,7 @@ try:
     assert run("select count(*) from pg_class where relnamespace='openkoda_private'::regnamespace and relkind='r' and not relrowsecurity;") == "0"
     assert rpc("account",USER)["plan"] is None
     assert rpc("account",USER)["controls"]["paymentsEnabled"] is False
+    exercise_simulation(run,rpc,denied,race,USER,OTHER)
     newcomer=str(uuid.uuid4())
     run(f"insert into auth.users values('{newcomer}','consent@example.invalid',now());")
     def initial(choice):

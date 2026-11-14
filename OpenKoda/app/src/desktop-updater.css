@@ -1,0 +1,15 @@
+.desktop-update-settings{padding:20px 0;max-width:760px;color:var(--text,#252525)}
+.desktop-update-heading{display:flex;justify-content:space-between;align-items:center;gap:16px}
+.desktop-update-heading h3{font-size:17px;margin:0 0 5px}.desktop-update-heading p{margin:0}
+.desktop-update-settings p{line-height:1.55}.desktop-update-channel,.desktop-update-caption{font-size:12px;opacity:.76}.desktop-update-caption code{word-break:break-word}
+.desktop-update-actions{display:flex;gap:8px;align-items:center;margin:12px 0}
+.desktop-update-actions button{display:inline-flex;align-items:center;gap:8px;border-radius:9px;padding:9px 13px;background:var(--text,#252525);color:var(--surface,#fff);border:1px solid transparent;cursor:pointer;font:inherit;font-size:13px}
+.desktop-update-actions button:disabled{opacity:.65;cursor:wait}
+.desktop-update-settings button:focus-visible,.desktop-update-notice button:focus-visible,.desktop-update-notes summary:focus-visible{outline:2px solid currentColor;outline-offset:3px}
+.desktop-update-version{font-weight:600;font-size:13px}
+.desktop-update-progress{display:grid;gap:5px;min-width:180px;font-size:12px;margin-top:10px}.desktop-update-progress progress{width:100%;height:6px;accent-color:var(--text,#252525)}
+.desktop-update-notice{position:fixed;z-index:130;right:24px;bottom:24px;width:min(450px,calc(100vw - 48px));padding:18px 20px;background:var(--surface,#fff);color:var(--text,#252525);border:1px solid var(--line,#d5d5d5);border-radius:14px;box-shadow:0 8px 35px #0002}
+.desktop-update-notice strong{font-size:14px}.desktop-update-notice p{font-size:13px;line-height:1.5;margin:6px 0}.desktop-update-notice-actions{display:flex;align-items:center;gap:12px}.desktop-update-link,.desktop-update-dismiss{background:transparent;border:0;color:inherit;cursor:pointer;padding:6px;font:inherit;font-size:12px}.desktop-update-dismiss{margin-left:auto;display:grid;place-items:center}
+.desktop-update-notes{margin:14px 0;font-size:13px}.desktop-update-notes summary{cursor:pointer;list-style:none;padding:8px 0;font-weight:600}.desktop-update-notes p{white-space:pre-wrap;max-height:200px;overflow:auto}
+.desktop-update-spin{animation:desktop-update-spin 1s linear infinite}@keyframes desktop-update-spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.desktop-update-spin{animation:none}}

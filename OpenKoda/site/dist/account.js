@@ -4,7 +4,7 @@ const params=new URLSearchParams(location.search);
 const callback=location.origin+'/conta/retorno/';
 const namespace='koda.auth.attempt';
 const legalVersion='2026-11-13';
-let email='', submitting=false;
+let email='', submitting=false, simulationRequest=null;
 let captcha, googleGrant, grantTimer, captchaLoading;
 const notice=document.createElement('p');
 notice.setAttribute('role','status');
@@ -58,6 +58,7 @@ async function authorize(desktop,chooseAccount=false,intent){
  const grant=googleGrant??await verifyGoogle(desktop);
  googleGrant=null;clearTimeout(grantTimer);
  const hash=desktop?nativeHash:grant.challenge;
+ sessionStorage.removeItem(namespace+(desktop?'.google':'.desktop'));
  sessionStorage.setItem(namespace+(desktop?'.desktop':'.google'),JSON.stringify({desktop,state,port,consent:desktop?null:intent,expires:Date.now()+180000}));
  const url=new URL(project+'/auth/v1/authorize');
  url.search=new URLSearchParams({provider:'google',redirect_to:callback,code_challenge:hash,code_challenge_method:'s256'});
@@ -143,7 +144,7 @@ const accountSections=[['visao-geral','Visão geral'],['plano','Plano'],['uso','
 let accountSnapshot=null,accountRevision=0,ticketRevision=0,ticketsLoaded=false;
 const feedback=action=>'<p class="account-feedback" data-feedback="'+action+'" role="status"></p>';
 function account(){
- accountSnapshot=null;ticketsLoaded=false;
+ accountSnapshot=null;ticketsLoaded=false;simulationRequest=null;
  content(`<div class="dashboard account-workspace">
  <header class="dashboard-head"><div><p class="account-eyebrow">Seu espaço no OpenKoda</p><h1>Minha conta</h1><p id="identity"></p></div><div><button class="secondary" data-do="logout">Sair</button>${feedback('logout')}</div></header>
  <div class="account-layout"><nav class="account-navigation" aria-label="Seções da conta">${accountSections.map(([id,label])=>`<a href="#${id}" data-section-link="${id}">${label}</a>`).join('')}</nav>
@@ -153,7 +154,7 @@ function account(){
  <div class="account-task-list"><a href="#plano"><span><strong>Seu plano</strong><small>Veja a situação da assinatura e as opções disponíveis.</small></span><span aria-hidden="true">01</span></a><a href="#chamados"><span><strong>Precisa de ajuda?</strong><small>Abra um chamado e acompanhe as respostas no mesmo lugar.</small></span><span aria-hidden="true">02</span></a><a href="#dados"><span><strong>Você controla seus dados</strong><small>Exporte as informações da conta ou consulte a exclusão.</small></span><span aria-hidden="true">03</span></a></div>
  </section>
  <section class="account-panel" data-account-section="plano" aria-labelledby="heading-plano" hidden><div class="account-section-heading"><p class="account-eyebrow">Plano</p><h2 id="heading-plano" tabindex="-1">Uma assinatura, limites claros.</h2><p>Veja o que está ativo antes de escolher qualquer alteração.</p></div><div class="account-plan-state" data-plan-state aria-live="polite"><p>Consultando seu plano…</p></div>
- <section class="account-surface"><h3>Explore os planos</h3><p class="account-callout">O checkout ainda é uma simulação: não há cobrança, renovação automática nem liberação de crédito de produção.</p><form id="checkout"><fieldset class="plan-choice"><legend>Plano para simulação</legend>
+ <section class="account-surface"><h3>Explore os planos</h3><p class="account-callout">A simulação interna está disponível somente para contas de teste autorizadas. Ela libera recursos de teste, sem cobrança, renovação automática ou crédito de IA gerenciada.</p><form id="checkout" hidden><fieldset class="plan-choice"><legend>Plano para simulação</legend>
  <label><input type="radio" name="plan" value="plus" checked><span>Plus</span><span>R$ 219 por mês</span></label><label><input type="radio" name="plan" value="pro"><span>Pro</span><span>R$ 999 por mês</span></label><label><input type="radio" name="plan" value="ultra"><span>Ultra</span><span>R$ 1.999 por mês</span></label></fieldset><button>Simular assinatura</button>${feedback('checkout')}</form><a class="account-inline-link" href="/precos/">Compare os recursos dos planos</a></section>
  <section class="account-surface"><h3>Cancelamento</h3><p>Consulte a situação acima. Um pedido de cancelamento é registrado na sua conta, sem contratar um novo plano.</p><button class="secondary" data-do="cancel">Cancelar renovação ou simulação</button>${feedback('cancel')}<a class="account-inline-link" href="/reembolso/">Leia a política de cancelamento e reembolso</a></section></section>
  <section class="account-panel" data-account-section="uso" aria-labelledby="heading-uso" hidden><div class="account-section-heading"><p class="account-eyebrow">Uso e limites</p><h2 id="heading-uso" tabindex="-1">Acompanhe sua cota.</h2><p>Os valores abaixo pertencem à IA da assinatura. O uso com chave própria é acompanhado no aplicativo e no seu provedor.</p></div><div data-usage-detail aria-live="polite"><p>Consultando seu uso…</p></div><button class="secondary" data-do="refresh">Atualizar uso</button>${feedback('refresh')}<div class="account-explainer"><h3>Como a cota funciona</h3><p>A cota do ciclo mensal é liberada em janelas de até sete dias. O saldo da janela e o limite mensal valem ao mesmo tempo. A próxima liberação aparece quando existe uma assinatura ativa.</p><a href="/guias/uso/">Entenda os limites de uso</a></div></section>
@@ -184,12 +185,15 @@ const dateLabel=value=>{if(!value)return 'Não disponível';const date=new Date(
 const planLabel=plan=>({plus:'Plus',pro:'Pro',ultra:'Ultra'})[plan?.id]??(plan?'Plano da conta':'Gratuito');
 function textAt(selector,text){for(const el of root.querySelectorAll(selector))el.textContent=text;}
 function renderAccountSummary(r){
- const usage=r.usage,active=Boolean(r.plan),label=planLabel(r.plan);
+ const usage=r.usage,active=Boolean(r.plan),sim=r.simulation;
+ const simulated=sim?.mode==='internal'&&sim.status==='active'&&Date.parse(sim.periodEnd)>Date.now();
+ const label=active?planLabel(r.plan):simulated?planLabel({id:sim.plan})+' · simulação interna':planLabel(null);
  const summary=root.querySelector('[data-account-summary]'),plan=root.querySelector('[data-plan-state]'),detail=root.querySelector('[data-usage-detail]');
  summary.innerHTML='<div><span class="account-stat-label">Plano atual</span><strong data-plan-label></strong><p data-plan-note></p></div><div><span class="account-stat-label">Próxima liberação</span><strong class="account-date" data-next-release></strong><a href="#uso">Ver uso e limites</a></div>';
  plan.innerHTML='<span class="account-stat-label">Plano atual</span><strong data-plan-label></strong><p data-plan-note></p>';
  textAt('[data-plan-label]',label);
- textAt('[data-plan-note]',!active?'Use sua própria chave de API no aplicativo.':r.subscription?.cancelAtPeriodEnd?'Renovação cancelada. Consulte o encerramento do ciclo em Uso e limites.':'Consulte o consumo e as datas do seu ciclo em Uso e limites.');
+ textAt('[data-plan-note]',!active?(simulated?'Recursos de teste até '+dateLabel(sim.periodEnd)+'. Use sua própria chave para IA; não há crédito gerenciado.':sim?'Simulação '+(sim.status==='canceled'?'cancelada':'expirada')+'. Use sua própria chave de API no aplicativo.':'Use sua própria chave de API no aplicativo.'):r.subscription?.cancelAtPeriodEnd?'Renovação cancelada. Consulte o encerramento do ciclo em Uso e limites.':'Consulte o consumo e as datas do seu ciclo em Uso e limites.');
+ root.querySelector('#checkout').hidden=r.controls?.simulationEnabled!==true;
  textAt('[data-next-release]',usage?dateLabel(usage.nextRelease):'Sem cota ativa');
  if(!usage){detail.innerHTML='<div class="account-empty"><h3>Não há uma cota de assinatura ativa.</h3><p>Você pode usar sua própria chave de API no aplicativo. Os gastos dessa conexão aparecem no histórico de uso do desktop e são cobrados pelo provedor escolhido.</p><a href="#plano">Consultar plano</a></div>';}
  else{
@@ -305,8 +309,21 @@ async function handle(action,data){
  case 'marketing':if(!accountSnapshot)throw Error('Atualize os dados da conta antes de salvar sua preferência.');await edge('marketing',{enabled:data.marketing==='on'});if(accountSnapshot)accountSnapshot.consent={...accountSnapshot.consent,marketing:data.marketing==='on'};delete root.querySelector('#marketing').dataset.dirty;await refreshAccount();return say('Preferência de e-mail salva.');
  case 'unsubscribe':await edge('marketing',{enabled:false});if(accountSnapshot)accountSnapshot.consent={...accountSnapshot.consent,marketing:false};root.querySelector('#marketing').elements.marketing.checked=false;delete root.querySelector('#marketing').dataset.dirty;await refreshAccount();return say('Consentimento de marketing retirado.');
  case 'support':{const r=await edge('support',{...data,requestId:crypto.randomUUID()});root.querySelector('#support').reset();await refreshTickets();return say('Chamado registrado. '+(r.id??''));}
- case 'checkout':await edge('checkout',{plan:data.plan,requestId:crypto.randomUUID()});await refreshAccount();return say('Simulação registrada. Nenhuma cobrança foi realizada.');
- case 'cancel':{const result=await edge('cancel');await refreshAccount();return say(result.cancelAtPeriodEnd?'Solicitação de cancelamento registrada.':'Não há renovação ativa para cancelar. Nenhuma cobrança foi realizada.');}
+ case 'checkout':{
+  if(accountSnapshot?.controls?.simulationEnabled!==true)throw Error('A simulação está restrita às contas de teste autorizadas.');
+  if(simulationRequest?.plan!==data.plan||simulationRequest?.outcome!=='activate')simulationRequest={plan:data.plan,outcome:'activate',requestId:crypto.randomUUID()};
+  const result=await edge('simulation',simulationRequest);
+  if(result.status!=='active'||result.grantsProductionCredit!==false)throw Error('Não foi possível confirmar a simulação. Atualize sua conta.');
+  simulationRequest=null;await refreshAccount();return say('Simulação ativa. Recursos de teste liberados; nenhuma cobrança foi realizada.');
+ }
+ case 'cancel':{
+  if(accountSnapshot?.simulation?.status==='active'&&!accountSnapshot?.plan){
+   const plan=accountSnapshot.simulation.plan;
+   if(simulationRequest?.plan!==plan||simulationRequest?.outcome!=='cancel')simulationRequest={plan,outcome:'cancel',requestId:crypto.randomUUID()};
+   await edge('simulation',simulationRequest);simulationRequest=null;await refreshAccount();return say('Simulação cancelada. Nenhuma cobrança foi realizada.');
+  }
+  const result=await edge('cancel');await refreshAccount();return say(result.cancelAtPeriodEnd?'Solicitação de cancelamento registrada.':'Não há renovação ativa para cancelar. Nenhuma cobrança foi realizada.');
+ }
  case 'refresh':await refreshAccount();return;
  case 'tickets':await refreshTickets();return;
  case 'showDelete':{const form=root.querySelector('#delete'),button=root.querySelector('[data-do=showDelete]');form.hidden=!form.hidden;button.setAttribute('aria-expanded',String(!form.hidden));if(!form.hidden)form.elements.confirmation.focus();return;}
@@ -364,12 +381,23 @@ async function init(){
   }
   if(!code){history.replaceState(null,'','/conta/');await loadAccount();return;}
   if(code.length>1024)throw Error('O retorno é inválido. Inicie novamente pelo dispositivo que solicitou o acesso.');
+  // A native code belongs exclusively to its native PKCE verifier. A stale web
+  // login cookie must never try to redeem it or prevent its loopback delivery.
+  if(desktop?.desktop){
+   sessionStorage.removeItem(namespace+'.desktop');
+   if(!native||!/^\d{2,5}$/.test(desktop.port??'')||Number(desktop.port)<1024||Number(desktop.port)>65535||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(desktop.state??'')||!/^[-\w.~]{8,512}$/.test(code)){
+    oauthFailure(true);return;
+   }
+   const target=new URL('http://127.0.0.1:'+Number(desktop.port)+'/openkoda/callback');
+   target.search=new URLSearchParams({state:desktop.state,code});
+   content('<p>A autenticação com Google foi concluída. Entregue o retorno ao OpenKoda para conectar sua conta neste computador.</p><p>Mantenha o aplicativo aberto. Se ele foi fechado, o prazo terminou ou você cancelou, inicie uma nova tentativa pelo aplicativo.</p>','Voltar ao OpenKoda');
+   const open=document.createElement('a');open.className='primary';open.href=target.href;open.textContent='Abrir aplicativo';open.referrerPolicy='no-referrer';root.append(open);
+   return;
+  }
   let result;
   try{result=await call('exchange',{auth_code:code});}
   catch(error){
-   if(error.code==='unmatched_attempt'&&native){
-    sessionStorage.removeItem(namespace+'.desktop');const url=new URL('http://127.0.0.1:'+Number(desktop.port)+'/openkoda/callback');url.search=new URLSearchParams({state:desktop.state,code});location.replace(url.href);return;
-   }
    if(!native&&!google&&error.code==='unmatched_attempt')emailLinkFailure();else oauthFailure(native);
    return;
   }

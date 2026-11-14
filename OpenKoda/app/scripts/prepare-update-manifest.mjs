@@ -1,0 +1,25 @@
+// Builds an inert candidate. Publishing a channel is a separate, reviewed step.
+import {readFile,writeFile,stat} from 'node:fs/promises';
+import {resolve,basename} from 'node:path';
+import {createHash} from 'node:crypto';
+const args=process.argv.slice(2), option=(name,fallback)=>{const index=args.indexOf(name);return index<0?fallback:args[index+1];};
+const receipt=JSON.parse((await readFile(resolve(option('--receipt','.local/package-windows.json')),'utf8')).replace(/^\uFEFF/,''));
+const internal=args.includes('--internal-test');
+const prerelease=args.includes('--prerelease');
+if(receipt.isolatedUpdateTest&&!internal)throw new Error('An isolated test build cannot be published on the public update channel.');
+if(internal&&prerelease)throw new Error('Choose an isolated rehearsal or a public prerelease, not both.');
+if(receipt.profile!=='release')throw new Error('Update candidates require a release build.');
+if(!receipt.updaterSigned)throw new Error('An updater signature is required.');
+if(!internal&&!prerelease&&receipt.files.some(file=>file.authenticode!=='Valid'))throw new Error('A certified release requires valid Windows Authenticode. Use --prerelease for an explicitly identified preview signed by the updater key.');
+if(!/^\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?$/.test(receipt.version))throw new Error('Invalid version.');
+const rollout=Number(option('--rollout','1'));if(!Number.isInteger(rollout)||rollout<0||rollout>100)throw new Error('Rollout must be an integer from 0 to 100.');
+if(receipt.files.length!==1)throw new Error('Exactly one Windows x64 installer is required.');
+const file=receipt.files[0];
+if((await stat(file.path)).size>384*1024*1024)throw new Error('Installer exceeds the desktop updater limit of 384 MiB.');
+const artifact=await readFile(file.path);
+if(createHash('sha256').update(artifact).digest('hex')!==file.sha256||artifact.length!==file.bytes)throw new Error('Installer does not match its build receipt.');
+const signature=(await readFile(file.updaterSignature,'utf8')).trim();if(!signature||signature.length>16384)throw new Error('Missing or oversized signature.');
+const tag=option('--tag',`desktop-v${receipt.version}`);if(!/^[A-Za-z0-9_.-]+$/.test(tag))throw new Error('Invalid tag.');
+const manifest={version:receipt.version,notes:option('--notes','Atualização do OpenKoda. Projetos e conversas são preservados.')+(prerelease?'\nPré-lançamento: atualização assinada pelo OpenKoda; certificado Authenticode do Windows ainda pendente.':''),pub_date:new Date().toISOString(),prerelease,rolloutPercent:rollout,platforms:{'windows-x86_64':{url:`https://github.com/joaquimmoraesgabriel-cmyk/OpenKoda/releases/download/${tag}/${encodeURIComponent(basename(file.path))}`,signature}}};
+await writeFile(resolve(option('--out','.local/latest.json')),JSON.stringify(manifest,null,2)+'\n');
+console.log(JSON.stringify({version:manifest.version,rollout,internal,prerelease,bytes:(await stat(file.path)).size,manifest:resolve(option('--out','.local/latest.json'))}));

@@ -21,6 +21,8 @@ import { ChatSkills } from './ChatSkills';
 import ChatCodeAnalysis from './ChatCodeAnalysis';
 import SecurityScanPanel, { useSecurityScan } from './SecurityScan';
 import { scanActive, scanStateLabel } from '../security-scan';
+import { accountChanged } from '../commercial';
+import { useDesktopSession } from '../desktop-session';
 import './project-conversation.css';
 
 type LiveStatus={requestId:string|null;stopping:boolean;queuePosition?:number|null;processingMs?:number|null;partialText?:string|null;messageId?:string|null;dataReview?:{id:string;digest:string}|null};
@@ -35,6 +37,8 @@ function compactionMessage(covered:number,omitted=0){
 }
 
 function Conversation({draftKey,unsaved=false,analysisSource,onAnalysisAdmitted,prepareConversation,onDraftSelection,sourceOnly=false,assessment,plans,action,busy,onAdvanced,onModels}:Props){
+  const session=useDesktopSession();
+  const skillsAllowed=session.account?.entitlements?.skills===true;
   const inputId=draftKey??assessment.id;
   const [messages,setMessages]=useState<ChatMessage[]>([]);
   const [acceptedMessage,setAcceptedMessage]=useState<string>();
@@ -220,6 +224,24 @@ function Conversation({draftKey,unsaved=false,analysisSource,onAnalysisAdmitted,
   function discard(){
     job.current?.abort();job.current=undefined;setApproval(undefined);setPendingLine('');setPhase('');
   }
+  useEffect(()=>{
+    const invalidate=()=>{
+      setSkillsOpen(false);
+      if(approval){void request('data.review.cancel',{review:approval.context.dataReview}).catch(()=>{});discard();}
+      else if(job.current&&!remote.requestId&&phase!=='Conectando ao provedor…')discard();
+    };
+    window.addEventListener(accountChanged,invalidate);
+    return()=>window.removeEventListener(accountChanged,invalidate);
+  },[approval,phase,remote.requestId]);
+  useEffect(()=>{
+    if(session.loading)return;
+    if(!skillsAllowed)setSkillsOpen(false);
+    const lostSkill=!skillsAllowed&&(approval?.draft.skill||approval?.context.autoSkill);
+    const lostReasoning=session.account?.entitlements?.reasoning===false&&approval?.selection.reasoning;
+    if(approval&&(lostSkill||lostReasoning)){
+      void request('data.review.cancel',{review:approval.context.dataReview}).catch(()=>{});discard();
+    }
+  },[session.loading,skillsAllowed,session.account?.entitlements?.reasoning,approval]);
   async function reviewWithoutSkill(){
     if(!approval?.context.autoSkill||phase)return;
     const current=approval;
@@ -253,7 +275,7 @@ function Conversation({draftKey,unsaved=false,analysisSource,onAnalysisAdmitted,
   const disabled=busy||running||!!approval||loadingFile;
   const shortcut=composerShortcut();
   const canSend=native && !disabled && !!sel && !!draft.trim();
-  const slash=sel?.provider==='openkoda'&&!skill&&/^\/[\w-]*$/.test(draft);
+  const slash=skillsAllowed&&!!sel&&!skill&&/^\/[\w-]*$/.test(draft);
   async function compact(){
     if(!sel||job.current||disabled||unsaved)return;
     const controller=new AbortController();job.current=controller;setPhase('Compactando o contexto…');setError('');
@@ -314,7 +336,7 @@ function Conversation({draftKey,unsaved=false,analysisSource,onAnalysisAdmitted,
       {awayFromEnd&&<button type="button" className="chat-jump" aria-label="Voltar à mensagem mais recente" title="Voltar à mensagem mais recente" onClick={followEnd}><ArrowDown size={17}/></button>}
       {error&&<div className="chat-error" role="alert">{error}{onAdvanced&&<button type="button" onClick={onAdvanced}>Revisar avaliação</button>}</div>}
       {compactionNotice&&<p role="status">{compactionNotice}</p>}
-      {sel?.provider==='openkoda'&&(skillsOpen||slash)&&<ChatSkills query={slash?draft.slice(1):''}
+      {skillsAllowed&&!!sel&&(skillsOpen||slash)&&<ChatSkills query={slash?draft.slice(1):''}
         onSelect={item=>{updateDraft(inputId,{skill:item,...(slash?{text:''}:{})});setSkillsOpen(false);input.current?.focus();}}
         onClose={()=>{setSkillsOpen(false);if(slash)updateDraft(inputId,{text:''});}}/>}
       {analyzing&&sel&&onAnalysisAdmitted?<ChatCodeAnalysis draftId={inputId} source={analysisSource} selection={sel} projectId={assessment.projectId}
@@ -331,7 +353,7 @@ function Conversation({draftKey,unsaved=false,analysisSource,onAnalysisAdmitted,
         <div className="project-composer-tools"><input type="file" hidden ref={file} onChange={e=>{void attach(e.target.files?.[0]);e.currentTarget.value='';}}/>
           <ChatComposerMenus mode={mode} onMode={changeApproval} proposing={proposing} hasAttachment={!!attachment} disabled={disabled} canPropose={native&&!sourceOnly}
             onCompact={native&&!unsaved&&messages.length>0?()=>void compact():undefined}
-            onSkills={native&&sel?.provider==='openkoda'?()=>setSkillsOpen(true):undefined}
+            onSkills={native&&skillsAllowed&&!!sel?()=>setSkillsOpen(true):undefined}
             onAnalyze={sourceOnly&&native&&sel&&onAnalysisAdmitted?()=>setAnalyzing(true):undefined}
             onAttach={()=>file.current?.click()} onPropose={()=>updateDraft(inputId,{proposing:!proposing})}/>
           <ChatModelPicker value={sel} disabled={disabled} onModels={onModels} onChange={async choice=>{if(onDraftSelection){await onDraftSelection(choice);return;}await action('ai.selection.save',{assessmentId:assessment.id,aiSelection:choice});}}/>

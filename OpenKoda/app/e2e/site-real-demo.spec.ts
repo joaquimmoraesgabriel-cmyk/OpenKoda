@@ -46,7 +46,8 @@ test('configurações, aparência, conta e histórico reutilizam telas reais',as
   await page.getByRole('button',{name:'Análises',exact:true}).click();
   await expect(page.getByText('Números fictícios para explorar o histórico. A demonstração não consome créditos.')).toBeVisible();
   await page.getByRole('button',{name:'Perfil',exact:true}).click();
-  await expect(page.getByText('visitante@example.invalid · PLUS')).toBeVisible();
+  await expect(page.getByText('visitante@example.invalid',{exact:true})).toBeVisible();
+  await expect(page.getByText('Plano Plus',{exact:true})).toBeVisible();
   expect(errors).toEqual([]);
 });
 test('cria projeto local com análise fictícia e conversa nova',async({page})=>{
@@ -78,14 +79,23 @@ for(const width of [320,334,350])test(`compositor a ${width}px envia sem desloca
   await page.getByRole('button',{name:'Enviar mensagem',exact:true}).click();
   const answer=page.getByText(/Esta é uma resposta pré-definida da demonstração/);
   await expect(answer).toBeVisible();
+  await expect(page.getByRole('button',{name:'Cancelar trabalho',exact:true})).toHaveCount(0);
   await answer.scrollIntoViewIfNeeded();
   const sizes=await page.locator('.desk-conversation,.project-chat,.project-chat-bottom,.project-composer,.project-composer-tools,.reasoning-auto').evaluateAll(elements=>elements.map(element=>({name:element.className,width:element.clientWidth,scrollWidth:element.scrollWidth,left:element.scrollLeft})));
   for(const size of sizes){expect(size.scrollWidth,JSON.stringify(size)).toBeLessThanOrEqual(size.width+1);expect(size.left,JSON.stringify(size)).toBe(0);}
   const bounds=await conversation.boundingBox();expect(bounds).not.toBeNull();
-  for(const control of [input,page.getByRole('button',{name:'Adicionar à mensagem'}),page.getByRole('button',{name:/Escolher modelo/}),page.locator('.reasoning-control input'),page.getByRole('button',{name:'Enviar mensagem',exact:true}),answer]){
+  for(const control of [input,page.getByRole('button',{name:'Adicionar à mensagem'}),page.getByRole('button',{name:/Escolher modelo/}),page.getByRole('button',{name:'Enviar mensagem',exact:true}),answer]){
     await expect(control).toBeVisible();const box=await control.boundingBox();expect(box).not.toBeNull();
     expect(box!.x).toBeGreaterThanOrEqual(bounds!.x-1);expect(box!.x+box!.width).toBeLessThanOrEqual(bounds!.x+bounds!.width+1);
   }
+  await expect(page.getByRole('group',{name:'Nível de raciocínio'})).toHaveCount(0);
+  await page.getByRole('button',{name:/Escolher modelo/}).click();
+  const picker=page.getByRole('dialog',{name:'Escolher provedor e modelo'});
+  await expect(picker.getByRole('group',{name:'Nível de raciocínio'})).toBeVisible();
+  const pickerBox=await picker.boundingBox();expect(pickerBox!.x).toBeGreaterThanOrEqual(0);expect(pickerBox!.x+pickerBox!.width).toBeLessThanOrEqual(width);
+  await picker.getByRole('button',{name:'Alto',exact:true}).click();
+  await expect(picker.getByRole('button',{name:'Alto',exact:true})).toHaveAttribute('aria-pressed','true');
+  await picker.getByRole('button',{name:'Fechar modelos'}).click();
   await page.getByRole('button',{name:'Projetos',exact:true}).click();
   await page.getByRole('button',{name:'Relatório de segurança',exact:true}).click();
   await expect(page.getByText('Relatório de exemplo pronto para revisão.')).toBeVisible();
@@ -118,7 +128,7 @@ test('capturas atuais das telas reais para os guias',async({page},info)=>{
 test('todas as categorias de configurações abrem sem erro de execução',async({page})=>{
   const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
   await page.getByRole('button',{name:'Configurações',exact:true}).click();
-  for(const name of ['Geral','Aparência','Dados e privacidade','Armazenamento','Backup e recuperação','Permissões','IA e modelos','Histórico de uso','Diagnóstico e suporte','Relatar um erro','Atualizações']){
+  for(const name of ['Conta e segurança','Plano e assinatura','Geral','Aparência','Dados e privacidade','Armazenamento','Backup e recuperação','Permissões','IA e modelos','Histórico de uso','Diagnóstico e suporte','Relatar um erro','Atualizações']){
     await page.getByRole('button',{name,exact:true}).click();
     await expect(page.getByRole('region',{name:'Conteúdo de '+name})).toBeVisible();
     await expect(page.getByRole('alert')).toHaveCount(0);

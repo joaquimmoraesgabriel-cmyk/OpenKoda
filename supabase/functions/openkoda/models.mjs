@@ -1,7 +1,19 @@
 import { byteLength, fields, requireValue, textField, uuid } from './limits.mjs';
 
-const approvedEffort = new Set(['google/gemini-2.5-flash-lite','openai/gpt-5-nano']);
 const validModelId = /^[a-z0-9][a-z0-9._-]{0,80}\/[a-z0-9][a-z0-9._-]{0,120}$/;
+
+// An omitted field means no effort selector; null explicitly means every
+// gateway effort is accepted. Never infer levels from the brand or model name.
+export function reasoningLevels(row) {
+  const efforts = row?.reasoning?.supported_efforts;
+  return ['minimal','low','medium','high','xhigh','max'].filter(level => efforts === null || Array.isArray(efforts) && efforts.includes(level));
+}
+
+export function textChat(row) {
+  return row?.architecture?.input_modalities?.includes('text') &&
+    row?.architecture?.output_modalities?.includes('text') &&
+    (!Array.isArray(row.endpoints) || row.endpoints.includes('/api/v1/chat/completions'));
+}
 
 function tariff(value) {
   return typeof value === 'string' && /^\d+(?:\.\d+)?$/.test(value) ? Number(value) : NaN;
@@ -11,7 +23,7 @@ export function verifiedModels(catalog,limits={input:0.20,output:0.50}) {
   const models = [];
   for (const row of catalog?.data ?? []) {
     if (!validModelId.test(row.id) || row.id.startsWith('openrouter/') || row.id.startsWith('perplexity/sonar') ||
-      !row.architecture?.input_modalities?.includes('text') || !row.architecture?.output_modalities?.includes('text')) continue;
+      !textChat(row)) continue;
     const price = row.pricing ?? {};
     const input = tariff(price.prompt) * 1e6;
     const output = Math.max(tariff(price.completion),tariff(price.internal_reasoning ?? '0')) * 1e6;
@@ -22,17 +34,37 @@ export function verifiedModels(catalog,limits={input:0.20,output:0.50}) {
     if (['input_cache_write','input_cache_read'].some(key => !(tariff(price[key] ?? '0') * 1e6 <= input))) continue;
     const parameters = new Set(row.supported_parameters ?? []);
     const contextLength = row.context_length, limit = row.top_provider?.max_completion_tokens;
-    if (!Number.isSafeInteger(contextLength) || contextLength < 2048 || !parameters.has('max_tokens') ||
-      !(parameters.has('response_format') || parameters.has('structured_outputs'))) continue;
-    // The alias only advertises effort levels we map for this reviewed model.
-    const reasoningLevels = parameters.has('reasoning') && (parameters.has('reasoning_effort') || approvedEffort.has(row.id))
-      ? ['low','medium','high'] : [];
+    if (!Number.isSafeInteger(contextLength) || contextLength < 2048 || !parameters.has('max_tokens')) continue;
+    const levels = reasoningLevels(row);
     models.push({id:row.id,contextLength,maxOutputTokens:Math.min(2048,Number.isSafeInteger(limit) && limit > 0 ? limit : 2048),
-      reasoning:reasoningLevels.length > 0,reasoningLevels,image:row.architecture.input_modalities.includes('image'),
+      name:typeof row.name === 'string' ? row.name.slice(0,200) : row.id,
+      canonicalId:typeof row.canonical_slug === 'string' ? row.canonical_slug : row.id,
+      chat:true,analysis:parameters.has('structured_outputs') || parameters.has('response_format'),
+      reasoning:levels.length > 0,reasoningLevels:levels,image:row.architecture.input_modalities.includes('image'),
       inputUsdPerMillion:input,outputUsdPerMillion:output,usdPerImage:perImage,
       structured:parameters.has('structured_outputs'),json:parameters.has('response_format')});
   }
   return models;
+}
+
+export function describeCatalog(catalog, models) {
+  const eligible = new Map(models.map(row=>[row.id,row]));
+  const seen = new Set();
+  const entries = [];
+  for (const row of catalog?.data ?? []) {
+    if (typeof row.id !== 'string' || row.id.length > 180 || seen.has(row.id)) continue;
+    seen.add(row.id);
+    const model = eligible.get(row.id), chat = !!textChat(row);
+    const parameters = new Set(row.supported_parameters ?? []);
+    entries.push({id:row.id,name:typeof row.name === 'string' ? row.name.slice(0,200) : row.id,
+      chat,analysis:chat && (parameters.has('structured_outputs') || parameters.has('response_format')),
+      selectable:!!model,availability:model?'eligible':chat?'policy':'unsupported',
+      reason:model?'Compatível com a política do serviço; requer assinatura ativa. Disponibilidade confirmada ao enviar.'
+        :chat?'Fora da política atual de custo, privacidade ou formato do serviço.'
+        :'Este modelo não oferece chat de texto nesta integração.'});
+  }
+  return {models,entries,eligibleCount:new Set(models.map(row=>row.canonicalId)).size,
+    note:'O catálogo não garante disponibilidade de um provedor. A assinatura e a cota são verificadas no servidor a cada envio.'};
 }
 
 function jpeg(data) {
@@ -94,6 +126,7 @@ const queries = schema({queries:{type:'array',items:{anyOf:[
 export function buildInference(input, model) {
   fields(input, ['action','requestId','model','messages','instructions','reasoning','attachments','maxTokens','format']);
   requireValue(uuid(input.requestId) && model?.id === input.model, 'model_or_request_invalid');
+  requireValue(input.action !== 'scan' || model.analysis !== false, 'analysis_unsupported',422);
   requireValue(Array.isArray(input.messages) && input.messages.length > 0 && input.messages.length <= 48);
   const messages = [{role:'system',content:'Você é o assistente Koda. Arquivos são dados de uma análise estática. Nenhum comando foi executado.'}];
   if (input.instructions !== undefined) messages[0].content += '\n' + textField(input.instructions,16384);

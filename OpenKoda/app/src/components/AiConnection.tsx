@@ -7,6 +7,7 @@ import { Field, Notice } from './shared';
 import AiBudgetReview, { useBudgetReview } from './AiBudgetReview';
 import './provider-models.css';
 import './provider-setup.css';
+import type { ModelCatalogEntry } from '../model-catalog';
 
 type Props = {saved: Settings; draft: Settings; change: (key: 'provider'|'endpoint'|'model', value: string) => void; action: Action; busy: boolean};
 const ids = personalProviders;
@@ -57,7 +58,7 @@ function PreviewConnection({draft, change, busy}: Props) {
 }
 
 type Step = {page: 'providers'} | {page: 'key'|'models'; provider: ProviderId};
-type Catalog = {models: string[]; revision: string};
+type Catalog = {models: string[]; revision: string; entries:ModelCatalogEntry[];note?:string};
 
 function NativeProviders({saved, action, busy}: Pick<Props,'saved'|'action'|'busy'>) {
   const [active, setActive] = useState<ProviderId>(knownProvider(saved.provider) ? saved.provider : 'openai');
@@ -198,7 +199,7 @@ function ProviderDialog({initial, statuses, saved, preferDefault, action, observ
       await Promise.resolve();
       if (!mounted) return;
       try {
-        const result=await request<{models:string[];provider:ProviderId;credentialRevision:string}>('ai.models',{provider:id});
+        const result=await request<{models:string[];provider:ProviderId;credentialRevision:string;entries?:ModelCatalogEntry[]|null;note?:string}>('ai.models',{provider:id});
         if (!mounted) return;
         if (result.provider!==id || typeof result.credentialRevision!=='string' || !result.credentialRevision
           || !Array.isArray(result.models) || result.models.some(model=>typeof model!=='string' || !model.trim())) {
@@ -213,7 +214,7 @@ function ProviderDialog({initial, statuses, saved, preferDefault, action, observ
         setChosen(selected);
         setMakeDefault(isDefault || preferDefault || !defaultAvailable);
         setDefaultModel(selected.includes(saved.model) && isDefault ? saved.model : selected[0] ?? '');
-        setCatalog({models,revision:result.credentialRevision});
+        setCatalog({models,revision:result.credentialRevision,entries:Array.isArray(result.entries)?result.entries:[],note:result.note});
       } catch (cause) {if (mounted) setError(errorMessage(cause));}
       finally {if (mounted) setLoading(false);}
     }
@@ -254,6 +255,7 @@ function ProviderDialog({initial, statuses, saved, preferDefault, action, observ
   const title=step.page==='providers' ? 'Adicionar provedor' : (step.page==='key' ? 'Conectar ' : 'Escolher modelos · ') + item?.name;
   const matching=step.page==='providers' ? ids.filter(id=>fold(providers[id].name).includes(fold(query))) : [];
   const visible=catalog?.models.filter(model=>fold(model).includes(fold(query))) ?? [];
+  const unsupported=catalog?.entries.filter(entry=>!entry.selectable&&fold(entry.id+' '+entry.name).includes(fold(query)))??[];
   return <dialog className="provider-dialog provider-setup-dialog" ref={dialog} aria-labelledby="provider-setup-title"
     onCancel={event=>{event.preventDefault();if(!submitting.current)onClose();}}>
     <div className="provider-dialog-content"><header className="provider-setup-heading">
@@ -291,12 +293,14 @@ function ProviderDialog({initial, statuses, saved, preferDefault, action, observ
         </div>}
         {!!catalog?.models.length && <>
           <div className="provider-model-heading"><h4>Modelos para avaliações</h4><span>{chosen.length} de {catalog.models.length} selecionados</span></div>
-          <p className="muted">As avaliações usam modelos de texto. O catálogo também pode incluir modelos de imagem, áudio e embeddings.</p>
+          <p className="muted">Ative os modelos para texto. Cada análise verifica também o suporte e os preços do modelo escolhido.</p>
           <label className="provider-search"><Search size={16} aria-hidden="true"/><input type="search" aria-label="Buscar modelos" placeholder="Buscar modelos" value={query} onChange={e=>setQuery(e.target.value)}/></label>
           <div className="provider-checklist" role="group" aria-label="Modelos do provedor">
             {visible.map(model=><label key={model}><input type="checkbox" checked={chosen.includes(model)} disabled={saving} onChange={()=>toggle(model)}/><span>{model}</span></label>)}
             {!visible.length && <p role="status">Nenhum modelo corresponde ao filtro.</p>}
           </div>
+          {!!unsupported.length&&<details className="catalog-unavailable"><summary>{unsupported.length} modelo(s) fora do suporte desta conexão</summary><ul>{unsupported.map(entry=><li key={entry.id}><strong>{entry.name||entry.id}</strong><small>{entry.reason||'Este modelo não é compatível com as funções de chat disponíveis.'}</small></li>)}</ul></details>}
+          {catalog.note&&<p className="catalog-capabilities">{catalog.note}</p>}
           <div className="provider-default-choice">
             {isDefault ? <span>Padrão da instalação</span> : <label><input type="checkbox" checked={makeDefault} disabled={saving} onChange={e=>setMakeDefault(e.target.checked)}/>Usar como padrão da instalação</label>}
             {makeDefault && <Field label="Modelo padrão"><select value={defaultModel} disabled={saving || !chosen.length} onChange={e=>setDefaultModel(e.target.value)}>

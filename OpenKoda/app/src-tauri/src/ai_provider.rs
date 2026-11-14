@@ -117,7 +117,7 @@ pub struct AiSelection { pub provider: ProviderId, pub model: String, #[serde(de
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
-pub enum Reasoning { Low, Medium, High }
+pub enum Reasoning { Minimal, Low, Medium, High, Xhigh, Max }
 
 /// A missing selection for a matching, older key preserves its original catalog behavior.
 /// A newer key must complete setup before it can use any of the previous key's models.

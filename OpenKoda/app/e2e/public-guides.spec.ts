@@ -49,14 +49,23 @@ for(const width of [375,1440]){
         }
       }
       await page.goto(origin+'/');
-      const project=page.getByRole('tab',{name:'Projeto',exact:true});
-      await project.focus();
-      await expect(page.getByRole('heading',{name:'Investigar dois arquivos'})).toBeVisible();
+      const captures=page.getByRole('group',{name:'Capturas da revisão'});
+      const project=captures.getByRole('button',{name:'Projeto',exact:true});
+      await project.focus();await page.keyboard.press('Enter');
+      await expect(project).toHaveAttribute('aria-pressed','true');
+      await expect(page.locator('#review-capture-projeto')).toBeVisible();
+      await expect(page.getByRole('heading',{name:'Definir a pergunta da revisão'})).toBeVisible();
+      const report=captures.getByRole('button',{name:'Relatório',exact:true});
+      await report.focus();await page.keyboard.press('Enter');
+      await expect(report).toHaveAttribute('aria-pressed','true');
+      await expect(page.locator('#review-capture-relatorio')).toBeVisible();
+      await expect(page.locator('#review-capture-projeto')).toBeHidden();
+      await captures.getByRole('button',{name:'Chat',exact:true}).click();
+      await expect(page.locator('#review-capture-chat')).toBeVisible();
+      await expect(page.getByRole('heading',{name:'Conectar a sessão ao pedido'})).toBeVisible();
+      await page.getByRole('tab',{name:'Chave própria'}).focus();
       await page.keyboard.press('ArrowRight');
-      await expect(page.getByRole('heading',{name:'Da entrada HTTP ao eval()'})).toBeVisible();
-      await page.getByRole('tab',{name:'Chat',exact:true}).click();
-      await expect(page.getByRole('heading',{name:'De onde vem a fórmula?'})).toBeVisible();
-      await page.getByRole('tab',{name:'IA da assinatura'}).click();
+      await expect(page.getByRole('tab',{name:'IA da assinatura'})).toBeFocused();
       await expect(page.getByRole('heading',{name:'Acompanhe uma cota na sua conta Koda.'})).toBeVisible();
       await page.getByRole('link',{name:'Entender o uso da assinatura'}).click();
       await expect(page.getByRole('heading',{level:1})).toHaveText('Usar a conexão da assinatura');
@@ -105,8 +114,10 @@ test('conteúdo estático e navegação de leitura funcionam sem JavaScript',asy
     const page=await context.newPage();
     await page.goto(origin+'/');
     await expect(page.getByRole('heading',{name:'Acompanhe uma revisão'})).toBeVisible();
-    await expect(page.getByRole('heading',{name:'De onde vem a fórmula?'})).toBeVisible();
-    await expect(page.getByRole('heading',{name:'Investigar dois arquivos'})).toBeVisible();
+    await expect(page.getByRole('heading',{name:'Conectar a sessão ao pedido'})).toBeVisible();
+    await expect(page.getByRole('heading',{name:'Definir a pergunta da revisão'})).toBeVisible();
+    for(const step of ['projeto','relatorio','chat'])await expect(page.locator('#review-capture-'+step)).toBeVisible();
+    await expect(page.getByRole('link',{name:'guias ilustrados'})).toBeVisible();
     await expect(page.getByRole('heading',{name:'Acompanhe uma cota na sua conta Koda.'})).toBeVisible();
     await expect(page.getByRole('tab')).toHaveCount(0);
     await page.locator('.nav-group').filter({has:page.locator('summary',{hasText:'Guias'})}).locator('summary').click();

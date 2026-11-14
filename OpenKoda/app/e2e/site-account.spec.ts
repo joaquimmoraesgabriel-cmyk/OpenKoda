@@ -42,6 +42,7 @@ test.beforeAll(() => {
 async function siteFixture(page:Page,accepted=false,options:{beforeAction?:(body:Record<string,unknown>)=>Promise<void>;account?:()=>unknown;failAction?:()=>string|undefined}={}){
   const posted:{action:string;marketing?:boolean}[]=[];
   let marketing=accepted;
+  let simulation:unknown=null;
   const tickets:{id:string;subject:string;message:string;status:string;createdAt:string;replies:unknown[]}[]=[];
   const registrations:{data:{adult_requested:boolean;privacy_requested:string}}[]=[];
   const user={id:'synthetic-user',email:'teste@example.invalid',email_confirmed_at:version};
@@ -80,7 +81,11 @@ async function siteFixture(page:Page,accepted=false,options:{beforeAction?:(body
     expect(url.pathname).toBe('/functions/v1/openkoda');posted.push(body);
     await options.beforeAction?.(body);
     if(options.failAction?.()===body.action)return Response.json({error:'fixture_unavailable'},{status:503});
-    if(body.action==='account')return Response.json(options.account?.()??{plan:null,consent:{acceptedAt:accepted?version:null,termsVersion:version,privacyVersion:version,requiredTermsVersion:version,requiredPrivacyVersion:version,marketing}});
+    if(body.action==='account')return Response.json(options.account?.()??{plan:null,simulation,controls:{simulationEnabled:true},consent:{acceptedAt:accepted?version:null,termsVersion:version,privacyVersion:version,requiredTermsVersion:version,requiredPrivacyVersion:version,marketing}});
+    if(body.action==='simulation'){
+      simulation={plan:body.plan,status:body.outcome==='cancel'?'canceled':'active',mode:'internal',periodStart:new Date().toISOString(),periodEnd:new Date(Date.now()+604800000).toISOString()};
+      return Response.json({status:body.outcome==='cancel'?'canceled':'active',simulation,grantsProductionCredit:false,replay:false});
+    }
     if(['consent_initial','consent'].includes(body.action)){accepted=true;marketing=body.marketing===true;}
     if(body.action==='marketing')marketing=body.enabled===true;
     if(body.action==='support'){tickets.push({id:body.requestId,subject:body.subject,message:body.message,status:'open',createdAt:new Date().toISOString(),replies:[]});return Response.json({id:body.requestId});}
@@ -199,9 +204,10 @@ test('site mantém a sessão no reload, nos preços e numa nova aba; sair revoga
   await expect(page.getByRole('radio',{name:/Ultra/})).toBeChecked();
   await page.getByRole('radio',{name:/Pro/}).check();
   await page.getByRole('button',{name:'Simular assinatura'}).click();
-  await expect(page.getByText('Simulação registrada.',{exact:false})).toBeVisible();
-  expect(f.posted.filter(p=>p.action==='checkout')).toEqual([expect.objectContaining({plan:'pro'})]);
+  await expect(page.getByText('Simulação ativa.',{exact:false})).toBeVisible();
+  expect(f.posted.filter(p=>p.action==='simulation')).toEqual([expect.objectContaining({plan:'pro',outcome:'activate'})]);
   await page.reload();await expect(page.getByRole('heading',{name:'Minha conta'})).toBeVisible();
+  await expect(page.locator('[data-plan-state]')).toContainText('Pro · simulação interna');
   await page.getByRole('link',{name:'Preços',exact:true}).click();
   await page.getByRole('link',{name:'Minha conta',exact:true}).click();
   await expect(page.getByRole('heading',{name:'Minha conta'})).toBeVisible();
@@ -231,9 +237,37 @@ test('Google do aplicativo aguarda o CAPTCHA e devolve o código ao aplicativo c
   await completeCaptcha(page);
   await Promise.all([page.waitForURL('**/auth/v1/authorize?**'),next.click()]);
   expect(new URL(page.url()).searchParams.get('code_challenge')).toBe(challenge);
-  await Promise.all([page.waitForURL(loopback+'?*'),page.getByRole('link',{name:'Entrar na conta de teste'}).click()]);
+  await page.getByRole('link',{name:'Entrar na conta de teste'}).click();
+  await Promise.all([page.waitForURL(loopback+'?*'),page.getByRole('link',{name:'Abrir aplicativo'}).click()]);
   expect(new URL(page.url()).searchParams.get('state')).toBe(state);
   expect(new URL(page.url()).searchParams.get('code')).toMatch(/^[\da-f-]{36}$/);
+});
+
+test('retorno nativo não tenta resgatar o código na sessão web e mantém botão de retorno',async({page})=>{
+  await siteFixture(page);
+  let exchanged=false;
+  await page.route(site+'/conta/api/exchange',route=>{exchanged=true;return route.fulfill({status:503,contentType:'application/json',body:'{"code":"service_unavailable"}'});});
+  const state=randomUUID(),code=randomUUID();
+  await page.goto(site+'/conta/');
+  await page.evaluate(({state})=>sessionStorage.setItem('koda.auth.attempt.desktop',JSON.stringify({desktop:true,state,port:'19834',expires:Date.now()+180000})),{state});
+  await page.goto(site+'/conta/retorno/?code='+code);
+  await expect(page.getByRole('link',{name:'Abrir aplicativo'})).toBeVisible();
+  expect(exchanged).toBe(false);
+  expect(await page.evaluate(()=>sessionStorage.getItem('koda.auth.attempt.desktop'))).toBeNull();
+  await page.reload();
+  await expect(page.getByRole('link',{name:'Abrir aplicativo'})).toHaveCount(0);
+  expect(exchanged).toBe(false);
+});
+
+test('retorno nativo expirado exige nova tentativa sem encaminhar código para web ou localhost',async({page})=>{
+  await siteFixture(page);let exchanges=0;
+  await page.route(site+'/conta/api/exchange',route=>{exchanges++;return route.fulfill({status:500,body:'{}'});});
+  await page.goto(site+'/conta/');
+  await page.evaluate(({state})=>sessionStorage.setItem('koda.auth.attempt.desktop',JSON.stringify({desktop:true,state,port:'19834',expires:Date.now()-1})),{state:randomUUID()});
+  await page.goto(site+'/conta/retorno/?code='+randomUUID());
+  await expect(page.getByRole('heading',{name:'O login não foi concluído'})).toBeVisible();
+  await expect(page.getByRole('link',{name:'Abrir aplicativo'})).toHaveCount(0);
+  expect(exchanges).toBe(0);
 });
 
 test('atualizar depois do link de recuperação preserva o formulário até salvar a senha',async({page})=>{

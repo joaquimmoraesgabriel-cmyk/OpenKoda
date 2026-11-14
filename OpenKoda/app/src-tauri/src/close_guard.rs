@@ -49,7 +49,22 @@ pub(crate) struct CloseGate(Mutex<State>);
 
 pub(crate) struct Admission { gate: Arc<CloseGate>, id: u64 }
 
+// This lock is reversible if backup/installation fails. No request can race the
+// idle check and begin a new write or paid operation while the installer starts.
+pub(crate) struct UpdateLease { gate: Arc<CloseGate>, id: u64 }
+
 impl CloseGate {
+    pub fn begin_update(self: &Arc<Self>) -> Result<UpdateLease, String> {
+        let mut state = self.0.lock().unwrap_or_else(|poison| poison.into_inner());
+        if state.closing || !state.live.is_empty() {
+            return Err("Aguarde a conclusão das respostas, análises e operações antes de instalar a atualização.".into());
+        }
+        state.next = state.next.checked_add(1).ok_or("Limite de operações da sessão atingido.")?;
+        let id = state.next;
+        state.live.insert(id, Activity { area: Area::Settings, assessment_id: None });
+        state.closing = true;
+        Ok(UpdateLease { gate: self.clone(), id })
+    }
     pub fn admit(self: &Arc<Self>, activity: Option<Activity>) -> Result<Option<Admission>, String> {
         let mut state = self.0.lock().unwrap_or_else(|poison| poison.into_inner());
         if state.closing { return Err("A janela está fechando. A operação não foi iniciada.".into()); }
@@ -70,6 +85,14 @@ impl CloseGate {
             .or_else(|| state.live.values().next()).copied();
         if exiting && current.is_none() { state.closing = true; }
         current
+    }
+}
+
+impl Drop for UpdateLease {
+    fn drop(&mut self) {
+        let mut state = self.gate.0.lock().unwrap_or_else(|poison| poison.into_inner());
+        state.live.remove(&self.id);
+        state.closing = false;
     }
 }
 

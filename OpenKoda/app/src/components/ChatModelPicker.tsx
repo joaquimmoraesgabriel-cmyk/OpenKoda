@@ -1,9 +1,10 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
-import { Check, Grid2X2, Plus, Search, X } from 'lucide-react';
+import { Check, Grid2X2, Plus, Search, SlidersHorizontal, X } from 'lucide-react';
 import { native, request } from '../api';
 import { personalProviders, providers, type AiSelection, type ProviderId, type ProviderStatus } from '../ai-provider';
 import { type CommercialModel, type Reasoning, accountChanged } from '../commercial';
 import { errorMessage } from '../types';
+import { useDesktopSession } from '../desktop-session';
 
 type Group = { provider: ProviderId; models: string[] };
 type Props = {
@@ -15,6 +16,9 @@ type Props = {
 };
 
 export function ChatModelPicker({ value, onChange, disabled, onModels, forAnalysis = false }: Props) {
+  const session=useDesktopSession();
+  const managedAllowed=session.account?.entitlements?.hostedInference===true;
+  const reasoningAllowed=session.account?.entitlements?.reasoning===true;
   const id = useId();
   const trigger = useRef<HTMLButtonElement>(null);
   const dialog = useRef<HTMLDivElement>(null);
@@ -27,11 +31,13 @@ export function ChatModelPicker({ value, onChange, disabled, onModels, forAnalys
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [commercial,setCommercial]=useState<CommercialModel[]>([]);
+  const [commercialNote,setCommercialNote]=useState('');
+  const [commercialLoaded,setCommercialLoaded]=useState(false);
   const [sessionRevision,setSessionRevision]=useState(0);
   const [personalReasoning,setPersonalReasoning]=useState<{key:string;levels:Reasoning[];subscribed:boolean}>();
   useEffect(()=>{
     setPersonalReasoning(undefined);
-    if(!native||!value||value.provider==='openkoda')return;
+    if(!native||!value||value.provider==='openkoda'||!reasoningAllowed)return;
     let current=true;
     const selection=value;
     async function load(){
@@ -43,9 +49,9 @@ export function ChatModelPicker({ value, onChange, disabled, onModels, forAnalys
       }catch{if(current)setPersonalReasoning(undefined);}
     }
     void load();return()=>{current=false;};
-  },[value?.provider,value?.model,sessionRevision]);
+  },[value?.provider,value?.model,sessionRevision,session.user?.id,reasoningAllowed]);
   useEffect(()=>{
-    const reset=()=>{setCommercial([]);setSessionRevision(n=>n+1);};
+    const reset=()=>{setCommercial([]);setCommercialLoaded(false);setSessionRevision(n=>n+1);};
     window.addEventListener(accountChanged,reset);return ()=>window.removeEventListener(accountChanged,reset);
   },[]);
   useEffect(()=>{
@@ -54,13 +60,13 @@ export function ChatModelPicker({ value, onChange, disabled, onModels, forAnalys
     async function catalog(){
       try{
         const session=await request<{user:{id:string}|null}>('account.session');
-        if(!session?.user){if(active)setCommercial([]);return;}
-        const result=await request<{models:CommercialModel[]}>('account.models');
-        if(active)setCommercial(Array.isArray(result.models)?result.models:[]);
-      }catch{if(active)setCommercial([]);}
+        if(!session?.user){if(active){setCommercial([]);setCommercialLoaded(true);}return;}
+        const result=await request<{models:CommercialModel[];note?:string}>('account.models');
+        if(active){setCommercial(Array.isArray(result.models)?result.models.filter(model=>!forAnalysis||model.analysis!==false):[]);setCommercialNote(result.note??'');setCommercialLoaded(true);}
+      }catch{if(active){setCommercial([]);setCommercialLoaded(true);}}
     }
     void catalog();return ()=>{active=false;};
-  },[open,value?.provider,sessionRevision]);
+  },[open,value?.provider,sessionRevision,forAnalysis]);
   const [error, setError] = useState('');
 
   useLayoutEffect(() => {
@@ -133,17 +139,17 @@ export function ChatModelPicker({ value, onChange, disabled, onModels, forAnalys
     if (restoreFocus) trigger.current?.focus({ preventScroll: true });
   }
   const term = query.toLocaleLowerCase().trim();
-  const allGroups:Group[]=commercial.length?[{provider:'openkoda',models:commercial.map(m=>m.id)},...groups]:groups;
+  const allGroups:Group[]=managedAllowed&&commercial.length?[{provider:'openkoda',models:commercial.map(m=>m.id)},...groups]:groups;
   const personal=personalReasoning?.key===value?.provider+':'+value?.model?personalReasoning:undefined;
-  const levels=value?.provider==='openkoda'?commercial.find(m=>m.id===value.model)?.reasoningLevels??[]:personal?.levels??[];
-  const levelLabel:Record<Reasoning,string>={low:'Leve',medium:'Médio',high:'Alto'};
+  const levels=!reasoningAllowed?[]:value?.provider==='openkoda'?(managedAllowed?commercial.find(m=>m.id===value.model)?.reasoningLevels??[]:[]):personal?.levels??[];
+  const levelLabel:Record<string,string>={minimal:'Mínimo',low:'Leve',medium:'Médio',high:'Alto',xhigh:'Muito alto',max:'Máximo'};
   const visible = allGroups.filter(g => !filter || g.provider === filter).map(g => ({
     ...g, models: g.models.filter(m => (m + ' ' + providers[g.provider].name).toLocaleLowerCase().includes(term)),
   })).filter(g => g.models.length);
 
-  async function choose(selection: AiSelection) {
+  async function choose(selection: AiSelection,closeAfter=true) {
     setSaving(true); setError('');
-    try { await onChange(selection); close(true); }
+    try { await onChange(selection); if(closeAfter)close(true); }
     catch (e) { setError(errorMessage(e)); }
     finally { setSaving(false); }
   }
@@ -153,7 +159,7 @@ export function ChatModelPicker({ value, onChange, disabled, onModels, forAnalys
       title={value ? providers[value.provider].name + ' · ' + value.model : 'Escolher modelo'}
       aria-label={'Escolher modelo · ' + (value?.model || 'Nenhum selecionado')}>
       {value && <img src={providers[value.provider].logo} alt="" width="17" height="17"/>}
-      <span>{value?.model || 'Escolher modelo'}</span>
+      <span>{value?.model || 'Escolher modelo'}</span>{value?.reasoning&&levels.includes(value.reasoning)&&<small className="model-effort-badge">{levelLabel[value.reasoning]}</small>}
     </button>
     <div id={id} popover="auto" role="dialog" ref={dialog} className="chat-model-dialog" aria-label="Escolher provedor e modelo"
       onToggle={e => {
@@ -189,7 +195,8 @@ export function ChatModelPicker({ value, onChange, disabled, onModels, forAnalys
             {g.models.map(m => {
               const selected = value?.provider === g.provider && value.model === m;
               return <button key={m} type="button" disabled={saving} aria-pressed={selected} onClick={() => {
-                const effort=g.provider==='openkoda'?commercial.find(row=>row.id===m)?.reasoningLevels[0]:undefined;
+                const compatible=g.provider==='openkoda'?commercial.find(row=>row.id===m)?.reasoningLevels??[]:selected?levels:[];
+                const effort=value?.reasoning&&compatible.includes(value.reasoning)?value.reasoning:undefined;
                 void choose({provider:g.provider,model:m,...(effort?{reasoning:effort}:{})});
               }}>
                 <span>{m}</span>{selected && <Check size={15}/>}
@@ -198,16 +205,19 @@ export function ChatModelPicker({ value, onChange, disabled, onModels, forAnalys
           </section>)}
         </div>
       </div>
+      {value&&<section className="model-reasoning" aria-label="Raciocínio do modelo">
+        <div className="model-reasoning-title"><SlidersHorizontal size={15}/><strong>Raciocínio</strong><span>{value.reasoning?levelLabel[value.reasoning]+(levels.includes(value.reasoning)?'':' · indisponível'):'Automático'}</span></div>
+        {levels.length>0?<><div className="model-reasoning-options" role="group" aria-label="Nível de raciocínio">
+          <button type="button" aria-pressed={!value.reasoning||!levels.includes(value.reasoning)} disabled={disabled||saving} onClick={()=>void choose({provider:value.provider,model:value.model},false)}>Automático</button>
+          {levels.map(level=><button key={level} type="button" aria-pressed={value.reasoning===level} disabled={disabled||saving} onClick={()=>void choose({...value,reasoning:level},false)}>{levelLabel[level]}</button>)}
+        </div><p>{value.provider==='openkoda'?'Ajuste aplicado às próximas mensagens. Mais esforço pode aumentar o consumo.':'Ajuste disponível com seu plano. O consumo é cobrado na sua chave.'}</p></>:
+          <p>{value.provider==='openkoda'&&!commercialLoaded?'Consultando as opções do modelo…':value.provider!=='openkoda'&&!personal?'O ajuste depende de um plano ativo e de suporte nesta conexão.':personal&&!personal.subscribed?'O ajuste de raciocínio está disponível nos planos OpenKoda.':'Este modelo não oferece ajuste de raciocínio nesta conexão. O modo automático é mantido.'}</p>}
+        {!!value.reasoning&&!reasoningAllowed&&!session.loading&&<button type="button" disabled={disabled||saving} onClick={()=>void choose({provider:value.provider,model:value.model},false)}>Usar Automático</button>}
+      </section>}
       {error && <p role="alert">{error}</p>}
+      {!!session.user&&!session.loading&&!managedAllowed&&<p className="model-catalog-note">Os modelos da assinatura exigem acesso ativo e cota disponível. Consulte o catálogo em IA e modelos.</p>}
+      {filter==='openkoda'&&commercialNote&&<p className="model-catalog-note">{commercialNote}</p>}
       {onModels && <footer><button type="button" disabled={saving} onClick={() => { close(false); onModels(); }}><Plus size={15}/>Configurar modelos</button></footer>}
     </div>
-    {value&&levels.length>0&&<label className="reasoning-control">Raciocínio · {value.reasoning?levelLabel[value.reasoning]:'Automático'}
-      <input aria-label="Nível de raciocínio" type="range" min={0} max={levels.length} step={1} disabled={disabled||saving}
-        value={value.reasoning?Math.max(0,levels.indexOf(value.reasoning)+1):0} aria-valuetext={value.reasoning?levelLabel[value.reasoning]:'Automático'}
-        onChange={event=>void choose(event.target.valueAsNumber===0?{provider:value.provider,model:value.model}:{...value,reasoning:levels[event.target.valueAsNumber-1]})}/></label>}
-    {value?.reasoning&&<button type="button" className="button quiet reasoning-auto" disabled={disabled||saving}
-      onClick={()=>void choose({provider:value.provider,model:value.model})}>Automático</button>}
-    {personal?.subscribed&&levels.length>0&&<span className="reasoning-note">Uso cobrado na sua chave.</span>}
-    {personal?.subscribed&&!levels.length&&<span className="reasoning-note">Este modelo não oferece ajuste nesta conexão.</span>}
   </>;
 }

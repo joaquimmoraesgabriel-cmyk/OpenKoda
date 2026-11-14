@@ -4,5 +4,5 @@
   "description": "Only the trusted local main webview can call validated domain actions.",
   "windows": ["main"],
   "local": true,
-  "permissions": ["allow-request"]
+  "permissions": ["allow-request", "allow-desktop-update"]
 }

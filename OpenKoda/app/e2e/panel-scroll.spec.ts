@@ -30,7 +30,7 @@ test('as categorias e o conteúdo das configurações rolam de forma independent
   await page.getByRole('button', {name:'Aparência', exact:true}).click();
   await checkIndependentScroll(page, page.locator('.settings-menu'), page.getByRole('region', {name:'Conteúdo de Aparência'}));
   await page.getByRole('button', {name:'Atualizações', exact:true}).click();
-  await expect(page.getByRole('heading', {name:'Atualizações', exact:true})).toBeInViewport();
+  await expect(page.getByRole('heading', {name:'Atualizações', exact:true, level:2})).toBeInViewport();
 });
 
 test('as listas de avaliações e achados mantêm a posição enquanto se lê um registro', async ({page}) => {

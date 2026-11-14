@@ -49,20 +49,20 @@ details[open] > summary::after { background-size: 100% 2px, 0 0; }
   :root[data-theme="system"] { color-scheme: dark; }
 }
 :root {
-  --display-font: Georgia, "Times New Roman", serif;
-  --surface: light-dark(#fafbf6, #192b22);
-  --subtle: light-dark(#ebeee4, #102019);
-  --text: light-dark(#18251e, #f2f5eb);
-  --muted: light-dark(#4f5a52, #b7ccc0);
-  --line: light-dark(#d2d6cb, #3c5045);
-  --control-line: light-dark(#78857a, #7e9485);
-  --accent: light-dark(#162b23, #d9f49a);
-  --accent-hover: light-dark(#304b3e, #e7f9c3);
-  --selection: light-dark(#dce9c8, #304837);
-  --rail-bg: light-dark(#162b23, #102019);
-  --rail-fg: #edf2e8;
-  --rail-selected: #d9f49a;
-  --rail-selected-fg: #18251e;
+  --display-font: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+  --surface: light-dark(#ffffff, #20252a);
+  --subtle: light-dark(#f3f5f6, #171b1f);
+  --text: light-dark(#172027, #eff2f4);
+  --muted: light-dark(#56636b, #b7c1c8);
+  --line: light-dark(#dbe1e5, #3c464e);
+  --control-line: light-dark(#85929b, #8998a2);
+  --accent: light-dark(#202c34, #cdf477);
+  --accent-hover: light-dark(#3a4c57, #dafa9c);
+  --selection: light-dark(#eaf1df, #344132);
+  --rail-bg: light-dark(#1b242b, #151b20);
+  --rail-fg: #edf2f4;
+  --rail-selected: #cdf477;
+  --rail-selected-fg: #172027;
   --warning: light-dark(#fff5e4, #3e3222);
   --danger: light-dark(#9e2b2b, #ffb4aa);
 }

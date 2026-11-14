@@ -1,5 +1,5 @@
 import { ApiError, fields, fingerprint, ipFingerprint, readJson, requireValue, textField, uuid } from './limits.mjs';
-import { buildInference, verifiedModels } from './models.mjs';
+import { buildInference, verifiedModels, describeCatalog } from './models.mjs';
 import { chatStream, generationId, metering } from './stream.mjs';
 
 const PLATFORM_SITE = 'https://openkoda-desktop.steelyrowan1.chatgpt.site';
@@ -10,6 +10,7 @@ const accountActions = {
   consent:['consent',['termsVersion','privacyVersion','marketing']],
   consent_initial:['consent_initial',['termsVersion','privacyVersion','marketing']],
   checkout:['checkout_mock',['plan','requestId']],
+  simulation:['simulation',['plan','requestId','outcome']],
   support:['support_create',['subject','message','requestId']], delete:['delete',['confirmation']],
   cancel_wait:['cancel_wait',['requestId','queueToken']],
 };
@@ -29,6 +30,9 @@ function accountArgs(action, input) {
     case 'checkout':
       requireValue(['plus','pro','ultra'].includes(input.plan));
       return {p_plan:input.plan,p_request:input.requestId};
+    case 'simulation':
+      requireValue(['plus','pro','ultra'].includes(input.plan)&&['activate','cancel','expire','fail'].includes(input.outcome));
+      return {p_plan:input.plan,p_request:input.requestId,p_outcome:input.outcome};
     case 'cancel_wait':
       requireValue(uuid(input.queueToken));
       return {p_request:input.requestId,p_queue_token:input.queueToken};
@@ -145,13 +149,14 @@ export function createHandler({env, fetcher = fetch, waitUntil}) {
   async function loadCatalog() {
     if (catalogCache && Date.now() < catalogCache.until) return catalogCache.rows;
     if (!catalogLoading) catalogLoading = (async () => {
-      const res = await fetcher(ROUTER+'/models?zdr=true',{redirect:'error',signal:AbortSignal.timeout(7000)});
+      const res = await fetcher(ROUTER+'/models?zdr=true&output_modalities=all',{redirect:'error',signal:AbortSignal.timeout(7000)});
       requireValue(res.ok,'catalog_unavailable',503);
       const limits = {input:Number(env('OPENKODA_MAX_INPUT_USD_PER_MILLION') ?? '0.20'),
         output:Number(env('OPENKODA_MAX_OUTPUT_USD_PER_MILLION') ?? '0.50')};
       requireValue(Object.values(limits).every(v=>Number.isFinite(v) && v > 0 && v <= 100),'invalid_price_policy',503);
-      const rows = verifiedModels(await readJson(res,20*1024*1024,502),limits);
-      requireValue(rows.length,'catalog_unavailable',503);
+      const catalog = await readJson(res,20*1024*1024,502);
+      requireValue(Array.isArray(catalog.data),'catalog_unavailable',503);
+      const rows = describeCatalog(catalog,verifiedModels(catalog,limits));
       catalogCache = {rows,until:Date.now()+60000};
       return rows;
     })().finally(() => { catalogLoading = undefined; });
@@ -195,12 +200,12 @@ export function createHandler({env, fetcher = fetch, waitUntil}) {
       requireValue(['models','chat','scan'].includes(action),'unknown_action',404);
       if (action === 'models') {
         fields(input,['action']);
-        return json({models:await loadCatalog()});
+        return json(await loadCatalog());
       }
       const routerKey = env('OPENKODA_OPENROUTER_KEY');
       requireValue(env('OPENKODA_AI_ENABLED') === 'true' && routerKey,'inference_disabled',503);
       const ipHash = await ipFingerprint(request,env('OPENKODA_IP_HMAC_KEY'));
-      const models = await loadCatalog();
+      const {models} = await loadCatalog();
       const model = models.find(row => row.id === input.model);
       const {body,reservation} = buildInference(input,model);
       const identity = {p_user:user,p_request:input.requestId};
