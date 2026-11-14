@@ -12,4 +12,6 @@ Em 13 de novembro de 2026, uma conta descartável com plano Plus entrou pelo Sup
 
 O acesso temporário à credencial foi restrito à sessão descartável e a um único identificador de solicitação. A função obteve o valor apenas em memória após receber o credenciamento cifrado. O fluxo normal verificou o usuário no Supabase Auth, o modelo, os limites de custo, a fila, o despacho e a liquidação. Ao encerrar o ensaio, o servidor voltou à implementação normal, com os orçamentos diário e mensal em zero e a inferência comercial desativada.
 
+A exclusão da conta pelo fluxo normal do aplicativo recebeu HTTP 200. Usar a mesma sessão em seguida recebeu HTTP 401. No banco hospedado, a contagem final foi zero para o usuário descartável, suas sessões, perfil e assinatura. A fila e as reservas ativas também estavam vazias. A credencial temporária de sessão foi removida do computador.
+
 Impressão SHA-256 da solicitação: `2cfdb12b1afa3ab13a04a3feff2af4caede959f553830abe985af0aaa7b33d21`. Impressão SHA-256 do identificador de geração: `0964874b3a977e07e4294d25375cd4a82b3529408cd3ab954ecd5f09397f6660`.
