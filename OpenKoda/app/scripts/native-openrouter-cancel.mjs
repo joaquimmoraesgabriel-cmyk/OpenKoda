@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { chromium, expect } from '@playwright/test';
 
 // Sends a single bounded chat. Reopening and billing checks never repeat inference.
-const [flag, keyFile, binaryPath, binarySha256] = process.argv.slice(2);
+const [flag, keyFile, binaryPath, binarySha256, selectedModel] = process.argv.slice(2);
 assert.equal(flag, '--live-openrouter');
 assert.match(binarySha256 ?? '', /^[0-9a-f]{64}$/);
 const binary = await realpath(binaryPath);
@@ -22,7 +22,8 @@ const root = join(app, '.local', 'live-cancel-' + randomUUID());
 const profile = join(root, 'profile');
 const repo = join(root, 'fixture');
 const provider = 'openrouter';
-const model = 'mistralai/ministral-8b-2512';
+const model = selectedModel ?? 'mistralai/ministral-8b-2512';
+assert.ok(['mistralai/ministral-8b-2512','openai/gpt-4.1-nano','qwen/qwen3-14b'].includes(model));
 const capUsd = '0.01';
 const question = 'Para este teste sintético de transmissão, escreva uma lista numerada de 150 pequenos exemplos de nomes de variáveis em Python. ' +
   'Escreva em cada linha o número, o nome e uma breve frase de explicação. Comece diretamente pelo primeiro exemplo e continue até o número 150.';
@@ -36,12 +37,19 @@ assert.equal(Number(entry.pricing.request ?? 0), 0);
 assert.ok(Number(entry.pricing.internal_reasoning ?? 0) <= 0.0000005);
 const keys = (await readFile(keyFile, 'utf8')).match(/sk-or-[\w-]{18,512}/g) ?? [];
 assert.equal(keys.length, 1, 'Expected one OpenRouter credential');
+async function keyUsage() {
+  const response=await fetch('https://openrouter.ai/api/v1/key',{headers:{Authorization:'Bearer '+keys[0]},redirect:'error',signal:AbortSignal.timeout(15000)});
+  assert.equal(response.status,200);
+  const used=(await response.json()).data.usage;
+  assert.ok(typeof used==='number'&&Number.isFinite(used));
+  return used;
+}
 await mkdir(root);
 await mkdir(profile);
 await mkdir(repo);
 const fixture = 'Synthetic cancellation fixture.\n';
 await writeFile(join(repo, 'README.md'), fixture, {flag:'wx'});
-const receipt = {model, binarySha256, capUsd, stage:'launch', passed:false, keyRemoved:false};
+const receipt = {model, binarySha256, capUsd, stage:'launch', passed:false, keyRemoved:false, keyUsageBeforeUsd:await keyUsage()};
 const portProbe = createServer();
 portProbe.listen(0, '127.0.0.1');
 await once(portProbe, 'listening');
@@ -78,9 +86,9 @@ async function readGeneration() {
     return typeof data?.total_cost === 'number';
   },{timeout:65000,intervals:[500,1000,2500]}).toBe(true);
   assert.equal(data.id,id);
-  assert.equal(data.model,model);
+  assert.ok([entry.id,entry.canonical_slug].includes(data.model),'Unexpected generation model: '+data.model);
   assert.equal(data.streamed,true);
-  receipt.generation = {id, costUsd:data.total_cost, cancelled:data.cancelled, streamed:data.streamed,
+  receipt.generation = {id, model:data.model, costUsd:data.total_cost, cancelled:data.cancelled, streamed:data.streamed,
     finishReason:data.finish_reason, nativeFinishReason:data.native_finish_reason, inputTokens:data.native_tokens_prompt,
     outputTokens:data.native_tokens_completion};
   assert.ok(data.total_cost >= 0 && data.total_cost <= Number(capUsd));
@@ -177,7 +185,16 @@ try {
       receipt.keyRemoved = true;
     }
     if (assessmentId) {
-      try { await readGeneration(); }
+      try {
+        await readGeneration();
+        if(receipt.generation){
+          await expect.poll(async()=>{
+            receipt.keyUsageAfterUsd=await keyUsage();
+            receipt.keyUsageDeltaUsd=Number((receipt.keyUsageAfterUsd-receipt.keyUsageBeforeUsd).toFixed(9));
+            return receipt.keyUsageDeltaUsd+0.000000001>=receipt.generation.costUsd;
+          },{timeout:65000,intervals:[1000,2000,3000]}).toBe(true);
+        }
+      }
       catch (error) { receipt.generationError = String(error).replaceAll(keys[0],'[redacted]').slice(0,900); }
     }
   } finally {

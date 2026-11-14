@@ -13,7 +13,7 @@ import { chromium, expect } from '@playwright/test';
 // participating. Secrets never enter argv, screenshots, traces, or the receipt.
 const [flag, keyFile, binaryPath, expectedDigest, run = 'all', priorId] = process.argv.slice(2);
 assert.equal(flag, '--live-openrouter');
-assert.ok(['all','google','mistral','chat','chat-google','resume-chat'].includes(run),'Unknown smoke case');
+assert.ok(['all','google','mistral','chat','chat-google','chat-qwen','chat-output-limit','resume-chat'].includes(run),'Unknown smoke case');
 const resume=run==='resume-chat';
 if(resume)assert.match(priorId??'',/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
 else assert.equal(priorId,undefined);
@@ -32,9 +32,11 @@ if(!resume)await mkdir(profile);
 else for(const path of [profileRoot,profile,join(profileRoot,'receipt.json'),join(profile,'openkoda.sqlite3')]){
   assert.equal((await realpath(path)).toLowerCase(),path.toLowerCase(),'Unexpected profile path');
 }
-const models = ['google/gemini-2.5-flash-lite', 'mistralai/ministral-8b-2512'];
-const chatOnly = run==='chat'||run==='chat-google';
-const chatModel = run==='chat-google'?models[0]:models[1];
+const outputLimit = run === 'chat-output-limit';
+const extraModel = outputLimit ? 'openai/gpt-4.1-nano' : run === 'chat-qwen' ? 'qwen/qwen3-14b' : undefined;
+const models = extraModel ? [extraModel] : ['google/gemini-2.5-flash-lite', 'mistralai/ministral-8b-2512'];
+const chatOnly = !!extraModel || run==='chat'||run==='chat-google';
+const chatModel = extraModel ?? (run==='chat-google'?models[0]:models[1]);
 const scanModels = chatOnly ? [] : models.filter((_,i)=>run==='all'||run===['google','mistral'][i]);
 const catalog = await (await fetch('https://openrouter.ai/api/v1/models', {redirect: 'error'})).json();
 for (const id of models) {
@@ -133,6 +135,15 @@ try {
   const listing=await ipc('ai.models',{provider:'openrouter'});
   assert.ok(models.every(id=>listing.models.includes(id)));
   await ipc('ai.provider.configure',{provider:'openrouter',credentialRevision:listing.credentialRevision,models,defaultModel:models[0]});
+  if(extraModel) {
+    const budget=await ipc('ai.budget.status');
+    const rates=catalog.data.find(m=>m.id===extraModel).pricing;
+    await ipc('ai.budget.configure',{enabled:true,currency:'USD',expectedRevision:budget.revision,
+      installationLimitUsd:'0.01',assessmentLimitUsd:'0.01',acknowledgeEstimates:true,acknowledgeLegacyExcluded:true,
+      legacyReviewDigest:budget.legacyReviewDigest,prices:[{provider:'openrouter',model:extraModel,
+        inputUsdPerMillion:(Number(rates.prompt)*1e6).toFixed(6),outputUsdPerMillion:(Number(rates.completion)*1e6).toFixed(6),
+        sourceNote:'Catálogo do OpenRouter no início deste teste.'}]});
+  }
   await page.reload();
   if(resume){
     const entry=reviewed[1];
@@ -195,10 +206,42 @@ try {
   stage='chat';
   assert.ok((await keyUsage())-baseline<0.022,'Stop on unexpected usage');
   const input=page.getByRole('textbox',{name:'Mensagem da conversa',exact:true});
-  await input.fill('Resuma em uma frase por que eval pode ser perigosa em Python. Inclua o nome da função.');
+  const question=outputLimit ? 'Explique em cinco parágrafos por que eval na função calculate é perigoso e como corrigir a validação em Python, com exemplos.'
+    : 'Resuma em uma frase por que eval pode ser perigosa em Python. Inclua o nome da função.';
+  await input.fill(question);
   const send=page.getByRole('button',{name:'Enviar mensagem',exact:true});
   await expect(send).toBeEnabled({timeout:15000});
   await send.click();
+  let cappedDispatch;
+  if(outputLimit){
+    // Let the UI adopt its normal source policy and credential, then request a
+    // deliberately small native packet, so the model cannot shorten the test.
+    await expect(page.getByRole('button',{name:'Autorizar envio',exact:true})).toBeVisible();
+    await page.getByRole('button',{name:'Recusar',exact:true}).click();
+    const snapshot=await ipc('snapshot');
+    const projectId=snapshot.assessments.find(a=>a.id===assessmentId).projectId;
+    const refs=await ipc('credential.reference.list',{projectId});
+    const reference=refs.references.find(r=>!r.revoked && r.providerSlotRef?.provider==='openrouter');
+    assert.ok(reference);
+    const base={assessmentId,evidenceIds:[],message:question};
+    const scope=await ipc('assessment.scopeStatus',{assessmentId});
+    if(scope.revision?.body.targetSet){
+      assert.equal(scope.targetOptions.length,1);
+      base.contextTargetRefs=[scope.targetOptions[0].targetRef];
+    }
+    const context=await ipc('ai.context',{...base,operation:'ask',credentialReferenceId:reference.id,
+      messageSensitivity:'internal',packageSensitivity:'internal',categories:['human_text','target_metadata','execution_summary'],
+      includeChatHistory:true,maxOutputTokensPerRequest:32});
+    assert.equal(context.canSend,true);
+    assert.equal(context.packetPreview.prompts[0].maxOutputTokens,32);
+    const payload={...base,contextDigest:context.digest,dataReview:context.dataReview};
+    const {review}=await ipc('ai.budget.preview',{operation:'ask',payload});
+    assert.equal(review.maxOutputTokens,32);
+    assert.ok(Number(review.reservedUsd)<=0.01);
+    await input.fill('');
+    cappedDispatch=ipc('ai.ask',{...payload,allowRemote:true,budgetReview:{id:review.id,digest:review.digest}})
+      .then(()=>null,error=>String(error));
+  }
   const start=Date.now(); let sawDelta=false;
   while(Date.now()-start<90000) {
     const error=page.getByRole('region',{name:'Conversa do projeto'}).getByRole('alert').first();
@@ -211,20 +254,27 @@ try {
     if(history.requests.length){
       assert.equal(history.requests.length,1);
       const r=history.requests[0];
-      if(r.status==='completed'){
+      if(r.status===(outputLimit?'incomplete':'completed')){
         assert.equal(r.model,chatModel);
         const rows=(await ipc('ai.budget.history')).rows.filter(row=>row.assessmentId===assessmentId && row.model===r.model);
         assert.ok(rows.some(row=>row.input===r.inputTokens && row.output===r.outputTokens && row.requests===1));
-        assert.ok(history.messages.some(m=>m.role==='assistant' && /eval/i.test(m.text)));
-        assert.equal(await input.inputValue(),'');
+        const answer=history.messages.find(m=>m.role==='assistant');
+        assert.ok(answer?.text.length>0);
+        if(outputLimit){
+          assert.equal(answer.outputLimited,true);
+          assert.equal(answer.outputLimitTokens,32);
+          assert.equal(r.outputTokens,32);
+        }else assert.match(answer.text,/eval/i);
+        await expect(input).toHaveValue('');
         receipt.chat={model:r.model,status:r.status,input:r.inputTokens,output:r.outputTokens,sawDelta};
         break;
       }
-      assert.ok(!['unknown','failed','incomplete'].includes(r.status),'Chat '+r.status);
+      assert.ok(!['unknown','failed','incomplete','completed'].includes(r.status),'Unexpected chat finish: '+r.status);
     }
     await pause(70);
   }
   assert.ok(receipt.chat,'No completed chat before deadline. Composer length='+String((await input.inputValue()).length)+'; submitting button visible='+await send.isVisible());
+  if(cappedDispatch)assert.equal(await cappedDispatch,null);
   }
   stage='reopen-history';
   await page.reload();
@@ -238,7 +288,54 @@ try {
   if(receipt.chat){
     const history=await ipc('ai.history',{assessmentId});
     assert.equal(history.requests.length,1);
-    assert.ok(history.messages.some(m=>m.role==='assistant' && /eval/i.test(m.text)));
+    const answer=history.messages.find(m=>m.role==='assistant');
+    if(outputLimit){
+      assert.equal(answer.outputLimited,true);
+      const button=page.getByRole('button',{name:'Continuar resposta'});
+      await button.click();
+      await expect(page.getByRole('textbox',{name:'Mensagem da conversa'})).toHaveValue(/Continue a resposta/);
+      assert.equal((await ipc('ai.history',{assessmentId})).requests.length,1);
+      assert.equal((await ipc('ai.chat.status',{assessmentId})).requestId,null);
+      receipt.chat.continuationDraftWithoutDispatch=true;
+      await page.getByRole('button',{name:'Enviar mensagem',exact:true}).click();
+      const consent=page.locator('.chat-approval');
+      await expect(consent.getByRole('button',{name:'Autorizar envio'})).toBeVisible();
+      await consent.getByText('Ver conteúdo do envio',{exact:true}).click();
+      const preview=await consent.locator('pre').innerText();
+      const tail=JSON.stringify(answer.text.trim().slice(-48)).slice(1,-1);
+      assert.ok(preview.includes('conversationHistory') && preview.includes(tail),
+        'The reviewed continuation should include the authorized tail of the previous response');
+      await consent.getByRole('button',{name:'Recusar'}).click();
+      assert.equal((await ipc('ai.history',{assessmentId})).requests.length,1);
+      receipt.chat.continuationReviewedWithHistory=true;
+    }else assert.match(answer.text,/eval/i);
+    if(extraModel){
+      const {DatabaseSync}=await import('node:sqlite');
+      const db=new DatabaseSync(join(profile,'assistant.sqlite3'),{readOnly:true});
+      let generation;
+      try {
+        generation=db.prepare("SELECT json_extract(details,'$.responseId') AS generation FROM requests WHERE id=?").get(history.requests[0].id).generation;
+      }finally{db.close();}
+      assert.match(generation,/^gen-[a-zA-Z0-9-]{1,124}$/);
+      const url=new URL('https://openrouter.ai/api/v1/generation');
+      url.searchParams.set('id',generation);
+      let measured;
+      await expect.poll(async()=>{
+        const response=await fetch(url,{headers:{Authorization:'Bearer '+keys[0]},redirect:'error',signal:AbortSignal.timeout(15000)});
+        if(response.status===404)return false;
+        assert.equal(response.status,200);
+        measured=(await response.json()).data;
+        return typeof measured?.total_cost==='number';
+      },{timeout:65000,intervals:[500,1000,2500]}).toBe(true);
+      assert.equal(measured.id,generation);
+      const catalogModel=catalog.data.find(m=>m.id===extraModel);
+      assert.ok([catalogModel.id,catalogModel.canonical_slug].includes(measured.model),'Unexpected generation model: '+measured.model);
+      assert.equal(measured.streamed,true);
+      assert.ok(measured.total_cost>=0&&measured.total_cost<=0.01);
+      receipt.chat.costUsd=measured.total_cost;
+      receipt.chat.finishReason=measured.finish_reason;
+      receipt.chat.providerModel=measured.model;
+    }
   }
   receipt.passed=true;
 } catch(error) {
@@ -250,7 +347,7 @@ try {
     receipt.keyUsageBeforeUsd=baseline;
     const start=Date.now();
     const scanned=receipt.scans.reduce((sum,s)=>sum+(s.costUsd??0),0);
-    const minimum=scanned-Math.max(1,receipt.scans.length*3)*0.000001;
+    const minimum=extraModel && receipt.chat?.costUsd!=null ? receipt.chat.costUsd-0.000000001 : scanned-Math.max(1,receipt.scans.length*3)*0.000001;
     do {
       const total=await keyUsage();
       receipt.keyUsageAfterUsd=total;

@@ -3,13 +3,14 @@ import { expect, test } from './fixtures';
 import { emptySnapshot } from '../src/preview';
 import { installScopeFixture } from './scope-fixture';
 
-type Turn = { id: string; role: string; text: string; createdAt: string };
+type Turn = { id: string; role: string; text: string; createdAt: string; outputLimited?:boolean; outputLimitTokens?:number };
 type Bridge = {
   turns: Turn[];
   calls: { action: string; payload: Record<string, unknown> }[];
   running: boolean;
   activeAssessment?:string;
   processingMs?:number;
+  queuePosition?:number;
   partialText?:string;
   scanAdmitted?:boolean;
   sensitiveSource?:boolean;
@@ -91,7 +92,7 @@ async function installChat(page: Page, turns: Turn[] = [], running = false) {
         return {id:chat.id};
       }
       if (action === 'ai.history') return { messages: payload.assessmentId === (bridge.activeAssessment??'A') ? bridge.turns : [], requests:payload.assessmentId===(bridge.activeAssessment??'A')&&bridge.acceptedMessage?[{id:'turn-A',dataReviewRef:bridge.activeReview,chatMessageIds:[bridge.acceptedMessage]}]:[] };
-      if (action === 'ai.chat.status') return { requestId: bridge.running && payload.assessmentId === (bridge.activeAssessment??'A') ? 'turn-A' : null, processingMs:bridge.processingMs,partialText:bridge.partialText, stopping: false, messageId:bridge.running?bridge.acceptedMessage:null,dataReview:bridge.running?bridge.activeReview:null };
+      if (action === 'ai.chat.status') return { requestId: bridge.running && payload.assessmentId === (bridge.activeAssessment??'A') ? 'turn-A' : null, queuePosition:bridge.queuePosition,processingMs:bridge.processingMs,partialText:bridge.partialText, stopping: false, messageId:bridge.running?bridge.acceptedMessage:null,dataReview:bridge.running?bridge.activeReview:null };
       if (action === 'ai.chat.stop') bridge.running = false;
       if (action === 'ai.status') return {
         provider: payload.provider, hasApiKey: ['openai', 'openrouter'].includes(String(payload.provider)),
@@ -106,6 +107,24 @@ async function installChat(page: Page, turns: Turn[] = [], running = false) {
   }, { snapshot, turns, running });
   await page.goto('/');
 }
+
+test('continuar depois do limite prepara um rascunho sem enviar nem cobrar', async ({page})=>{
+  await installChat(page,[{id:'partial',role:'assistant',createdAt:'2026-11-12T12:00:00Z',text:'Fragmento recebido.',outputLimited:true,outputLimitTokens:32}]);
+  await expect(page.getByText('A resposta atingiu o limite de saída (32 tokens).')).toBeVisible();
+  await page.getByRole('button',{name:'Continuar resposta'}).click();
+  await expect(page.getByRole('textbox',{name:'Mensagem da conversa'})).toHaveValue(/Continue a resposta anterior/);
+  await expect(page.getByRole('button',{name:'Continuar resposta'})).toHaveCount(0);
+  expect(await page.evaluate(()=>window.__conversationTest.calls.filter(c=>c.action==='ai.ask'||c.action==='ai.context'))).toEqual([]);
+});
+
+test('a posição na fila fica visível até o processamento começar',async({page})=>{
+  await installChat(page,[],true);
+  await page.evaluate(()=>{window.__conversationTest.queuePosition=2;window.__conversationTest.processingMs=1000;});
+  await expect(page.getByRole('status').filter({hasText:'Aguardando vaga · posição 2'})).toBeVisible();
+  await page.evaluate(()=>{delete window.__conversationTest.queuePosition;});
+  await expect(page.getByText('Processando · 1 s')).toBeVisible();
+  expect(await page.evaluate(()=>window.__conversationTest.calls.filter(c=>c.action==='ai.ask'))).toEqual([]);
+});
 
 test('cada conversa recupera seu rascunho e anexo sem enviar mensagens', async ({ page }) => {
   await installChat(page);
