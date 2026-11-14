@@ -6,6 +6,7 @@ const topics = [
  ['uso','Acompanhar o uso','Encontre as solicitações, os tokens informados, as estimativas e os limites do projeto.'],
  ['skills','Usar skills e ajustar o raciocínio','Escolha as instruções da próxima mensagem e veja o que muda ao ajustar o modelo da assinatura.'],
  ['conta','Gerenciar sua conta','Acompanhe chamados, consulte suas preferências e encontre a exportação dos seus dados.'],
+ ['aparencia','Ajustar a aparência','Escolha uma paleta, facilite a leitura e entenda o que fica salvo em cada dispositivo.'],
 ];
 const guidePath = slug => '/guias/'+slug+'/';
 const topicLinks = topics.map(([slug,title,description])=>
@@ -65,6 +66,11 @@ const account = [
  ['dados','Consulte e exporte seus dados',`<p>Em <strong>Preferências</strong>, consulte os aceites e retire o consentimento de marketing quando quiser. Em <strong>Meus dados</strong>, você pode exportar os dados da conta hospedada ou solicitar a exclusão. A exclusão exige que você digite uma confirmação.</p><p>As conversas e os projetos da edição local ficam no seu computador. A exportação da conta hospedada cobre os registros mantidos pelo serviço. Consulte os detalhes na <a href="/privacidade/">política de privacidade</a>.</p>`],
 ];
 const faq = questions.map(([q,a])=>`<details><summary>${q}</summary><p>${a}</p></details>`).join('');
+const appearance = [
+ ['cores','Escolha as cores do aplicativo','<p>No Windows, abra <strong>Configurações</strong> e entre em <strong>Aparência</strong>. O tema controla a luminosidade da janela. A paleta altera os tons dos painéis, listas e conversas. A paleta OpenKoda usa o verde e os tons de papel que você vê neste site.</p><p>Se já usa outra paleta, pode mantê-la. Salve e volte à sua conversa para ver o resultado no projeto aberto.</p>'],
+ ['leitura','Encontre uma leitura confortável','<p>Aumente a escala se os controles estiverem pequenos. Para ler o código, ajuste a fonte de código separadamente da fonte da interface. Em uma janela larga, escolha a navegação por ícones para dar mais espaço ao trabalho.</p><p>Prefere menos movimento? Use a opção de movimento reduzido. Essas escolhas mudam a apresentação do projeto; seus arquivos e mensagens continuam os mesmos.</p>'],
+ ['site','Troque o tema deste site','<p>No rodapé, em <strong>Aparência</strong>, escolha <strong>Clara</strong>, <strong>Escura</strong> ou <strong>Do sistema</strong>. A última acompanha a preferência do navegador. A escolha se mantém ao abrir outra página ou aba no mesmo navegador.</p><p>A preferência do site e a do aplicativo são independentes. Você pode manter o site claro no celular e trabalhar no escuro no computador.</p>']
+];
 export const publicPages = {
  guias:['Guias do OpenKoda',`<h1>Guias do OpenKoda</h1><p class="lead">Da primeira pasta ao relatório, encontre as instruções para a etapa em que você está.</p>${directory}`],
  'guias/primeiro-projeto':lesson('primeiro-projeto','Configure uma conexão e acompanhe uma revisão pequena do começo ao fim.',start,'relatorios'),
@@ -73,6 +79,7 @@ export const publicPages = {
  'guias/uso':lesson('uso','Confira quanto contexto circulou e como o aplicativo registra os custos da sua revisão.',usage,'primeiro-projeto'),
  'guias/skills':lesson('skills','Veja como o aplicativo prepara as instruções de uma mensagem nos modelos da assinatura. O checkout está em simulação durante o pré-lançamento.',skills,'uso'),
  'guias/conta':lesson('conta','Use o painel da Koda para cuidar do plano, das preferências e dos seus pedidos de suporte.',account,'uso'),
+ 'guias/aparencia':lesson('aparencia','Ajuste a leitura para a sua tela. As preferências visuais ficam no dispositivo em que você as escolheu.',appearance,'conversas'),
  seguranca:['Segurança dos projetos',`<h1>O que a revisão pode ler</h1><p class="lead">O escopo começa na pasta escolhida no Windows. A autorização de envio define o que chega ao provedor de IA.</p>
  <section class="reading-section" data-motion><h2>No computador</h2><p>O leitor captura texto dentro do alvo selecionado. Ignora links, pontos de reanálise, pastas de credenciais e arquivos binários. A revisão trabalha sobre a cópia dos trechos selecionados, sem executar o código do projeto.</p><p>A chave própria fica protegida pelo cofre do Windows. Os projetos, conversas e registros da edição local ficam no perfil do dispositivo.</p></section>
  <section class="reading-section" data-motion><h2>Ao enviar para a IA</h2><p>Revise os arquivos autorizados, os anexos e o modelo de destino. Envie somente material que você pode compartilhar. Uma chave do provedor identifica sua conta junto a ele e o uso pode ser faturado por esse provedor.</p></section>

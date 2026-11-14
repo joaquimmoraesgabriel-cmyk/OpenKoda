@@ -2,6 +2,8 @@
 
 O aplicativo gratuito continua funcionando com a credencial do usuário. Uma conta comercial concede acesso a serviços hospedados. O acesso ao computador, aos arquivos e à execução local continua dependendo do escopo autorizado naquela instalação.
 
+Resultado mais recente dos e-mails e bloqueios para a abertura pública: [validação de e-mail e lançamento](./VALIDACAO-EMAIL-E-LANCAMENTO.md).
+
 ## 1. Verificação da execução existente
 
 Usar fixtures sintéticas e perfis descartáveis para verificar um fluxo que atravessa arquivos e lotes, uma imagem com informação ausente do prompt e a interrupção depois do primeiro texto real. Conferir fonte e trecho, histórico após reabertura, unicidade da solicitação e cobrança do provedor. Uma interrupção pode gerar cobrança mesmo sem mensagem final. Reexecutar as regressões afetadas antes de prosseguir.

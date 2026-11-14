@@ -1,5 +1,5 @@
 const repository = 'https://github.com/joaquimmoraesgabriel-cmyk/OpenKoda';
-export const desktopVersion = '0.2.5';
+export const desktopVersion = '0.2.6';
 const release = version => repository+'/releases/tag/desktop-v'+version;
 const entry = version => '/novidades/openkoda-'+version.replaceAll('.','-')+'/';
 const currentEntry = entry(desktopVersion);
@@ -7,6 +7,12 @@ const date = '<time datetime="2026-11-13">13 de novembro de 2026</time>';
 const download = '<a class="primary" href="/download/">Baixar para Windows</a>';
 
 const changes = [
+  {version:'0.2.6', title:'As cores do OpenKoda, do site à conversa',
+   summary:'O aplicativo ganhou a paleta do site. Você pode escolher outra paleta e ver a sua escolha na área do projeto, no chat e nas configurações.',
+   paragraphs:[
+    'Em Configurações, abra Aparência e experimente a paleta OpenKoda nos temas claro e escuro. As outras paletas continuam disponíveis. Quem já personalizou fonte, densidade ou papel de parede pode manter essas escolhas.',
+    'O modo de navegação por ícones passa a ser respeitado também nas janelas largas. Na lista de achados, alterne a prévia e a visualização em uma linha sem mudar o conteúdo da análise.'
+   ],more:'/guias/aparencia/',label:'Ajustar a aparência no Windows'},
   {version:'0.2.5', title:'Novos controles para abrir e fechar detalhes',
    summary:'A nova apresentação deixa mais fácil encontrar preferências, ler os detalhes de uma análise e acompanhar chamados.',
    paragraphs:[
