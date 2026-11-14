@@ -1,31 +1,23 @@
 import { mkdir, readFile, writeFile, copyFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
-import { homeResources, productChapters, publicPages } from './product-pages.mjs';
+import { productChapters, publicPages } from './product-pages.mjs';
 import { home, launch, pricing, screenshot, editorialPages } from './editorial.mjs';
+
+import { walkthrough, connections, readingCards, connectionPages } from './showcase.mjs';
+import { menu, footer } from './navigation.mjs';
 
 const output = fileURLToPath(new URL('./dist/', import.meta.url));
 const contact = 'joaquimmoraesgabriel@gmail.com';
 const mail = (subject, label) => '<a href="mailto:' + contact + '?subject=' + encodeURIComponent(subject) + '">' + label + '</a>';
 const mark = '<svg viewBox="0 0 26 24" width="26" height="24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 3.5v17M21.5 3.5l-9 8.5 9 8.5"/></svg>';
 const brand = '<a class="brand" href="/" aria-label="OpenKoda, início">'+mark+'<span>OpenKoda</span></a>';
-const links = [['produto','Produto'],['guias','Guias'],['precos','Preços'],['novidades','Novidades'],['suporte','Suporte']];
-const menu = route => '<nav id="primary-nav" aria-label="Principal">'+links.map(([path,label])=>'<a href="/'+path+'/"'+(route===path?' aria-current="page"':'')+'>'+label+'</a>').join('')+'</nav><div class="nav-actions"><a class="login" href="/conta/"'+(route.startsWith('conta')?' aria-current="page"':'')+'>Minha conta</a><button id="menu-toggle" type="button" aria-label="Menu principal" aria-expanded="false" aria-controls="primary-nav"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 8h18M3 16h18"/></svg></button></div>';
 const download = '<a class="primary" href="/download/">Baixar para Windows</a>';
-const demo = `<section class="demo-stage" id="demonstracao" aria-labelledby="demo-title">
-<div class="stage-title"><h2 id="demo-title">Acompanhe uma revisão</h2><p>Explore um projeto Python de dois arquivos analisado no OpenKoda.</p></div>
-<div class="exhibit"><div class="demo-controls"><p>Calculadora <span>/ Python</span></p><div class="demo-nav" aria-label="Escolher demonstração"><button aria-pressed="true" data-view="relatorio">Relatório</button><button aria-pressed="false" data-view="chat">Chat</button><button aria-pressed="false" data-view="projeto">Projeto</button></div></div>
-<div id="demo-body" aria-live="polite"><div class="demo-body" id="demo-relatorio"><div class="code-sample"><p class="file"><span>math_worker.py</span><span>Python</span></p><pre><code><span class="ln">1</span> <b>def</b> compute_formula(user_expression):
-<mark><span class="ln">2</span>     <b>return</b> eval(user_expression)</mark></code></pre></div><div class="demo-copy"><small>Relatório de análise</small><h3>Da entrada HTTP ao <code>eval()</code></h3><p>A rota em <code>api.py</code> recebe uma fórmula do usuário. A linha destacada a executa como código.</p><p class="caption">Candidato identificado por IA. Requer revisão humana.</p></div></div>
-<div class="demo-body" id="demo-chat"><div class="code-sample"><p class="file"><span>api.py</span><span>Python</span></p><pre><code><mark><span class="ln">6</span>     expression = request.args["formula"]</mark>
-<span class="ln">7</span>     <b>return</b> str(compute_formula(expression))</code></pre></div><div class="demo-copy"><small>Conversa sobre o relatório</small><h3>De onde vem a fórmula?</h3><p>A rota HTTP lê o parâmetro <code>formula</code> e o passa para <code>compute_formula</code>, em <code>math_worker.py</code>.</p><p class="caption">Pergunta de exemplo sobre o caso analisado.</p></div></div>
-<div class="demo-body" id="demo-projeto"><div class="demo-note"><dl><dt>Pasta selecionada</dt><dd>calculadora/</dd><dt>Arquivos autorizados</dt><dd>api.py<br>math_worker.py</dd></dl></div><div class="demo-copy"><small>Escopo da revisão</small><h3>Investigar dois arquivos</h3><p>O objetivo deste projeto é seguir a fórmula desde a entrada HTTP até a operação que a executa.</p></div></div>
-</div></div></section>`;
 const compatibility = '<section class="resource-shelf" data-motion><div><h2>Escolha a conexão da sua IA.</h2><p>Selecione o modelo adequado ao tipo de trabalho. O catálogo disponível depende do provedor e da sua credencial.</p><a href="/guias/primeiro-projeto/#conexao">Configurar uma conexão</a></div><dl class="capabilities"><dt>Conversa</dt><dd>Um modelo de texto pode explicar o código e responder perguntas sobre os trechos autorizados.</dd><dt>Análise de código</dt><dd>Respostas estruturadas permitem organizar candidatos, arquivos e linhas no relatório.</dd><dt>Imagens</dt><dd>Para conversar sobre uma captura de tela, escolha um modelo que receba entrada visual.</dd></dl></section>';
 const intro = (title, lead) => '<h1>' + title + '</h1><p class="lead">' + lead + '</p>';
 const pages = {
- ...publicPages, ...editorialPages,
- '': ['Revisão de código para Windows', home(demo)],
- produto: ['Funcionalidades', intro('Do projeto ao relatório', 'Use a revisão para investigar uma pergunta concreta. Escolha a entrada de dados, acompanhe os trechos citados e consulte o histórico quando retomar o projeto.') + demo + '<section class="project-feature" data-motion><div><h2>Dentro do aplicativo</h2><p>O projeto reúne as conversas e o material autorizado na investigação. Abra a captura para ver o chat e os arquivos citados em detalhe.</p>'+download+'</div>'+screenshot+'</section>'+compatibility],
+ ...publicPages, ...editorialPages, ...connectionPages,
+ '': ['Revisão de código para Windows', home(walkthrough, connections, readingCards)],
+ produto: ['Funcionalidades', intro('Do projeto ao relatório', 'Use a revisão para investigar uma pergunta concreta. Escolha a entrada de dados, acompanhe os trechos citados e consulte o histórico quando retomar o projeto.') + walkthrough + '<section class="project-feature" data-motion><div><h2>Dentro do aplicativo</h2><p>O projeto reúne as conversas e o material autorizado na investigação. Abra a captura para ver o chat e os arquivos citados em detalhe.</p>'+download+'</div>'+screenshot+'</section>'+compatibility],
  download: ['Download', intro('OpenKoda para Windows', 'Revise código e converse sobre um projeto com uma chave de IA própria.') + launch],
  precos: ['Preços', intro('Escolha como usar a IA', 'Use sua própria chave na edição local ou conheça as cotas previstas para os planos da Koda.') + pricing],
  suporte: ['Suporte', intro('Fale com a Koda.', 'Conte em qual tela o problema aconteceu e o que você esperava ver. Para relatar um teste bem-sucedido, informe o modelo e o recurso usado.') + '<h2>Enviar um relato</h2><p>Inclua a versão do OpenKoda e passos para reproduzir. Revise o texto e remova chaves, senhas e código confidencial antes de enviar.</p><p><a href="/conta/?acao=suporte">Abrir chamado na conta</a> ou '+mail('Suporte OpenKoda','escrever por e-mail')+'.</p><h2>Privacidade e segurança</h2><p>Para solicitar seus dados, exclusão, informar uma falha de segurança ou retirar seu consentimento de marketing, escreva para '+mail('Privacidade OpenKoda',contact)+'. Para verificar a titularidade, podemos pedir uma confirmação pelo endereço da conta.</p><p>A Koda atende no Brasil durante o pré-lançamento. Não há prazo de resposta garantido.</p>'],
@@ -37,7 +29,6 @@ const pages = {
  'conta/retorno': ['Retorno à conta', '<div class="account-shell"><div id="account" aria-busy="true">Validando retorno…</div></div>']
 };
 
-pages[''][1]+=homeResources;
 pages.produto[1]+=productChapters;
 pages.suporte[1]+='<section class="reading-section"><h2>Encontre uma orientação</h2><p><a href="/guias/primeiro-projeto/#conexao">Configurar um provedor</a>, <a href="/guias/relatorios/#cobertura">entender uma análise parcial</a> ou <a href="/guias/uso/">conferir custos e limites</a>.</p><p><a href="/perguntas/">Perguntas frequentes</a></p></section>';
 
@@ -66,16 +57,15 @@ for (const [route,[name,body]] of Object.entries(pages)) {
  const directory=output+route;
  await mkdir(directory,{recursive:true});
  const layout=route.startsWith('conta')?'account-page':route in policySections?'policies inner':route==='novidades'||route==='politicas'||route==='exemplos'?'collection inner':route.startsWith('novidades/')||route.startsWith('exemplos/')?'document story inner':route==='produto'?'product inner':route==='precos'?'pricing inner':
-  route==='guias' || route.startsWith('guias/')?'guides inner':route?'document inner':'home';
- const html=`<!doctype html><html lang="pt-BR"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="referrer" content="no-referrer"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; style-src 'self'; img-src 'self'; connect-src 'self' https://ynjcyvnrfxsrijrwpaye.supabase.co https://challenges.cloudflare.com; object-src 'none'; base-uri 'none'; form-action 'self'"><title>${name} | OpenKoda</title><link rel="stylesheet" href="/style.css"><body><a class="skip" href="#main">Pular para o conteúdo</a><header class="site-header"><div class="header-inner">${brand}${menu(route)}</div></header><main id="main" tabindex="-1" class="${layout}">${body}</main><footer class="site-footer"><div class="footer-inner"><div class="footer-brand">${brand}<small>Koda, Brasil</small></div><nav aria-label="Informações legais"><a href="/politicas/">Central de políticas</a><a href="/privacidade/">Privacidade</a><a href="/termos/">Termos</a><a href="/reembolso/">Reembolso</a><a href="/suboperadores/">Fornecedores</a><button id="cookies" type="button">Cookies</button></nav></div></footer><aside id="cookie-box" hidden aria-label="Cookies e armazenamento"><p>Usamos cookies essenciais para sua sessão e a verificação de segurança. Consulte a <a href="/privacidade/#cookies-e-marketing">política de privacidade</a>.</p><button type="button" id="accept-essential">Entendi</button></aside><script type="module" src="/site.js"></script>${route.startsWith('conta')?'<script type="module" src="/account.js"></script>':''}</body></html>`;
- const browse='<nav class="footer-explore" aria-label="Explore o aplicativo"><a href="/exemplos/">Exemplos</a><a href="/guias/">Guias</a><a href="/download/">Download</a><a href="/perguntas/">Perguntas frequentes</a><a href="/seguranca/">Segurança</a></nav>';
- await writeFile(directory+'/index.html',html.replace('<title>', '<link rel="icon" type="image/svg+xml" href="/favicon.svg"><title>').replace('<nav aria-label="Informações legais">',browse+'<nav aria-label="Informações legais">'));
+  route==='conexoes'?'product inner':route.startsWith('conexoes/')?'document story inner':route==='guias' || route.startsWith('guias/')?'guides inner':route?'document inner':'home';
+ const html=`<!doctype html><html lang="pt-BR"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="referrer" content="no-referrer"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; style-src 'self'; img-src 'self'; connect-src 'self' https://ynjcyvnrfxsrijrwpaye.supabase.co https://challenges.cloudflare.com; object-src 'none'; base-uri 'none'; form-action 'self'"><title>${name} | OpenKoda</title><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/tema.css"><script src="/tema.js" defer></script><body><a class="skip" href="#main">Pular para o conteúdo</a><header class="site-header"><div class="header-inner">${brand}${menu(route)}</div></header><main id="main" tabindex="-1" class="${layout}">${body}</main>${footer(brand,route)}<aside id="cookie-box" hidden aria-label="Cookies e armazenamento"><p>Usamos cookies essenciais para sua sessão e a verificação de segurança. Consulte a <a href="/privacidade/#cookies-e-marketing">política de privacidade</a>.</p><button type="button" id="accept-essential">Entendi</button></aside><script type="module" src="/site.js"></script>${route.startsWith('conta')?'<script type="module" src="/account.js"></script>':''}</body></html>`;
+ await writeFile(directory+'/index.html',html.replace('<title>', '<link rel="icon" type="image/svg+xml" href="/favicon.svg"><title>'));
 }
 
 // Serve the same reviewed files through a Worker so security headers also
 // protect direct visits to the OAuth callback and account forms.
 const files = [...Object.keys(pages).map(route=>(route?route+'/':'')+'index.html'),
- 'style.css','account.js','site.js','cloud.js','painel.png','conversa.png','favicon.svg'];
+ 'style.css','tema.css','tema.js','account.js','site.js','cloud.js','painel.png','conversa.png','projeto.png','relatorio.png','favicon.svg'];
 await writeFile(output+'favicon.svg',mark.replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" ').replace('currentColor', '#171719'));
 const assets = {};
 for (const file of files) {

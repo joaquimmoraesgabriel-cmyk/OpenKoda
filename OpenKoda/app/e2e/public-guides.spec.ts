@@ -8,6 +8,7 @@ import type {BrowserContext} from '@playwright/test';
 const origin='https://openkoda.example.invalid';
 const dist=fileURLToPath(new URL('../../site/dist/',import.meta.url));
 const routes=['/','/produto/','/download/','/precos/','/suporte/','/seguranca/','/perguntas/','/guias/',
+  '/conexoes/','/conexoes/chave-propria/','/conexoes/assinatura/',
   '/guias/primeiro-projeto/','/guias/conversas/','/guias/relatorios/','/guias/uso/','/guias/skills/','/guias/conta/',
   '/exemplos/','/exemplos/revisao-de-api/','/novidades/','/novidades/openkoda-0-2-5/','/novidades/openkoda-0-2-4/','/novidades/openkoda-0-2-3/',
   '/politicas/','/privacidade/','/termos/','/reembolso/','/suboperadores/'];
@@ -25,6 +26,7 @@ async function serve(context:BrowserContext){
 }
 for(const width of [375,1440]){
   test('guias e demonstração navegáveis em '+width+'px',async({browser},testInfo)=>{
+    test.setTimeout(90000);
     const context=await browser.newContext({viewport:{width,height:900},reducedMotion:'reduce'});
     try{
       await serve(context);
@@ -47,25 +49,51 @@ for(const width of [375,1440]){
         }
       }
       await page.goto(origin+'/');
-      await page.getByRole('button',{name:'Projeto',exact:true}).focus();
-      await page.keyboard.press('Enter');
+      const project=page.getByRole('tab',{name:'Projeto',exact:true});
+      await project.focus();
       await expect(page.getByRole('heading',{name:'Investigar dois arquivos'})).toBeVisible();
-      await page.getByRole('button',{name:'Chat',exact:true}).click();
+      await page.keyboard.press('ArrowRight');
+      await expect(page.getByRole('heading',{name:'Da entrada HTTP ao eval()'})).toBeVisible();
+      await page.getByRole('tab',{name:'Chat',exact:true}).click();
       await expect(page.getByRole('heading',{name:'De onde vem a fórmula?'})).toBeVisible();
-      await page.getByRole('link',{name:'Ver todos os guias'}).click();
-      await page.getByRole('link',{name:/Ler um relatório/}).click();
+      await page.getByRole('tab',{name:'IA da assinatura'}).click();
+      await expect(page.getByRole('heading',{name:'Acompanhe uma cota na sua conta Koda.'})).toBeVisible();
+      await page.getByRole('link',{name:'Entender o uso da assinatura'}).click();
+      await expect(page.getByRole('heading',{level:1})).toHaveText('Usar a conexão da assinatura');
+      await page.goto(origin+'/');
+      await page.locator('#demonstracao').screenshot({path:testInfo.outputPath('demonstracao-'+width+'.png')});
+      await page.locator('#conexoes').screenshot({path:testInfo.outputPath('conexoes-'+width+'.png')});
+      await page.getByRole('link',{name:'Ver todos os guias',exact:true}).click();
+      await page.getByRole('main').getByRole('link',{name:/Ler um relatório/}).click();
       await page.locator('.lesson-index a').last().focus();
       await page.keyboard.press('Enter');
       await expect(page).toHaveURL(/#cobertura$/);
       await page.goto(origin+'/perguntas/');
-      const question=page.locator('summary').first();
+      const question=page.getByRole('main').locator('summary').first();
       await expect(question).toHaveCSS('list-style-type','none');
       await question.focus();await page.keyboard.press('Enter');
-      await expect(page.locator('details[open] p')).toBeVisible();
+      await expect(page.getByRole('main').locator('details[open] p')).toBeVisible();
       if(width===375){
         const menu=page.getByRole('button',{name:'Menu principal'});await menu.focus();await page.keyboard.press('Enter');
-        await expect(page.locator('#primary-nav')).toBeVisible();await page.keyboard.press('Escape');
+        const sub=page.locator('.nav-group summary').first();await sub.focus();await page.keyboard.press('Enter');
+        await expect(page.locator('.nav-flyout a[href="/conexoes/"]')).toBeVisible();
+        await page.keyboard.press('Tab');await expect(page.locator('.nav-flyout a[href="/produto/"]')).toBeFocused();
+        await page.keyboard.press('Escape');await expect(sub).toBeFocused();await page.keyboard.press('Escape');
         await expect(menu).toBeFocused();
+      }else{
+        const group=page.locator('.nav-group').first();await group.locator('summary').hover();
+        await expect(group.getByRole('link',{name:/Revisões|Exemplos/})).toBeVisible();
+        await group.locator('summary').click();await group.locator('summary').click();
+        await expect(group.locator('.nav-flyout')).toBeHidden();
+      }
+      await page.goto(origin+'/precos/');
+      await expect(page.locator('.offer-grid article')).toHaveCount(4);
+      const table=page.getByRole('region',{name:'Comparação dos quatro planos'});
+      await expect(table.getByRole('columnheader',{name:'Ultra',exact:true})).toBeAttached();
+      if(width===375){
+        await table.focus();await page.keyboard.press('End');await page.keyboard.press('ArrowRight');
+        await expect.poll(()=>table.evaluate(el=>el.scrollLeft)).toBeGreaterThan(0);
+        expect(await page.evaluate(()=>window.scrollX)).toBe(0);
       }
     }finally{await context.close();}
   });
@@ -79,7 +107,9 @@ test('conteúdo estático e navegação de leitura funcionam sem JavaScript',asy
     await expect(page.getByRole('heading',{name:'Acompanhe uma revisão'})).toBeVisible();
     await expect(page.getByRole('heading',{name:'De onde vem a fórmula?'})).toBeVisible();
     await expect(page.getByRole('heading',{name:'Investigar dois arquivos'})).toBeVisible();
-    await expect(page.getByRole('button',{name:'Projeto',exact:true})).toHaveCount(0);
+    await expect(page.getByRole('heading',{name:'Acompanhe uma cota na sua conta Koda.'})).toBeVisible();
+    await expect(page.getByRole('tab')).toHaveCount(0);
+    await page.locator('.nav-group').filter({has:page.locator('summary',{hasText:'Guias'})}).locator('summary').click();
     await page.locator('#primary-nav a[href="/guias/"]').click();
     await page.getByRole('link',{name:/Conversar sobre o código/}).click();
     await expect(page.getByRole('heading',{name:'Compacte uma conversa longa'})).toBeVisible();
