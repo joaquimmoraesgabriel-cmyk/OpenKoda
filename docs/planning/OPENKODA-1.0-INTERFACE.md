@@ -37,3 +37,17 @@ Data: 14 de novembro de 2026. Esta entrega continua em pré-lançamento: a numer
 US$ 0 de chamadas de IA nesta entrega. Nenhum pagamento, domínio, alteração de banco ou configuração Asaas foi executado.
 
 Próximas etapas, mantidas fora deste pedido: domínio e remetente próprio de e-mail; finalizar identificação legal e condições comerciais; ativar e testar pagamentos Asaas em sandbox; validar raciocínio BYOK ponta a ponta com assinatura real e chamadas pequenas antes de abrir vendas.
+
+## Publicação verificada
+
+- Fonte do instalador: `a72a8d7103c46150c37b23ab47318a42d16f2209`.
+- [Release OpenKoda 1.0](https://github.com/joaquimmoraesgabriel-cmyk/OpenKoda/releases/tag/desktop-v1.0.0), pré-lançamento público; versões anteriores preservadas.
+- Instalador: `OpenKoda_1.0.0_x64-setup.exe`, 181.850.126 bytes.
+- SHA-256: `45df94468e44a5358658f97f189e5329597f1d488c15cfe0a747ad3ec5c1dfb4`.
+- [Windows 11 Arm64 executando o pacote x64](https://github.com/joaquimmoraesgabriel-cmyk/OpenKoda/actions/runs/43566844158): instalação, duas aberturas, configurações e desinstalação com dados preservados aprovadas.
+- [Windows Server 2022 e 2025](https://github.com/joaquimmoraesgabriel-cmyk/OpenKoda/actions/runs/43566844149): mesmas verificações aprovadas. A rodada não inclui Windows 10 nem Windows 11 x64 em máquina física.
+- [Site público](https://openkoda-desktop.steelyrowan1.chatgpt.site/): versão Sites 11, fonte `f12434c5a145fd941aa27e7a294cb7c8ea1ff909`. As 33 páginas e 14 assets publicados conferem com o build local. Duas solicitações de Google sem CAPTCHA válido foram rejeitadas corretamente.
+- Na inspeção visual pública, a demonstração criou projeto fictício e apresentou resposta preparada. A ausência do CSS no HTML gerado foi encontrada, corrigida e coberta por teste de regressão; o painel foi inspecionado novamente com o estilo correto.
+- O download normal pelo próprio site transferiu o arquivo inteiro, com hash idêntico ao artefato aprovado. HEAD, retomada por Range e rejeição de intervalo inválido também passaram. Na conexão desta verificação: cabeçalhos em 0,282 s, primeiro bloco em 0,511 s, arquivo completo em 37,524 s. Esses tempos são observações desta conexão, não promessa de velocidade.
+- O endereço direto do GitHub foi verificado anonimamente. O botão continua oferecendo essa alternativa se a transferência pelo site falhar.
+- Após a correção do CSS, os seis testes da demonstração foram repetidos e passaram. Capturas desktop e mobile foram renovadas: nenhum erro JavaScript e nenhum transbordamento horizontal na largura de 390 px.
