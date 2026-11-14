@@ -40,7 +40,7 @@ function fixture(options={}) {
       const handled = options.rpc(name,body);
       if (handled) return handled;
     }
-    if (name === 'ai_reserve') {
+    if (name === 'ai_admit') {
       const replay = reserved;
       reserved = true;
       return json({requestId,status:replay?'completed':'reserved',replay});
@@ -68,7 +68,7 @@ test('auth fails closed and identity, limits and secrets cannot be supplied by c
   assert.equal((await f.ask({...base,provider:{zdr:false}})).status,400);
   assert.equal((await f.ask({...base,messages:[{role:'system',content:'untrusted'}]})).status,400);
   assert.equal((await f.ask(base,{'cf-connecting-ip':'','x-forwarded-for':'127.0.0.1'})).status,503);
-  assert.ok(!f.calls.some(call=>call.path.endsWith('ai_reserve')));
+  assert.ok(!f.calls.some(call=>call.path.endsWith('ai_admit')));
 });
 
 test('only approved origin is allowed; account results and errors are not cacheable',async () => {
@@ -116,7 +116,7 @@ test('scan uses reserve and dispatch before inference, private routing, a bounde
   const response = await f.ask(base);
   assert.equal(response.status,200);
   assert.equal((await response.json()).text,'Análise concluída.');
-  assert.deepEqual(f.calls.map(c=>c.path.split('/').at(-1)),['user','models','openkoda_ai_reserve','openkoda_ai_dispatch','completions','openkoda_ai_settle']);
+  assert.deepEqual(f.calls.map(c=>c.path.split('/').at(-1)),['user','models','openkoda_ai_admit','openkoda_ai_dispatch','completions','openkoda_ai_settle']);
   const reserve = f.calls[2].body;
   assert.equal(reserve.p_user,userId);
   assert.match(reserve.p_ip_hash,/^[0-9a-f]{64}$/);
@@ -152,9 +152,9 @@ test('small JPEGs are accepted while metadata before or after image data is reje
 test('disabled service, rejected reservation and non-winning dispatch never call the model',async () => {
   const cases = [
     fixture({env:{OPENKODA_AI_ENABLED:'false'}}),
-    fixture({rpc:n=>n==='ai_reserve'&&json({message:'weekly_quota_exceeded'},400)}),
+    fixture({rpc:n=>n==='ai_admit'&&json({message:'weekly_quota_exceeded'},400)}),
     fixture({rpc:n=>n==='ai_dispatch'&&json({dispatch:false,status:'dispatched',requestId})}),
-    fixture({rpc:n=>n==='ai_reserve'&&json({replay:false})}),
+    fixture({rpc:n=>n==='ai_admit'&&json({replay:false})}),
     fixture({rpc:n=>n==='ai_dispatch'&&json({dispatch:true,requestId,status:'reserved'})}),
   ];
   for (const f of cases) {
@@ -171,6 +171,40 @@ test('lost or malformed post-dispatch results retain the reservation',async () =
     const settlement = f.calls.findLast(c => c.path.endsWith('ai_settle')).body;
     assert.equal(settlement.p_status,'unknown');
     assert.equal(settlement.p_actual_cost_micros,null);
+  }
+});
+
+test('capacity tickets retry the identical request, authenticate cancellation, and never call the provider while waiting',async()=>{
+  const token='50fa8d07-aa43-44c2-b0f1-b90f58aacdf2';
+  const waiting={status:'waiting',requestId,queueToken:token,position:3,expiresAt:new Date(Date.now()+120000).toISOString(),retryAfterSeconds:2,replay:false};
+  let firstDigest;
+  const f=fixture({rpc:(name,body)=>{
+    if(name==='ai_admit'){
+      assert.equal(body.p_user,userId);
+      if(body.p_queue_token===null){firstDigest=body.p_digest;return json(waiting);}
+      assert.equal(body.p_digest,firstDigest);assert.equal(body.p_queue_token,token);
+      return json({status:'reserved',requestId,replay:false});
+    }
+    if(name==='cancel_wait'){
+      assert.deepEqual(body,{p_user:userId,p_request:requestId,p_queue_token:token});
+      return json({requestId,cancelled:true});
+    }
+  }});
+  const wait=await f.ask(base);
+  assert.equal(wait.status,429);assert.equal(wait.headers.get('retry-after'),'2');
+  assert.deepEqual(await wait.json(),{code:'capacity_wait',requestId,queueToken:token,position:3,retryAfterSeconds:2,expiresAt:waiting.expiresAt});
+  assert.ok(!f.calls.some(c=>c.path.endsWith('completions')||c.path.endsWith('ai_dispatch')));
+  assert.equal((await f.ask(base,{'x-koda-queue-token':'bad'})).status,400);
+  assert.equal((await f.ask(base,{'x-koda-queue-token':token})).status,200);
+  assert.equal(f.calls.filter(c=>c.path.endsWith('completions')).length,1);
+  assert.equal((await f.ask({action:'cancel_wait',requestId,queueToken:token,p_user:'other'})).status,400);
+  const cancelled=await f.ask({action:'cancel_wait',requestId,queueToken:token});
+  assert.deepEqual(await cancelled.json(),{requestId,cancelled:true});
+  for(const code of ['queue_full','queue_expired','queue_user_limit','quota_exceeded']){
+    const denied=fixture({rpc:name=>name==='ai_admit'&&json({message:code},400)});
+    const r=await denied.ask(base);assert.equal(r.status,code==='queue_expired'?409:429);
+    assert.equal(r.headers.get('retry-after'),null);assert.deepEqual(await r.json(),{code});
+    assert.ok(!denied.calls.some(c=>c.path.endsWith('completions')));
   }
 });
 
@@ -324,7 +358,7 @@ test('budget notices retry with stable content and key without retrying model ge
         return json({alerts:[{...event,attempt:++attempt}]});
       }
       if (name==='budget_notice_finish') return json({updated:true});
-      if (name==='ai_reserve' && delivered) return json({code:'P0001',message:'budget_exceeded'},400);
+      if (name==='ai_admit' && delivered) return json({code:'P0001',message:'budget_exceeded'},400);
     }});
   assert.equal((await f.ask(base)).status,200);
   let acks=f.calls.filter(c=>c.path.endsWith('budget_notice_finish'));

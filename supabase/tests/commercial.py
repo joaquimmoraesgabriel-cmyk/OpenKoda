@@ -6,6 +6,7 @@ import json
 import subprocess
 import sys
 import uuid
+from capacity import exercise_capacity
 
 if len(sys.argv) != 2 or sys.argv[1] != "--local":
     raise SystemExit("Usage: python supabase/tests/commercial.py --local")
@@ -78,6 +79,7 @@ try:
     alter default privileges in schema public grant execute on functions to authenticated,anon,service_role;""")
     for file in sorted((ROOT/"migrations").glob("*_openkoda*.sql")):
         run("begin;\n"+file.read_text(encoding="utf-8")+"\ncommit;")
+    exercise_capacity(run,rpc,race,denied,MODEL,DIGEST)
     run(f"insert into auth.users values('{USER}','one@example.invalid',now()),('{OTHER}','two@example.invalid',now());")
     for role in ["anon","authenticated"]:
         denied("permission denied",run,f"set role {role}; select public.openkoda_export('{USER}');")

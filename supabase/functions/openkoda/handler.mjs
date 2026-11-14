@@ -11,6 +11,7 @@ const accountActions = {
   consent_initial:['consent_initial',['termsVersion','privacyVersion','marketing']],
   checkout:['checkout_mock',['plan','requestId']],
   support:['support_create',['subject','message','requestId']], delete:['delete',['confirmation']],
+  cancel_wait:['cancel_wait',['requestId','queueToken']],
 };
 
 function accountArgs(action, input) {
@@ -28,6 +29,9 @@ function accountArgs(action, input) {
     case 'checkout':
       requireValue(['plus','pro','ultra'].includes(input.plan));
       return {p_plan:input.plan,p_request:input.requestId};
+    case 'cancel_wait':
+      requireValue(uuid(input.queueToken));
+      return {p_request:input.requestId,p_queue_token:input.queueToken};
     case 'support': return {p_subject:textField(input.subject,160),p_message:textField(input.message,4000),p_request:input.requestId};
     case 'skill': return {p_skill:textField(input.id,96)};
     case 'delete': requireValue(input.confirmation === 'EXCLUIR','confirmation_required'); return {};
@@ -61,7 +65,7 @@ export function createHandler({env, fetcher = fetch, waitUntil}) {
       // Never return DB detail or hint; validation failures may echo supplied text.
       const message = typeof fault.message === 'string' ? fault.message : '';
       const safe = /^(?:[a-z][a-z_]{1,64})$/.test(message) ? message : 'operation_refused';
-      const status = /quota|rate_limit|concurrency|budget/.test(safe) ? 429 :
+      const status = safe === 'queue_expired' ? 409 : /quota|rate_limit|concurrency|budget|queue_full|queue_user_limit/.test(safe) ? 429 :
         /disabled|kill_switch/.test(safe) ? 503 : /conflict|idempotency/.test(safe) ? 409 :
         res.status >= 500 || /PGRST202/.test(fault.code) ? 503 : 403;
       throw new ApiError(status,safe);
@@ -138,10 +142,11 @@ export function createHandler({env, fetcher = fetch, waitUntil}) {
       if (origin) {
         requireValue(origin === (env('OPENKODA_SITE_ORIGIN') || PLATFORM_SITE), 'origin_refused',403);
         headers.set('access-control-allow-origin',origin);
+        headers.set('access-control-expose-headers','Retry-After');
       }
       if (request.method === 'OPTIONS') {
         headers.set('access-control-allow-methods','POST, OPTIONS');
-        headers.set('access-control-allow-headers','authorization, apikey, content-type, x-client-info');
+        headers.set('access-control-allow-headers','authorization, apikey, content-type, x-client-info, x-koda-queue-token');
         return new Response(null,{status:204,headers});
       }
       requireValue(request.method === 'POST','method_not_allowed',405);
@@ -179,14 +184,23 @@ export function createHandler({env, fetcher = fetch, waitUntil}) {
       const model = models.find(row => row.id === input.model);
       const {body,reservation} = buildInference(input,model);
       const identity = {p_user:user,p_request:input.requestId};
-      const reserveArgs = {...identity,p_digest:await fingerprint(JSON.stringify(body)),p_model:model.id,
+      const queueToken=request.headers.get('x-koda-queue-token');
+      requireValue(queueToken===null||uuid(queueToken),'invalid_queue_token');
+      const reserveArgs = {...identity,p_digest:await fingerprint(JSON.stringify(body)),p_model:model.id,p_queue_token:queueToken,
         p_operation:action === 'scan' ? 'analysis' : 'chat',p_ip_hash:ipHash,p_max_cost_micros:reservation};
-      const hold = await rpc('ai_reserve',reserveArgs).catch(async error => {
+      const hold = await rpc('ai_admit',reserveArgs).catch(async error => {
         if (error.status === 429) await notifyBudget();
         throw error;
       });
       requireValue(hold?.requestId === input.requestId && typeof hold.replay === 'boolean','reservation_unconfirmed',503);
       if (hold.replay) return json({code:'request_replayed',requestId:input.requestId,status:hold.status},409);
+      if (hold.status==='waiting') {
+        requireValue(uuid(hold.queueToken)&&Number.isSafeInteger(hold.position)&&hold.position>=1&&hold.position<=64&&
+          hold.retryAfterSeconds===2&&typeof hold.expiresAt==='string'&&Number.isFinite(Date.parse(hold.expiresAt)),'queue_unconfirmed',503);
+        headers.set('Retry-After',String(hold.retryAfterSeconds));
+        return json({code:'capacity_wait',requestId:input.requestId,queueToken:hold.queueToken,
+          position:hold.position,retryAfterSeconds:hold.retryAfterSeconds,expiresAt:hold.expiresAt},429);
+      }
       requireValue(hold.status === 'reserved','reservation_unconfirmed',503);
       await notifyBudget();
       const settle = async (status, usage, id) => {
