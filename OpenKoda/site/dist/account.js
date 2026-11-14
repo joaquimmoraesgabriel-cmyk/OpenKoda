@@ -8,7 +8,11 @@ let email='', submitting=false;
 let captcha, googleGrant, grantTimer, captchaLoading;
 const notice=document.createElement('p');
 notice.setAttribute('role','status');
-const say=text=>{notice.textContent=text;};
+let feedbackAction='';
+const say=(text,error=false)=>{
+ const target=(feedbackAction&&root.querySelector('[data-feedback="'+feedbackAction+'"]'))||notice;
+ target.setAttribute('role',error?'alert':'status');target.textContent=text;
+};
 function content(html,title='Minha conta',subtitle=''){
  clearTimeout(grantTimer);googleGrant=null;
  if(captcha){
@@ -135,51 +139,104 @@ async function attachCaptcha(action){
   });
  }catch{if(captcha===current)say('A verificação de segurança não carregou. Recarregue a página para tentar novamente.');}
 }
+const accountSections=[['visao-geral','Visão geral'],['plano','Plano'],['uso','Uso e limites'],['chamados','Chamados'],['preferencias','Preferências'],['dados','Dados e acesso']];
+let accountSnapshot=null,accountRevision=0,ticketRevision=0,ticketsLoaded=false;
+const feedback=action=>'<p class="account-feedback" data-feedback="'+action+'" role="status"></p>';
 function account(){
- content(`<div class="dashboard"><div class="dashboard-head"><div><h1>Minha conta</h1><p id="identity"></p></div><button class="secondary" data-do="logout">Sair</button></div>
- <section class="dash-block is-summary"><h2>Plano e uso</h2><p id="usage" aria-live="polite">Consultando seu plano…</p></section>
- <div class="dash-grid"><section class="dash-block"><h2>Assinatura</h2><form id="checkout"><fieldset class="plan-choice"><legend>Plano para simulação</legend>
- <label><input type="radio" name="plan" value="plus" checked><span>Plus</span><span>R$ 219 por mês</span></label>
- <label><input type="radio" name="plan" value="pro"><span>Pro</span><span>R$ 999 por mês</span></label>
- <label><input type="radio" name="plan" value="ultra"><span>Ultra</span><span>R$ 1.999 por mês</span></label>
- </fieldset><p>Simulação sem cobrança, renovação ou crédito de produção.</p><button>Simular assinatura</button></form><button class="secondary" data-do="cancel">Cancelar renovação ou simulação</button></section>
- <section class="dash-block"><h2>Suporte</h2><form id="support"><label>Assunto<input name="subject" required maxlength="120"></label><label>Mensagem sem dados confidenciais<textarea name="message" required rows="3" minlength="10" maxlength="2000"></textarea></label><button>Enviar chamado</button></form><details><summary>Meus chamados e respostas</summary><p id="tickets-empty" hidden>Você ainda não abriu chamados.</p><ul id="tickets"></ul></details></section>
- <section class="dash-block"><h2>Preferências</h2><details><summary>Aceites e comunicações</summary><form id="consent">${agreements}<button>Salvar aceites</button></form></details><button class="secondary" data-do="unsubscribe">Retirar consentimento de marketing</button></section>
- <section class="dash-block"><h2>Meus dados</h2><button class="secondary" data-do="export">Exportar dados da conta</button><details class="danger"><summary>Excluir minha conta</summary><form id="delete"><p>A exclusão da conta hospedada é permanente. Para continuar, digite EXCLUIR.</p><label>Frase de confirmação<input name="confirmation" required pattern="EXCLUIR"></label><button>Excluir minha conta</button></form></details></section></div></div>`,null);
+ accountSnapshot=null;ticketsLoaded=false;
+ content(`<div class="dashboard account-workspace">
+ <header class="dashboard-head"><div><p class="account-eyebrow">Seu espaço no OpenKoda</p><h1>Minha conta</h1><p id="identity"></p></div><div><button class="secondary" data-do="logout">Sair</button>${feedback('logout')}</div></header>
+ <div class="account-layout"><nav class="account-navigation" aria-label="Seções da conta">${accountSections.map(([id,label])=>`<a href="#${id}" data-section-link="${id}">${label}</a>`).join('')}</nav>
+ <div class="account-panels">
+ <section class="account-panel" data-account-section="visao-geral" aria-labelledby="heading-visao-geral"><div class="account-section-heading"><p class="account-eyebrow">Visão geral</p><h2 id="heading-visao-geral" tabindex="-1">Tudo no seu lugar.</h2><p>Consulte sua conta, acompanhe os limites e encontre o próximo passo.</p></div>
+ <div class="account-summary" data-account-summary aria-live="polite"><p>Consultando seu plano…</p></div>
+ <div class="account-task-list"><a href="#plano"><span><strong>Seu plano</strong><small>Veja a situação da assinatura e as opções disponíveis.</small></span><span aria-hidden="true">01</span></a><a href="#chamados"><span><strong>Precisa de ajuda?</strong><small>Abra um chamado e acompanhe as respostas no mesmo lugar.</small></span><span aria-hidden="true">02</span></a><a href="#dados"><span><strong>Você controla seus dados</strong><small>Exporte as informações da conta ou consulte a exclusão.</small></span><span aria-hidden="true">03</span></a></div>
+ </section>
+ <section class="account-panel" data-account-section="plano" aria-labelledby="heading-plano" hidden><div class="account-section-heading"><p class="account-eyebrow">Plano</p><h2 id="heading-plano" tabindex="-1">Uma assinatura, limites claros.</h2><p>Veja o que está ativo antes de escolher qualquer alteração.</p></div><div class="account-plan-state" data-plan-state aria-live="polite"><p>Consultando seu plano…</p></div>
+ <section class="account-surface"><h3>Explore os planos</h3><p class="account-callout">O checkout ainda é uma simulação: não há cobrança, renovação automática nem liberação de crédito de produção.</p><form id="checkout"><fieldset class="plan-choice"><legend>Plano para simulação</legend>
+ <label><input type="radio" name="plan" value="plus" checked><span>Plus</span><span>R$ 219 por mês</span></label><label><input type="radio" name="plan" value="pro"><span>Pro</span><span>R$ 999 por mês</span></label><label><input type="radio" name="plan" value="ultra"><span>Ultra</span><span>R$ 1.999 por mês</span></label></fieldset><button>Simular assinatura</button>${feedback('checkout')}</form><a class="account-inline-link" href="/precos/">Compare os recursos dos planos</a></section>
+ <section class="account-surface"><h3>Cancelamento</h3><p>Consulte a situação acima. Um pedido de cancelamento é registrado na sua conta, sem contratar um novo plano.</p><button class="secondary" data-do="cancel">Cancelar renovação ou simulação</button>${feedback('cancel')}<a class="account-inline-link" href="/reembolso/">Leia a política de cancelamento e reembolso</a></section></section>
+ <section class="account-panel" data-account-section="uso" aria-labelledby="heading-uso" hidden><div class="account-section-heading"><p class="account-eyebrow">Uso e limites</p><h2 id="heading-uso" tabindex="-1">Acompanhe sua cota.</h2><p>Os valores abaixo pertencem à IA da assinatura. O uso com chave própria é acompanhado no aplicativo e no seu provedor.</p></div><div data-usage-detail aria-live="polite"><p>Consultando seu uso…</p></div><button class="secondary" data-do="refresh">Atualizar uso</button>${feedback('refresh')}<div class="account-explainer"><h3>Como a cota funciona</h3><p>A cota do ciclo mensal é liberada em janelas de até sete dias. O saldo da janela e o limite mensal valem ao mesmo tempo. A próxima liberação aparece quando existe uma assinatura ativa.</p><a href="/guias/uso/">Entenda os limites de uso</a></div></section>
+ <section class="account-panel" data-account-section="chamados" aria-labelledby="heading-chamados" hidden><div class="account-section-heading"><p class="account-eyebrow">Chamados</p><h2 id="heading-chamados" tabindex="-1">Vamos resolver juntos.</h2><p>Descreva o que aconteceu, o que esperava e os passos para reproduzir. Não envie senhas, chaves de API ou arquivos confidenciais.</p></div><section class="account-surface"><h3>Novo chamado</h3><form id="support"><label>Assunto<input name="subject" required maxlength="120"></label><label>Mensagem sem dados confidenciais<textarea name="message" required rows="5" minlength="10" maxlength="2000"></textarea></label><button>Enviar chamado</button>${feedback('support')}</form></section><section class="account-ticket-history"><div class="account-row-heading"><h3>Meus chamados e respostas</h3><button class="secondary" data-do="tickets">Atualizar chamados</button></div><p id="tickets-state" role="status"></p><ul id="tickets"></ul>${feedback('tickets')}</section></section>
+ <section class="account-panel" data-account-section="preferencias" aria-labelledby="heading-preferencias" hidden><div class="account-section-heading"><p class="account-eyebrow">Preferências</p><h2 id="heading-preferencias" tabindex="-1">Escolhas que são suas.</h2><p>O consentimento para novidades é opcional e fica separado dos documentos necessários à conta.</p></div><section class="account-surface"><h3>Novidades por e-mail</h3><p id="marketing-state">Consultando sua preferência…</p><form id="marketing"><label><input type="checkbox" name="marketing"> Quero receber novidades da Koda por e-mail.</label><button>Salvar preferência</button>${feedback('marketing')}</form><button class="secondary" data-do="unsubscribe">Retirar consentimento de marketing</button>${feedback('unsubscribe')}</section><section class="account-surface"><h3>Termos e privacidade</h3><p id="consent-state">Consultando seus aceites…</p><form id="consent" hidden>${requiredAgreements}<label><input type="checkbox" name="marketing"> Quero autorizar novidades por e-mail junto a estes aceites.</label><p class="account-small">Esta escolha opcional será registrada junto com os aceites. Se você deixar a opção desmarcada, o envio de novidades ficará desativado. Depois, poderá alterá-la na seção de e-mails acima.</p><button>Salvar aceites</button></form>${feedback('consent')}</section></section>
+ <section class="account-panel" data-account-section="dados" aria-labelledby="heading-dados" hidden><div class="account-section-heading"><p class="account-eyebrow">Dados e acesso</p><h2 id="heading-dados" tabindex="-1">Sua conta, seu controle.</h2><p>Estas ações se referem à conta hospedada. Projetos e conversas guardados no computador são gerenciados no aplicativo.</p></div><section class="account-surface"><h3>Uma cópia dos seus dados</h3><p>Baixe as informações disponíveis da conta em um arquivo JSON. Guarde-o em um lugar seguro.</p><button class="secondary" data-do="export">Exportar dados da conta</button>${feedback('export')}</section><section class="account-surface account-danger"><h3>Excluir a conta</h3><p>A exclusão da conta hospedada é permanente. Leia a política de privacidade e exporte os dados que deseja guardar antes de continuar.</p><button class="secondary" data-do="showDelete" aria-expanded="false" aria-controls="delete">Ver opções de exclusão</button><form id="delete" hidden><p>Para confirmar o pedido, digite EXCLUIR.</p><label>Frase de confirmação<input name="confirmation" required pattern="EXCLUIR" autocomplete="off"></label><button>Excluir minha conta</button>${feedback('delete')}</form></section><a class="account-inline-link" href="/privacidade/">Consulte a política de privacidade</a></section>
+ </div></div></div>`,null);
  root.querySelector('#identity').textContent=email;
+ root.querySelector('.dashboard-head>div').append(notice);
  const selected=params.get('plano');if(['plus','pro','ultra'].includes(selected))root.querySelector('#checkout input[value="'+selected+'"]').checked=true;
+ const requested=location.hash.slice(1),initial=accountSections.some(([id])=>id===requested)?requested:params.get('acao')==='suporte'?'chamados':selected?'plano':'visao-geral';
+ if(!requested&&initial!=='visao-geral')history.replaceState(null,'',location.pathname+location.search+'#'+initial);
+ selectAccountSection(initial,false);
  void refreshAccount();
- if(params.get('acao')==='suporte')root.querySelector('#support input').focus();
 }
-const usd = micros => (micros / 1000000).toLocaleString('pt-BR',{style:'currency',currency:'USD',maximumFractionDigits:6});
-async function refreshAccount(){
- try {
-  const r=await edge('account');
-  const target=root.querySelector('#usage');
-  if(!target)return;
-  const usage=r.usage;
-  const parts=['Plano atual: '+(r.plan?.id??'Gratuito')+'.'];
-  if(usage?.windowEnd){
-   parts.push('Nesta janela de sete dias: '+usd(usage.windowUsedMicros)+' de '+usd(usage.windowLimitMicros)+'.');
-   parts.push('No ciclo mensal: '+usd(usage.monthlyUsedMicros)+' de '+usd(usage.monthlyLimitMicros)+'.');
-   parts.push('Próxima liberação: '+new Date(usage.nextRelease).toLocaleString('pt-BR')+'.');
+function selectAccountSection(id,focus=true){
+ if(!root.querySelector('.dashboard'))return;
+ if(!accountSections.some(([key])=>key===id))id='visao-geral';
+ for(const panel of root.querySelectorAll('[data-account-section]'))panel.hidden=panel.dataset.accountSection!==id;
+ for(const link of root.querySelectorAll('[data-section-link]')){if(link.dataset.sectionLink===id)link.setAttribute('aria-current','page');else link.removeAttribute('aria-current');}
+ if(focus)root.querySelector('#heading-'+id)?.focus({preventScroll:true});
+ if(id==='chamados'&&!ticketsLoaded)void refreshTickets();
+}
+window.addEventListener('hashchange',()=>selectAccountSection(location.hash.slice(1)));
+const amount=value=>typeof value==='number'&&Number.isFinite(value)&&value>=0?value:null;
+const usd=value=>amount(value)===null?'Não disponível':(value/1000000).toLocaleString('pt-BR',{style:'currency',currency:'USD',maximumFractionDigits:6});
+const dateLabel=value=>{if(!value)return 'Não disponível';const date=new Date(value);return Number.isNaN(date.valueOf())?'Não disponível':date.toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'});};
+const planLabel=plan=>({plus:'Plus',pro:'Pro',ultra:'Ultra'})[plan?.id]??(plan?'Plano da conta':'Gratuito');
+function textAt(selector,text){for(const el of root.querySelectorAll(selector))el.textContent=text;}
+function renderAccountSummary(r){
+ const usage=r.usage,active=Boolean(r.plan),label=planLabel(r.plan);
+ const summary=root.querySelector('[data-account-summary]'),plan=root.querySelector('[data-plan-state]'),detail=root.querySelector('[data-usage-detail]');
+ summary.innerHTML='<div><span class="account-stat-label">Plano atual</span><strong data-plan-label></strong><p data-plan-note></p></div><div><span class="account-stat-label">Próxima liberação</span><strong class="account-date" data-next-release></strong><a href="#uso">Ver uso e limites</a></div>';
+ plan.innerHTML='<span class="account-stat-label">Plano atual</span><strong data-plan-label></strong><p data-plan-note></p>';
+ textAt('[data-plan-label]',label);
+ textAt('[data-plan-note]',!active?'Use sua própria chave de API no aplicativo.':r.subscription?.cancelAtPeriodEnd?'Renovação cancelada. Consulte o encerramento do ciclo em Uso e limites.':'Consulte o consumo e as datas do seu ciclo em Uso e limites.');
+ textAt('[data-next-release]',usage?dateLabel(usage.nextRelease):'Sem cota ativa');
+ if(!usage){detail.innerHTML='<div class="account-empty"><h3>Não há uma cota de assinatura ativa.</h3><p>Você pode usar sua própria chave de API no aplicativo. Os gastos dessa conexão aparecem no histórico de uso do desktop e são cobrados pelo provedor escolhido.</p><a href="#plano">Consultar plano</a></div>';}
+ else{
+  detail.innerHTML='<div class="account-usage-grid"><section class="account-surface"><h3>Janela de sete dias</h3><p class="account-usage-value" data-week-value></p><progress aria-label="Consumo da janela de sete dias"></progress><p data-week-dates></p></section><section class="account-surface"><h3>Ciclo mensal</h3><p class="account-usage-value" data-month-value></p><progress aria-label="Consumo do ciclo mensal"></progress><p data-month-dates></p></section></div><dl class="account-usage-ledger"><div><dt>Próxima liberação</dt><dd data-usage-release></dd></div><div><dt>Reservado para solicitações em andamento</dt><dd data-reserved></dd></div><div><dt>Consumo concluído no ciclo</dt><dd data-settled></dd></div></dl><p class="account-small">O uso pode incluir valores reservados enquanto uma solicitação aguarda conclusão. Eles são reconciliados pelo servidor.</p>';
+  for(const [period,used,limit] of [['week',usage.windowUsedMicros,usage.windowLimitMicros],['month',usage.monthlyUsedMicros,usage.monthlyLimitMicros]]){
+   textAt('[data-'+period+'-value]',usd(used)+' de '+usd(limit));
+   const progress=detail.querySelector(period==='week'?'progress[aria-label="Consumo da janela de sete dias"]':'progress[aria-label="Consumo do ciclo mensal"]');
+   if(amount(used)!==null&&amount(limit)!==null&&limit>0){progress.max=limit;progress.value=Math.min(used,limit);progress.setAttribute('aria-valuetext',usd(used)+' de '+usd(limit));}else{progress.hidden=true;}
   }
-  if(r.subscription?.cancelAtPeriodEnd)parts.push('Renovação cancelada.');
-  target.textContent=parts.join(' ');
-  root.querySelector('#consent [name=marketing]').checked=Boolean(r.consent?.marketing);
-  const saved=Boolean(r.consent?.acceptedAt && r.consent.termsVersion===r.consent.requiredTermsVersion && r.consent.privacyVersion===r.consent.requiredPrivacyVersion);
-  root.querySelector('#consent [name=agreement]').checked=saved;
-  const list=root.querySelector('#tickets');
-  const empty=root.querySelector('#tickets-empty');
-  if(list&&empty){const {tickets}=await edge('support_list');list.replaceChildren();
-   empty.hidden=Boolean(tickets?.length);
-   for(const ticket of tickets??[]){
-   const row=document.createElement('li');row.textContent=ticket.subject+' · '+ticket.status;
-   for(const reply of ticket.replies??[]){const p=document.createElement('p');p.textContent=reply.message;row.append(p);}
-   list.append(row);
-  }}
- } catch(e){if(e.code==='unauthenticated'){email='';login();}say(e.message);}
-
+  textAt('[data-week-dates]',dateLabel(usage.windowStart)+' a '+dateLabel(usage.windowEnd));
+  textAt('[data-month-dates]',dateLabel(r.subscription?.periodStart)+' a '+dateLabel(r.subscription?.periodEnd));
+  textAt('[data-usage-release]',dateLabel(usage.nextRelease));textAt('[data-reserved]',usd(usage.reservedMicros));textAt('[data-settled]',usd(usage.settledMicros));
+ }
+ const saved=Boolean(r.consent?.acceptedAt&&r.consent.termsVersion===r.consent.requiredTermsVersion&&r.consent.privacyVersion===r.consent.requiredPrivacyVersion);
+ textAt('#consent-state',saved?'Aceites atuais registrados em '+dateLabel(r.consent.acceptedAt)+'.':'Confira e registre os aceites dos termos e da política de privacidade.');
+ textAt('#marketing-state',r.consent?.marketing?'Você autorizou o envio de novidades. Pode mudar essa escolha a qualquer momento.':'O envio de novidades não está autorizado. E-mails necessários à conta e ao suporte são tratados separadamente.');
+ const form=root.querySelector('#marketing');if(!form.dataset.dirty)form.elements.marketing.checked=Boolean(r.consent?.marketing);
+ const terms=root.querySelector('#consent');terms.hidden=saved;
+ if(!terms.dataset.dirty){terms.elements.agreement.checked=false;terms.elements.marketing.checked=false;}
+}
+async function refreshAccount(){
+ const revision=++accountRevision,dashboard=root.querySelector('.dashboard');if(!dashboard)return;
+ for(const node of root.querySelectorAll('[data-account-summary],[data-plan-state],[data-usage-detail]'))node.setAttribute('aria-busy','true');
+ try{
+  const r=await edge('account');if(revision!==accountRevision||!dashboard.isConnected)return;
+  accountSnapshot=r;renderAccountSummary(r);
+ }catch(e){
+  if(revision!==accountRevision||!dashboard.isConnected)return;
+  accountSnapshot=null;
+  if(e.code==='unauthenticated'){email='';login();say('Sua sessão expirou. Entre novamente.');return;}
+  for(const node of root.querySelectorAll('[data-account-summary],[data-plan-state],[data-usage-detail]')){node.innerHTML='<p role="alert">Não foi possível consultar os dados agora. Nenhum valor estimado foi exibido.</p><button class="secondary" data-do="refresh">Tentar novamente</button>';}
+  textAt('#marketing-state','Não foi possível consultar sua preferência. Atualize os dados antes de alterar.');textAt('#consent-state','Não foi possível consultar os aceites.');
+ }finally{if(dashboard.isConnected)for(const node of root.querySelectorAll('[data-account-summary],[data-plan-state],[data-usage-detail]'))node.setAttribute('aria-busy','false');}
+}
+async function refreshTickets(){
+ const revision=++ticketRevision,dashboard=root.querySelector('.dashboard'),list=root.querySelector('#tickets'),state=root.querySelector('#tickets-state');if(!dashboard||!list)return;
+ state.textContent='Consultando seus chamados…';list.setAttribute('aria-busy','true');
+ try{
+  const r=await edge('support_list');if(revision!==ticketRevision||!dashboard.isConnected)return;
+  const tickets=Array.isArray(r.tickets)?r.tickets:[];list.replaceChildren();ticketsLoaded=true;
+  state.setAttribute('role','status');state.textContent=tickets.length?'':'Você ainda não abriu chamados.';
+  for(const ticket of tickets){const row=document.createElement('li'),head=document.createElement('div'),title=document.createElement('h4'),status=document.createElement('span'),time=document.createElement('p'),message=document.createElement('p');
+   head.className='account-ticket-heading';title.textContent=ticket.subject;status.className='account-ticket-status';status.textContent=ticket.status==='closed'?'Encerrado':'Aberto';head.append(title,status);time.className='account-small';time.textContent=dateLabel(ticket.createdAt);message.textContent=ticket.message??'';row.append(head,time,message);
+   for(const reply of ticket.replies??[]){const response=document.createElement('div'),label=document.createElement('strong'),body=document.createElement('p');response.className='account-ticket-reply';label.textContent='Resposta do suporte';body.textContent=reply.message;response.append(label,body);row.append(response);}list.append(row);
+  }
+ }catch(e){if(revision!==ticketRevision||!dashboard.isConnected)return;if(e.code==='unauthenticated'){email='';login();say('Sua sessão expirou. Entre novamente.');return;}state.setAttribute('role','alert');state.textContent='Não foi possível atualizar seus chamados. Tente novamente; o rascunho foi mantido.';}
+ finally{if(list.isConnected)list.setAttribute('aria-busy','false');}
 }
 async function signedIn(result,oauthIntent){
  if(!result.user?.email)throw Error('Confirme seu e-mail antes de entrar.');
@@ -233,26 +290,51 @@ async function handle(action,data){
  case 'recover':if(!turnstileSiteKey)throw Error('Para recuperar o acesso no pré-lançamento, entre em contato com o suporte.');if(!data){content('<form id="recover"><label>E-mail da conta<input type="email" required name="email"></label><button>Enviar recuperação</button></form>');attachCaptcha();return;}
   await call('recover',{email:data.email,gotrue_meta_security:security});return say('Se a conta existir, você receberá instruções. Abra o link no mesmo navegador.');
  case 'reset':{const result=await call('reset',{password:data.password});email=result.user.email;history.replaceState(null,'','/conta/');account();return say('Senha atualizada.');}
- case 'consent':await edge('consent',{termsVersion:'2026-11-13',privacyVersion:'2026-11-13',marketing:data.marketing==='on'});return say('Aceites registrados.');
- case 'unsubscribe':await edge('marketing',{enabled:false});return say('Consentimento de marketing retirado.');
- case 'support':{const r=await edge('support',{...data,requestId:crypto.randomUUID()});root.querySelector('#support').reset();void refreshAccount();return say('Chamado registrado. '+(r.id??''));}
- case 'checkout':await edge('checkout',{plan:data.plan,requestId:crypto.randomUUID()});return say('Simulação registrada. Nenhuma cobrança foi realizada.');
- case 'cancel':await edge('cancel');void refreshAccount();return say('Solicitação de cancelamento registrada.');
- case 'export':{const result=await edge('export');const a=document.createElement('a');const url=URL.createObjectURL(new Blob([JSON.stringify(result,null,2)],{type:'application/json'}));a.href=url;a.download='koda-meus-dados.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),3000);return;}
+ case 'consent':{
+  consentIntent(data);
+  // The current endpoint updates terms and marketing together. Never reuse an
+  // old opt-in. Only the optional checkbox in this form grants a new opt-in.
+  let latest;
+  try{latest=await edge('account');accountSnapshot=latest;}catch(error){accountSnapshot=null;throw error;}
+  const consent=latest.consent;
+  if(consent?.requiredTermsVersion!==legalVersion||consent?.requiredPrivacyVersion!==legalVersion)throw Error('Os documentos foram atualizados. Recarregue a página antes de registrar os aceites.');
+  if(consent.acceptedAt&&consent.termsVersion===legalVersion&&consent.privacyVersion===legalVersion){renderAccountSummary(latest);return say('Seus aceites atuais já estão registrados. A preferência de e-mail foi mantida.');}
+  await edge('consent',{termsVersion:legalVersion,privacyVersion:legalVersion,marketing:data.marketing==='on'});
+  delete root.querySelector('#consent').dataset.dirty;await refreshAccount();return say('Aceites registrados.');
+ }
+ case 'marketing':if(!accountSnapshot)throw Error('Atualize os dados da conta antes de salvar sua preferência.');await edge('marketing',{enabled:data.marketing==='on'});if(accountSnapshot)accountSnapshot.consent={...accountSnapshot.consent,marketing:data.marketing==='on'};delete root.querySelector('#marketing').dataset.dirty;await refreshAccount();return say('Preferência de e-mail salva.');
+ case 'unsubscribe':await edge('marketing',{enabled:false});if(accountSnapshot)accountSnapshot.consent={...accountSnapshot.consent,marketing:false};root.querySelector('#marketing').elements.marketing.checked=false;delete root.querySelector('#marketing').dataset.dirty;await refreshAccount();return say('Consentimento de marketing retirado.');
+ case 'support':{const r=await edge('support',{...data,requestId:crypto.randomUUID()});root.querySelector('#support').reset();await refreshTickets();return say('Chamado registrado. '+(r.id??''));}
+ case 'checkout':await edge('checkout',{plan:data.plan,requestId:crypto.randomUUID()});await refreshAccount();return say('Simulação registrada. Nenhuma cobrança foi realizada.');
+ case 'cancel':{const result=await edge('cancel');await refreshAccount();return say(result.cancelAtPeriodEnd?'Solicitação de cancelamento registrada.':'Não há renovação ativa para cancelar. Nenhuma cobrança foi realizada.');}
+ case 'refresh':await refreshAccount();return;
+ case 'tickets':await refreshTickets();return;
+ case 'showDelete':{const form=root.querySelector('#delete'),button=root.querySelector('[data-do=showDelete]');form.hidden=!form.hidden;button.setAttribute('aria-expanded',String(!form.hidden));if(!form.hidden)form.elements.confirmation.focus();return;}
+ case 'export':{const result=await edge('export');const a=document.createElement('a');const url=URL.createObjectURL(new Blob([JSON.stringify(result,null,2)],{type:'application/json'}));a.href=url;a.download='koda-meus-dados.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),3000);return say('Arquivo preparado. Confira os downloads do navegador.');}
  case 'delete':await edge('delete',{confirmation:data.confirmation});email='';login();return say('Pedido de exclusão aceito.');
  case 'logout':await call('logout');email='';login();return say('Sessão encerrada.');
  }
 }
-async function dispatch(action,data){if(submitting)return;submitting=true;say('');try{await handle(action,data);}catch(e){retryCaptcha();say(e.message||'Serviço indisponível.');}finally{submitting=false;}}
+async function dispatch(action,data){
+ if(submitting)return;submitting=true;feedbackAction=action;say('');
+ const dashboard=root.querySelector('.dashboard'),form=data&&root.querySelector('form#'+action),scope=form||root.querySelector('[data-do="'+action+'"]');
+ const controls=dashboard?[...root.querySelectorAll('form button,[data-do]')].map(el=>[el,el.disabled]):[];
+ for(const [el]of controls)el.disabled=true;
+ scope?.setAttribute('aria-busy','true');
+ const submit=form?.querySelector('button'),label=submit?.textContent;if(submit)submit.textContent='Aguarde…';
+ try{await handle(action,data);}catch(e){retryCaptcha();say(e.message||'Serviço indisponível.',true);}
+ finally{submitting=false;feedbackAction='';scope?.removeAttribute('aria-busy');for(const [el,disabled]of controls)if(el.isConnected)el.disabled=disabled;if(submit?.isConnected)submit.textContent=label;}
+}
 root.addEventListener('submit',e=>{e.preventDefault();void dispatch(e.target.id,payload(e.target));});
 root.addEventListener('click',e=>{const b=e.target.closest('[data-do]');if(b)void dispatch(b.dataset.do);});
+root.addEventListener('input',e=>{const form=e.target.closest('#marketing,#consent');if(form)form.dataset.dirty='true';});
 async function restoreDashboard(){
  if(!root.querySelector('.dashboard'))return;
  try{
   const state=await call('status');
   if(!root.querySelector('.dashboard'))return;
   if(!state.user){email='';login();return;}
-  if(email!==state.user.email){email=state.user.email;account();}
+  if(email!==state.user.email){email=state.user.email;account();}else{await refreshAccount();if(root.querySelector('[data-account-section=chamados]:not([hidden])'))await refreshTickets();}
  }catch(e){say(e.message);}
 }
 window.addEventListener('pageshow',event=>{if(event.persisted)void restoreDashboard();});

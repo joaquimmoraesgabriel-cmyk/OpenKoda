@@ -2,4 +2,6 @@
 dist/server/
 dist/.openai/
 dist/**/*.html
+!dist/demo-app/index.html
+dist/**/*.tmp-*
 dist/favicon.svg

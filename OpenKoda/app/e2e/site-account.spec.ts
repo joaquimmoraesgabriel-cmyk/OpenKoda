@@ -39,8 +39,10 @@ test.beforeAll(() => {
   execFileSync(process.execPath, [build]);
 });
 
-async function siteFixture(page:Page,accepted=false){
+async function siteFixture(page:Page,accepted=false,options:{beforeAction?:(body:Record<string,unknown>)=>Promise<void>;account?:()=>unknown;failAction?:()=>string|undefined}={}){
   const posted:{action:string;marketing?:boolean}[]=[];
+  let marketing=accepted;
+  const tickets:{id:string;subject:string;message:string;status:string;createdAt:string;replies:unknown[]}[]=[];
   const registrations:{data:{adult_requested:boolean;privacy_requested:string}}[]=[];
   const user={id:'synthetic-user',email:'teste@example.invalid',email_confirmed_at:version};
   const challenges=new Map<string,string>(), spentCaptcha=new Set<string>();
@@ -76,9 +78,13 @@ async function siteFixture(page:Page,accepted=false){
     if(url.pathname==='/auth/v1/user')return Response.json(validSession?user:{},{status:validSession?200:401});
     if(url.pathname==='/auth/v1/logout'){validSession=false;return new Response(null,{status:204});}
     expect(url.pathname).toBe('/functions/v1/openkoda');posted.push(body);
-    if(body.action==='account')return Response.json({plan:null,consent:{acceptedAt:accepted?version:null,requiredTermsVersion:version,requiredPrivacyVersion:version,marketing:accepted}});
-    if(body.action==='consent_initial')accepted=true;
-    return Response.json(body.action==='support_list'?{tickets:[]}:{});
+    await options.beforeAction?.(body);
+    if(options.failAction?.()===body.action)return Response.json({error:'fixture_unavailable'},{status:503});
+    if(body.action==='account')return Response.json(options.account?.()??{plan:null,consent:{acceptedAt:accepted?version:null,termsVersion:version,privacyVersion:version,requiredTermsVersion:version,requiredPrivacyVersion:version,marketing}});
+    if(['consent_initial','consent'].includes(body.action)){accepted=true;marketing=body.marketing===true;}
+    if(body.action==='marketing')marketing=body.enabled===true;
+    if(body.action==='support'){tickets.push({id:body.requestId,subject:body.subject,message:body.message,status:'open',createdAt:new Date().toISOString(),replies:[]});return Response.json({id:body.requestId});}
+    return Response.json(body.action==='support_list'?{tickets}:{});
   };
   await page.context().route('**/*',async route=>{
     const request=route.request(),url=new URL(request.url());
@@ -183,11 +189,11 @@ test('site mantém a sessão no reload, nos preços e numa nova aba; sair revoga
   await page.getByRole('button',{name:'Entrar',exact:true}).click();
   await expect(page.getByRole('heading',{name:'Minha conta'})).toBeVisible();
   expect(await page.evaluate(()=>document.cookie)).not.toContain('koda-');
-  const tickets=page.locator('summary').filter({hasText:'Meus chamados e respostas'});
-  await expect(tickets).toHaveCSS('list-style-type','none');
+  const tickets=page.getByRole('link',{name:'Chamados',exact:true});
   await tickets.focus();await page.keyboard.press('Enter');
+  await expect(page.getByRole('heading',{name:'Meus chamados e respostas'})).toBeVisible();
   await expect(page.getByText('Você ainda não abriu chamados.')).toBeVisible();
-  await page.keyboard.press('Space');
+  await page.getByRole('link',{name:'Visão geral',exact:true}).click();
   await expect(page.getByText('Você ainda não abriu chamados.')).toBeHidden();
   await page.goto(site+'/conta/?plano=ultra');
   await expect(page.getByRole('radio',{name:/Ultra/})).toBeChecked();
@@ -254,4 +260,189 @@ test('link de e-mail expirado permite pedir outro e remove o erro da URL',async(
   expect(new URL(page.url()).search).toBe('');
   await page.getByRole('button',{name:'Solicitar nova recuperação'}).click();
   await expect(page.getByLabel('E-mail da conta')).toBeVisible();
+});
+
+async function passwordLogin(page:Page,path='/conta/'){
+  await page.goto(site+path);
+  await page.getByLabel('E-mail',{exact:true}).fill('teste@example.invalid');
+  await page.getByLabel('Senha',{exact:true}).fill('fixture-local-somente');
+  await completeCaptcha(page);
+  await page.getByRole('button',{name:'Entrar',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'Minha conta',exact:true})).toBeVisible();
+}
+
+test('conta organiza tarefas, preserva rascunhos e restaura a seção sem consultar chamados fora dela',async({page})=>{
+  const fixture=await siteFixture(page,true);
+  await passwordLogin(page);
+  await expect(page.getByRole('link',{name:'Visão geral',exact:true})).toHaveAttribute('aria-current','page');
+  await expect(page.getByText('Gratuito',{exact:true}).first()).toBeVisible();
+  expect(fixture.posted.filter(p=>p.action==='support_list')).toHaveLength(0);
+  await page.getByRole('link',{name:'Chamados',exact:true}).click();
+  await page.getByLabel('Assunto',{exact:true}).fill('Rascunho preservado');
+  await page.getByLabel('Mensagem sem dados confidenciais').fill('Ainda estou reunindo os passos do problema.');
+  await page.getByRole('link',{name:'Plano',exact:true}).click();
+  await page.goBack();
+  await expect(page.getByLabel('Assunto',{exact:true})).toHaveValue('Rascunho preservado');
+  await page.getByRole('link',{name:'Preferências',exact:true}).click();
+  await page.reload();
+  await expect(page.getByRole('heading',{name:'Escolhas que são suas.'})).toBeVisible();
+  await expect(page.getByRole('link',{name:'Preferências',exact:true})).toHaveAttribute('aria-current','page');
+  expect(fixture.posted.filter(p=>p.action==='support_list')).toHaveLength(1);
+});
+
+test('chamado mostra envio em andamento, evita duplicação e mantém texto após falha',async({page})=>{
+  let release:(()=>void)|undefined,fail=true;
+  const fixture=await siteFixture(page,true,{beforeAction:async body=>{if(body.action==='support')await new Promise<void>(resolve=>{release=resolve;});},failAction:()=>fail?'support':undefined});
+  await passwordLogin(page,'/conta/?acao=suporte');
+  await page.getByLabel('Assunto',{exact:true}).fill('Erro ao salvar um projeto');
+  await page.getByLabel('Mensagem sem dados confidenciais').fill('Criei um projeto e cliquei em salvar. O formulário mostrou um erro.');
+  const send=page.locator('#support button');
+  await send.click();
+  await expect(send).toBeDisabled();
+  await expect(send).toHaveText('Aguarde…');
+  await page.locator('#support').evaluate(form=>(form as HTMLFormElement).requestSubmit());
+  await expect.poll(()=>fixture.posted.filter(p=>p.action==='support').length).toBe(1);
+  release?.();
+  await expect(page.locator('[data-feedback=support]')).toHaveAttribute('role','alert');
+  await expect(page.getByLabel('Assunto',{exact:true})).toHaveValue('Erro ao salvar um projeto');
+  fail=false;
+  await send.click();
+  await expect.poll(()=>fixture.posted.filter(p=>p.action==='support').length).toBe(2);release?.();
+  await expect(page.locator('[data-feedback=support]')).toContainText('Chamado registrado.');
+  await expect(page.getByLabel('Assunto',{exact:true})).toHaveValue('');
+  await expect(page.locator('#tickets')).toContainText('Erro ao salvar um projeto');
+});
+
+test('uso mostra dados indisponíveis sem NaN e permite recuperar a consulta',async({page})=>{
+  let failing=true;
+  await siteFixture(page,true,{failAction:()=>failing?'account':undefined,account:()=>({plan:{id:'plus'},subscription:{periodStart:'invalid',periodEnd:'invalid'},usage:{windowEnd:'invalid',nextRelease:'invalid',windowUsedMicros:'not-a-number',monthlyUsedMicros:null},consent:{marketing:false}})});
+  await passwordLogin(page);
+  await expect(page.locator('[data-account-summary]')).toContainText('Não foi possível consultar os dados agora.');
+  failing=false;
+  await page.locator('[data-account-summary]').getByRole('button',{name:'Tentar novamente'}).click();
+  await page.getByRole('link',{name:'Uso e limites',exact:true}).click();
+  await expect(page.locator('[data-usage-detail]')).toContainText('Não disponível');
+  await expect(page.locator('[data-usage-detail]')).not.toContainText(/NaN|Invalid Date/);
+  await expect(page.locator('[data-usage-detail] progress:visible')).toHaveCount(0);
+});
+
+test('preferência de marketing salva e retirada permanece correta no reload',async({page})=>{
+  const fixture=await siteFixture(page,true);
+  await passwordLogin(page);
+  await page.getByRole('link',{name:'Preferências',exact:true}).click();
+  const marketing=page.getByRole('checkbox',{name:/receber novidades/});
+  await expect(marketing).toBeChecked();
+  await page.getByRole('button',{name:'Retirar consentimento de marketing'}).click();
+  await expect(marketing).not.toBeChecked();
+  await expect(page.locator('[data-feedback=unsubscribe]')).toContainText('retirado');
+  await page.reload();
+  await expect(marketing).not.toBeChecked();
+  await marketing.check();
+  await page.getByRole('button',{name:'Salvar preferência'}).click();
+  await expect(page.locator('[data-feedback=marketing]')).toContainText('salva');
+  await page.reload();
+  await expect(marketing).toBeChecked();
+  expect(fixture.posted.filter(p=>p.action==='marketing')).toEqual([{action:'marketing',enabled:false},{action:'marketing',enabled:true}]);
+});
+
+for(const width of [390,768,1440])test('conta navegável sem corte horizontal em '+width+'px',async({page},testInfo)=>{
+  await page.setViewportSize({width,height:900});
+  await siteFixture(page,true);
+  await passwordLogin(page);
+  await expect(page.getByText('Gratuito',{exact:true}).first()).toBeVisible();
+  const nav=page.getByRole('navigation',{name:'Seções da conta'});
+  await expect(nav).toBeVisible();
+  for(const name of ['Plano','Uso e limites','Chamados','Preferências','Dados e acesso']){
+    await nav.getByRole('link',{name,exact:true}).click();
+    await expect(nav.getByRole('link',{name,exact:true})).toHaveAttribute('aria-current','page');
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+  }
+  await nav.getByRole('link',{name:'Visão geral',exact:true}).click();
+  await page.getByRole('button',{name:'Entendi',exact:true}).click();
+  for(const appearance of ['light','dark']){
+    await page.getByLabel('Aparência',{exact:true}).selectOption(appearance);
+    await nav.getByRole('link',{name:'Visão geral',exact:true}).click();
+    await page.screenshot({path:testInfo.outputPath('account-overview-'+appearance+'-'+width+'.png'),fullPage:true});
+    await nav.getByRole('link',{name:'Chamados',exact:true}).click();
+    await page.screenshot({path:testInfo.outputPath('account-support-'+appearance+'-'+width+'.png'),fullPage:true});
+  }
+});
+
+test('conta mantém contraste escuro e atualiza a cota ao restaurar a mesma sessão',async({page},testInfo)=>{
+  let used=2000000;
+  await siteFixture(page,true,{account:()=>({plan:{id:'plus'},subscription:{periodStart:'2026-11-01T00:00:00Z',periodEnd:'2026-12-01T00:00:00Z'},usage:{windowStart:'2026-11-08T00:00:00Z',windowEnd:'2026-11-15T00:00:00Z',nextRelease:'2026-11-15T00:00:00Z',windowUsedMicros:used,windowLimitMicros:5000000,monthlyUsedMicros:used,monthlyLimitMicros:20000000,reservedMicros:0,settledMicros:used},consent:{marketing:false}})});
+  await passwordLogin(page);
+  await page.getByLabel('Aparência',{exact:true}).selectOption('dark');
+  await page.getByRole('button',{name:'Entendi',exact:true}).click();
+  await expect(page.locator('.account-summary')).toHaveCSS('color','rgb(242, 245, 246)');
+  await expect(page.locator('body')).toHaveCSS('background-color','rgb(17, 21, 25)');
+  await page.screenshot({path:testInfo.outputPath('account-dark-1440.png'),fullPage:true});
+  await page.getByRole('link',{name:'Uso e limites',exact:true}).click();
+  const week=page.getByRole('progressbar',{name:'Consumo da janela de sete dias'});
+  await expect(week).toHaveAttribute('value','2000000');
+  used=3000000;
+  await page.evaluate(()=>window.dispatchEvent(new PageTransitionEvent('pageshow',{persisted:true})));
+  await expect(week).toHaveAttribute('value','3000000');
+  await page.screenshot({path:testInfo.outputPath('account-usage-dark-1440.png'),fullPage:true});
+  await page.setViewportSize({width:390,height:900});
+  await page.screenshot({path:testInfo.outputPath('account-usage-dark-390.png'),fullPage:true});
+  await page.getByRole('link',{name:'Dados e acesso',exact:true}).click();
+  await page.getByRole('button',{name:'Ver opções de exclusão'}).click();
+  await expect(page.locator('#delete button')).toHaveCSS('color','rgb(255, 255, 255)');
+  await page.getByRole('link',{name:'Preferências',exact:true}).click();
+  await expect(page.getByLabel('Aparência',{exact:true})).toHaveValue('dark');
+});
+
+test('falha ao consultar aceites não reutiliza marketing armazenado',async({page})=>{
+  let failRefresh=false;
+  const fixture=await siteFixture(page,true,{failAction:()=>failRefresh?'account':undefined,account:()=>({consent:{acceptedAt:version,termsVersion:'versao-anterior',privacyVersion:'versao-anterior',requiredTermsVersion:version,requiredPrivacyVersion:version,marketing:true}})});
+  await passwordLogin(page);
+  await page.getByRole('link',{name:'Preferências',exact:true}).click();
+  await page.getByRole('checkbox',{name:/18 anos/}).check();
+  await page.getByRole('checkbox',{name:/Li e aceito/}).check();
+  failRefresh=true;
+  await page.getByRole('button',{name:'Salvar aceites'}).click();
+  await expect(page.locator('[data-feedback=consent]')).toHaveAttribute('role','alert');
+  expect(fixture.posted.filter(p=>p.action==='consent')).toHaveLength(0);
+});
+
+test('aceites consultam retirada de marketing em outro dispositivo e nunca reenviam opt-in',async({page})=>{
+  let remoteMarketing=true;
+  const fixture=await siteFixture(page,true,{account:()=>({consent:{acceptedAt:version,termsVersion:'versao-anterior',privacyVersion:'versao-anterior',requiredTermsVersion:version,requiredPrivacyVersion:version,marketing:remoteMarketing}})});
+  await passwordLogin(page);
+  await page.getByRole('link',{name:'Preferências',exact:true}).click();
+  await expect(page.locator('#marketing [name=marketing]')).toBeChecked();
+  await expect(page.locator('#consent [name=marketing]')).not.toBeChecked();
+  remoteMarketing=false; // A withdrawal on another device after this page loaded.
+  await page.getByRole('checkbox',{name:/18 anos/}).check();
+  await page.getByRole('checkbox',{name:/Li e aceito/}).check();
+  await page.getByRole('button',{name:'Salvar aceites'}).click();
+  await expect(page.locator('[data-feedback=consent]')).toContainText('Aceites registrados.');
+  expect(fixture.posted.filter(p=>p.action==='consent')).toEqual([{action:'consent',termsVersion:version,privacyVersion:version,marketing:false}]);
+});
+
+test('novos aceites só autorizam marketing quando a caixa opcional é marcada explicitamente',async({page})=>{
+  const fixture=await siteFixture(page,false);
+  await passwordLogin(page);
+  await page.getByRole('link',{name:'Preferências',exact:true}).click();
+  const optional=page.locator('#consent [name=marketing]');
+  await expect(optional).not.toBeChecked();
+  await page.getByRole('checkbox',{name:/18 anos/}).check();
+  await page.getByRole('checkbox',{name:/Li e aceito/}).check();
+  await optional.check();
+  await page.getByRole('button',{name:'Salvar aceites'}).click();
+  await expect(page.locator('[data-feedback=consent]')).toContainText('Aceites registrados.');
+  expect(fixture.posted.filter(p=>p.action==='consent')).toEqual([{action:'consent',termsVersion:version,privacyVersion:version,marketing:true}]);
+  await expect(page.locator('#consent')).toBeHidden();
+  await expect(page.locator('[data-feedback=consent]')).toBeVisible();
+});
+
+test('aceites já atuais mostram o registro e ocultam o formulário de nova autorização',async({page})=>{
+  const fixture=await siteFixture(page,true);
+  await passwordLogin(page);
+  await page.getByRole('link',{name:'Preferências',exact:true}).click();
+  await expect(page.locator('#consent-state')).toContainText('Aceites atuais registrados');
+  await expect(page.locator('#consent')).toBeHidden();
+  await expect(page.locator('#marketing [name=marketing]')).toBeChecked();
+  expect(fixture.posted.filter(p=>['consent','marketing'].includes(p.action))).toHaveLength(0);
 });

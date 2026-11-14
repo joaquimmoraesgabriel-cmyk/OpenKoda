@@ -1,12 +1,11 @@
-// The preview is a closed, browser-local product tour. No user input leaves it.
+// The embedded build mounts the desktop App with a browser-local service adapter.
 export const interactiveDemo = `<section class="koda-tour" id="experimente-openkoda" aria-labelledby="tour-title">
-  <div class="tour-heading"><div><p class="section-name">Entre no projeto</p><h2 id="tour-title">Experimente o OpenKoda.</h2></div><p>Crie um projeto, converse e explore as configurações. Tudo acontece nesta demonstração.</p></div>
+  <div class="tour-heading"><div><p class="section-name">Experimente no navegador</p><h2 id="tour-title">Entre no projeto.</h2></div><p>Esta é a interface do OpenKoda. Escreva uma pergunta, abra o relatório ou crie um projeto de exemplo.</p></div>
   <div class="koda-demo" data-koda-demo>
-    <div class="kd-topline"><span class="kd-wordmark"><svg viewBox="0 0 26 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 3.5v17M21.5 3.5l-9 8.5 9 8.5"/></svg>OpenKoda 1.0</span><span class="kd-mode-label">Ambiente de demonstração</span><button type="button" class="kd-reset" data-demo-reset>Recomeçar</button></div>
-    <div class="kd-workspace"><nav class="kd-rail" aria-label="Navegação da demonstração"></nav><aside class="kd-tree" aria-label="Projetos da demonstração"></aside><div class="kd-main" tabindex="-1"></div></div>
-    <div class="kd-disclosure"><span class="kd-demo-dot" aria-hidden="true"></span>Demonstração interativa · dados fictícios · sem uso de IA</div>
-    <div class="kd-announcer kd-sr" role="status" aria-live="polite"></div>
-    <noscript><p class="kd-no-script">Ative JavaScript para explorar a demonstração. Você também pode conhecer o aplicativo nos <a href="/guias/">guias ilustrados</a>.</p></noscript>
+    <div class="kd-topline"><span class="kd-wordmark">OpenKoda 1.0 <span>· demonstração</span></span><div class="kd-toolbar"><a href="#depois-da-demonstracao" class="kd-skip">Pular demonstração</a><button type="button" class="kd-reset" data-demo-reset>Recomeçar</button></div></div>
+    <div class="kd-frame-wrap"><iframe src="/demo-app/" title="Demonstração interativa do aplicativo OpenKoda" sandbox="allow-scripts allow-forms" referrerpolicy="no-referrer" loading="lazy"></iframe></div>
+    <div class="kd-disclosure"><span>Dados fictícios · respostas preparadas · sem consumo de IA</span><span class="kd-status" role="status" aria-live="polite"></span></div>
+    <noscript><p>Explore o aplicativo nos <a href="/guias/">guias ilustrados</a>.</p></noscript>
   </div>
-  <p class="tour-footnote">Os arquivos e as respostas são exemplos preparados. Nenhuma pasta, chave ou URL digitada aqui é acessada ou enviada.</p>
+  <div class="tour-footnote" id="depois-da-demonstracao" tabindex="-1"><p>A interface é a mesma do aplicativo. Nesta janela, pastas, arquivos, conexões e ações usam exemplos locais. Reiniciar restaura todos os exemplos.</p><a href="/guias/primeiro-projeto/">Como começar com seu código</a></div>
 </section>`;

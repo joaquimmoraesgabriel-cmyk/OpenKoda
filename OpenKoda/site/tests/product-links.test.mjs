@@ -32,7 +32,7 @@ test('a navegação pública resolve páginas, recursos e seções da compilaç�
   assert.ok(pages.has(expected),expected);
  }
  for(const [route,html] of pages){
-  if(!route.startsWith('/conta/')){
+  if(!route.startsWith('/conta/')&&!route.startsWith('/demo-app/')){
    assert.equal([...html.matchAll(/<h1\b/gi)].length,1,route);
    assert.doesNotMatch(html,/\b(?:Gemini|Ministral)\b/i,route);
    assert.doesNotMatch(html,/[→←↓↗▸▶]/u,route);

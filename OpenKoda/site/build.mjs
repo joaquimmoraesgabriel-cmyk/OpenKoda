@@ -1,4 +1,5 @@
-import { mkdir, readFile, writeFile, copyFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile as write, rename, rm, copyFile, readdir } from 'node:fs/promises';
+import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { productChapters, publicPages } from './product-pages.mjs';
 import { home, launch, pricing, screenshot, editorialPages, desktopInstaller } from './editorial.mjs';
@@ -8,6 +9,19 @@ import { walkthrough, connections, readingCards, connectionPages } from './showc
 import { menu, footer } from './navigation.mjs';
 
 const output = fileURLToPath(new URL('./dist/', import.meta.url));
+async function writeFile(path,content) {
+ const temporary=path+'.tmp-'+process.pid;
+ await write(temporary,content);
+ try {
+  for(let attempt=0;;attempt++) {
+   try {await rename(temporary,path);break;}
+   catch(error) {
+    if(attempt>=12||!['EPERM','EBUSY','EACCES'].includes(error.code))throw error;
+    await delay(40*(attempt+1));
+   }
+  }
+ } finally {await rm(temporary,{force:true});}
+}
 const contact = 'joaquimmoraesgabriel@gmail.com';
 const mail = (subject, label) => '<a href="mailto:' + contact + '?subject=' + encodeURIComponent(subject) + '">' + label + '</a>';
 const mark = '<svg viewBox="0 0 26 24" width="26" height="24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 3.5v17M21.5 3.5l-9 8.5 9 8.5"/></svg>';
@@ -61,7 +75,8 @@ for (const [route,[name,body]] of Object.entries(pages)) {
   route==='conexoes'?'product inner':route.startsWith('conexoes/')?'document story inner':route==='guias' || route.startsWith('guias/')?'guides inner':route?'document inner':'home';
  const html=`<!doctype html><html lang="pt-BR"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="referrer" content="no-referrer"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; style-src 'self'; img-src 'self'; connect-src 'self' https://ynjcyvnrfxsrijrwpaye.supabase.co https://challenges.cloudflare.com; object-src 'none'; base-uri 'none'; form-action 'self'"><title>${name} | OpenKoda</title><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/tema.css"><script src="/tema.js" defer></script><body><a class="skip" href="#main">Pular para o conteúdo</a><header class="site-header"><div class="header-inner">${brand}${menu(route)}</div></header><main id="main" tabindex="-1" class="${layout}">${body}</main>${footer(brand,route)}<aside id="cookie-box" hidden aria-label="Cookies e armazenamento"><p>Usamos cookies essenciais para sua sessão e a verificação de segurança. Consulte a <a href="/privacidade/#cookies-e-marketing">política de privacidade</a>.</p><button type="button" id="accept-essential">Entendi</button></aside><script type="module" src="/site.js"></script>${route.startsWith('conta')?'<script type="module" src="/account.js"></script>':''}</body></html>`;
  const enhanced=html.replace('<title>', '<link rel="icon" type="image/svg+xml" href="/favicon.svg"><title>')
-  .replace('<body>',(route===''?'<link rel="stylesheet" href="/demo.css">':'')+'<body>')
+  .replace('frame-src https://challenges.cloudflare.com', "frame-src 'self' https://challenges.cloudflare.com")
+  .replace('<body>',(route===''?'<link rel="stylesheet" href="/demo.css">':'')+(route.startsWith('conta')?'<link rel="stylesheet" href="/account-dashboard.css">':'')+'<body>')
   .replace('</body>',(route===''?'<script type="module" src="/demo.js"></script>':'')+(route==='download'?'<script type="module" src="/download.js"></script>':'')+'</body>');
  await writeFile(directory+'/index.html',enhanced);
 }
@@ -69,13 +84,26 @@ for (const [route,[name,body]] of Object.entries(pages)) {
 // Serve the same reviewed files through a Worker so security headers also
 // protect direct visits to the OAuth callback and account forms.
 const files = [...Object.keys(pages).map(route=>(route?route+'/':'')+'index.html'),
- 'style.css','tema.css','tema.js','account.js','site.js','cloud.js','demo.css','demo.js','download.js','painel.png','conversa.png','projeto.png','relatorio.png','aparencia.png','uso.png','favicon.svg'];
+ 'style.css','tema.css','tema.js','account.js','account-dashboard.css','site.js','cloud.js','demo.css','demo.js','download.js','painel.png','conversa.png','projeto.png','relatorio.png','aparencia.png','uso.png','modelos.png','favicon.svg'];
+// The separate Vite build reuses the desktop App. Only its public output is served.
+// A missing build must fail publication instead of shipping an empty frame.
+await readFile(output+'demo-app/index.html');
+async function demoFiles(directory='demo-app') {
+ const entries=await readdir(output+directory,{withFileTypes:true});
+ for(const entry of entries) {
+  const path=directory+'/'+entry.name;
+  if(entry.isDirectory())await demoFiles(path);
+  else if(entry.isFile()&&!entry.name.endsWith('.map'))files.push(path);
+ }
+}
+await demoFiles();
 await writeFile(output+'favicon.svg',mark.replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" ').replace('currentColor', '#171719'));
 const assets = {};
 for (const file of files) {
  const type = file.endsWith('.html')?'text/html; charset=utf-8':file.endsWith('.css')?'text/css; charset=utf-8':
-  file.endsWith('.png')?'image/png':file.endsWith('.svg')?'image/svg+xml':'text/javascript; charset=utf-8';
- assets['/'+file] = {type,body:(await readFile(output+file)).toString(file.endsWith('.png')?'base64':'utf8')};
+  file.endsWith('.png')?'image/png':file.endsWith('.svg')?'image/svg+xml':file.endsWith('.webp')?'image/webp':file.endsWith('.woff2')?'font/woff2':file.endsWith('.json')?'application/json':'text/javascript; charset=utf-8';
+ const binary=/\.(png|webp|woff2)$/.test(file);
+ assets['/'+file] = {type,binary,body:(await readFile(output+file)).toString(binary?'base64':'utf8')};
 }
 assets['/favicon.ico'] = assets['/favicon.svg'];
 const handler = await readFile(new URL('./worker.mjs',import.meta.url),'utf8');

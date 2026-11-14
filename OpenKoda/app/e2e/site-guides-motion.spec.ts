@@ -45,28 +45,35 @@ test('guias mostram capturas e exemplos interativos sem serviços externos',asyn
  await page.getByRole('tab',{name:'IA da assinatura',exact:true}).click();
  const included=page.locator('[data-route-example="assinatura"]');
  await included.getByRole('button',{name:'Simular um envio'}).click();
- await expect(included.getByRole('status')).toContainText('Plano e uso');
+ await expect(included.getByRole('status')).toContainText('Uso e limites');
  expect(errors).toEqual([]);expect(external).toEqual([]);
 });
-test('movimento revela conteúdo ao rolar e ao focar, sem alterar nomes acessíveis',async({context,page})=>{
+test('texto permanece legível e a revisão acompanha a rolagem sem capturá-la',async({context,page})=>{
  await serve(context);await page.emulateMedia({reducedMotion:'no-preference'});
  await page.goto(origin+'/guias/primeiro-projeto/');
  const last=page.locator('#revisao');
- await expect(last).toHaveClass(/motion-pending/);
- await expect(last).toHaveCSS('opacity','0');
- await last.scrollIntoViewIfNeeded();
- await expect(last).not.toHaveClass(/motion-pending/);
  await expect(last).toHaveCSS('opacity','1');
+ await last.scrollIntoViewIfNeeded();
  await expect(last.getByRole('heading',{name:'Inicie e acompanhe'})).toBeVisible();
- await expect(last.locator('.letter-piece').first()).toBeVisible();
- await page.reload();
+ await expect(page.locator('.letter-piece,.motion-pending')).toHaveCount(0);
  const link=page.locator('.next-guide a');
  await link.focus();
  await expect(link).toBeFocused();
  await page.goto(origin+'/guias/relatorios/#cobertura');
- await expect(page.locator('#cobertura')).not.toHaveClass(/motion-pending/);
+ await expect(page.locator('#cobertura')).toHaveCSS('opacity','1');
+ await page.setViewportSize({width:1440,height:1000});
+ await page.goto(origin+'/produto/');
+ const review=page.locator('[data-review-story]');
+ const third=review.locator('[data-review-step="2"]');
+ await third.scrollIntoViewIfNeeded();
+ await expect(review).toHaveAttribute('data-review-current','2');
+ await review.getByRole('button',{name:'Projeto',exact:true}).click();
+ await expect(review.locator('[data-review-capture="0"]')).toBeVisible();
+ await expect(review.locator('[data-review-capture="2"]')).toBeHidden();
  await page.emulateMedia({reducedMotion:'reduce'});
- await expect(page.locator('.motion-pending')).toHaveCount(0);
+ await review.getByRole('button',{name:'Relatório',exact:true}).click();
+ await expect(review.locator('[data-review-capture="1"]')).toBeVisible();
+ await expect(review.locator('.review-visual')).toHaveCSS('position','static');
 });
 test('guias continuam legíveis sem JavaScript e cabem no celular',async({browser,context,page})=>{
  const noJs=await browser.newContext({javaScriptEnabled:false,viewport:{width:390,height:844}});
@@ -85,4 +92,72 @@ test('guias continuam legíveis sem JavaScript e cabem no celular',async({browse
   expect(await text.evaluate(el=>parseFloat(getComputedStyle(el).fontSize))).toBeGreaterThanOrEqual(17);
  }
  await page.screenshot({path:'.local/site-guide-mobile.png',fullPage:true,animations:'disabled'});
+});
+
+test('apresentação mantém leitura e controles nas três larguras',async({context,page})=>{
+ await serve(context);await page.emulateMedia({reducedMotion:'reduce'});
+ for(const width of [390,768,1440]){
+  await page.setViewportSize({width,height:1000});
+  for(const route of ['produto','precos','guias/relatorios','conexoes']){
+   await page.goto(origin+'/'+route+'/');
+   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+   await expect(page.locator('h1')).toBeVisible();
+  }
+  await page.goto(origin+'/produto/');
+  const skip=page.getByRole('link',{name:'Pular para o conteúdo',exact:true});
+  await expect(skip).toHaveCSS('clip-path','inset(50%)');
+  await page.keyboard.press('Tab');
+  await expect(skip).toBeFocused();
+  await expect(skip).toHaveCSS('clip-path','none');
+  const report=page.getByRole('button',{name:'Relatório',exact:true});
+  await report.focus();await page.keyboard.press('Enter');
+  await expect(skip).toHaveCSS('clip-path','inset(50%)');
+  await expect(report).toHaveAttribute('aria-pressed','true');
+  const cookies=page.getByRole('button',{name:'Entendi',exact:true});
+  if(await cookies.isVisible())await cookies.click();
+  const image=page.locator('.screen-print img');
+  await image.scrollIntoViewIfNeeded();
+  await expect.poll(()=>image.evaluate((node:HTMLImageElement)=>node.naturalWidth)).toBeGreaterThan(0);
+  await page.screenshot({path:`.local/public-product-${width}.png`,fullPage:true,animations:'disabled'});
+ }
+});
+
+test('novo site apresenta produto, comparação e guias com navegação por teclado',async({context,page})=>{
+ await serve(context);await page.emulateMedia({reducedMotion:'reduce'});
+ const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
+ for(const width of [1440,390]){
+  await page.setViewportSize({width,height:1000});
+  for(const [route,name] of [['','home'],['precos/','precos'],['guias/primeiro-projeto/','guia']]){
+   await page.goto(origin+'/'+route);
+   const cookies=page.getByRole('button',{name:'Entendi',exact:true});
+   if(await cookies.isVisible())await cookies.click();
+   if(name==='home'){
+    await expect(page.locator('h1')).toContainText('Abra o projeto.');
+    const annotation=page.getByRole('button',{name:'Examinar esta linha'});
+    await annotation.click();await expect(page.locator('#evidence-explanation')).toBeVisible();
+    await page.getByRole('button',{name:'Fechar explicação'}).click();
+    await page.getByLabel('Mude o consumo do exemplo').fill('100');
+    await expect(page.locator('.home-quota [data-quota-left]')).toHaveText('0%');
+    await page.getByLabel('Mude o consumo do exemplo').fill('30');
+   }
+   for(const image of await page.locator('main img').all()){
+    if(!await image.isVisible())continue;
+    await image.scrollIntoViewIfNeeded();
+    await expect.poll(()=>image.evaluate((node:HTMLImageElement)=>node.naturalWidth)).toBeGreaterThan(0);
+   }
+   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+   await page.evaluate(()=>window.scrollTo(0,0));
+   await page.screenshot({path:`.local/visual-rebuild-${name}-${width}.png`,fullPage:true,animations:'disabled'});
+   if(name==='home'&&width===1440)await page.screenshot({path:'.local/visual-rebuild-home-1440-viewport.png',animations:'disabled'});
+  }
+  await page.goto(origin+'/');
+  if(width===390)await page.getByRole('button',{name:'Menu principal',exact:true}).click();
+  const summary=page.locator('#primary-nav summary').first();
+  await summary.focus();await page.keyboard.press('Enter');
+  await expect(page.locator('#primary-nav .nav-group').first()).toHaveAttribute('open','');
+  await page.screenshot({path:`.local/visual-rebuild-menu-${width}.png`,animations:'disabled'});
+  await page.keyboard.press('Escape');await expect(summary).toBeFocused();
+  await expect(page.locator('#primary-nav .nav-group').first()).not.toHaveAttribute('open','');
+ }
+ expect(errors).toEqual([]);
 });

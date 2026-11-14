@@ -13,7 +13,7 @@ toggle.addEventListener('click',()=>{
  menuOpen(open);
  if(open)menu.querySelector('summary').focus();
 });
-const pointerMenu=matchMedia('(min-width:761px) and (hover:hover) and (pointer:fine)');
+const pointerMenu=matchMedia('(min-width:901px) and (hover:hover) and (pointer:fine)');
 for(const group of navGroups){
  const summary=group.querySelector('summary');
  let openedOnHover=false;
@@ -39,7 +39,7 @@ document.addEventListener('keydown',event=>{
  else if(toggle.getAttribute('aria-expanded')==='true'){menuOpen(false);toggle.focus();}
 });
 document.addEventListener('click',event=>{if(!event.target.closest('.site-header'))menuOpen(false);});
-matchMedia('(min-width:761px)').addEventListener('change',()=>menuOpen(false));
+matchMedia('(min-width:901px)').addEventListener('change',()=>menuOpen(false));
 const cookieSettings=document.querySelector('#cookies');
 let openedFromFooter=false;
 try{box.hidden=localStorage.getItem('koda.cookies')==='essential';}catch{box.hidden=false;}
@@ -78,71 +78,73 @@ for(const widget of document.querySelectorAll('[data-switcher]')){
 }
 
 const reducedMotion=matchMedia('(prefers-reduced-motion:reduce)');
-// All content is visible before enhancement. Only offscreen material waits for
-// intersection, and keyboard focus/hash navigation always reveals it immediately.
-const sections=[...document.querySelectorAll('[data-motion], .story-card, .guide-directory li, .offer')];
+// Only visual illustrations animate. All descriptions remain readable at rest.
+if('IntersectionObserver' in window&&!reducedMotion.matches){
+ const visuals=new IntersectionObserver(entries=>{
+  for(const entry of entries)if(entry.isIntersecting){entry.target.classList.add('visual-entered');visuals.unobserve(entry.target);}
+ },{threshold:.16});
+ document.querySelectorAll('[data-visual]').forEach(visual=>visuals.observe(visual));
+}
+for(const evidence of document.querySelectorAll('[data-evidence-example]')){
+ const button=evidence.querySelector('[data-evidence-toggle]');
+ const explanation=document.getElementById(button.getAttribute('aria-controls'));
+ button.addEventListener('click',()=>{
+  const open=button.getAttribute('aria-expanded')!=='true';
+  button.setAttribute('aria-expanded',String(open));explanation.hidden=!open;
+  evidence.dataset.open=String(open);
+  button.textContent=open?'Fechar explicação':'Examinar esta linha';
+ });
+}
+// Reading content is never hidden. The index follows the section being read.
 const indexLinks=[...document.querySelectorAll('.lesson-index a')];
-const visible=new Set(),played=new WeakSet(),letterHeadings=new WeakSet();
-const activeAnimations=new Set();
-function reveal(section,immediate=false){
- section.classList.remove('motion-pending');
- if(played.has(section))return;
- played.add(section);
- if(immediate||reducedMotion.matches)return;
- section.classList.add('entered');
- const title=section.matches('h2,h3')?section:section.querySelector('.feature-heading h2, :scope > h2, :scope > div > h2');
- if(!title||title.children.length||letterHeadings.has(title)||title.textContent.length>72||!Element.prototype.animate)return;
- letterHeadings.add(title);
- const original=title.textContent;
- const visual=document.createElement('span');visual.setAttribute('aria-hidden','true');
- const letters=[];
- for(const word of original.split(/(\s+)/)){
-  if(/^\s+$/.test(word)){visual.append(document.createTextNode(word));continue;}
-  const wordNode=document.createElement('span');wordNode.className='letter-word';
-  for(const char of Array.from(word)){
-   const letter=document.createElement('span');letter.className='letter-piece';letter.textContent=char;
-   letters.push(letter);wordNode.append(letter);
-  }
-  visual.append(wordNode);
- }
- title.setAttribute('aria-label',original);title.replaceChildren(visual);
- for(const [index,letter] of letters.entries()){
-  const animation=letter.animate([{opacity:0,filter:'blur(5px)',transform:'translateY(-.16em)'},{opacity:1,filter:'blur(0px)',transform:'translateY(0)'}],{
-   duration:520,delay:index*13,easing:'cubic-bezier(.2,.7,.2,1)',fill:'backwards'});
-  activeAnimations.add(animation);
-  animation.finished.catch(()=>{}).finally(()=>activeAnimations.delete(animation));
- }
-}
-function revealTarget(target){
- if(!(target instanceof Element))return;
- for(const section of sections)if(section.contains(target)||target.contains(section))reveal(section,true);
-}
-function revealHash(){
- try{if(location.hash)revealTarget(document.getElementById(decodeURIComponent(location.hash.slice(1))));}catch{}
-}
-if('IntersectionObserver' in window && sections.length){
+if('IntersectionObserver' in window && indexLinks.length){
+ const visible=new Set();
+ const targets=indexLinks.map(link=>document.getElementById(link.hash.slice(1))).filter(Boolean);
  const observer=new IntersectionObserver(entries=>{
-  for(const entry of entries){
-   if(entry.isIntersecting){visible.add(entry.target);reveal(entry.target);}
-   else visible.delete(entry.target);
-  }
-  const current=sections.find(section=>visible.has(section)&&section.id);
+  for(const entry of entries){if(entry.isIntersecting)visible.add(entry.target);else visible.delete(entry.target);}
+  const current=targets.find(section=>visible.has(section));
   if(current)for(const link of indexLinks){
    if(link.hash==='#'+current.id)link.setAttribute('aria-current','location');
    else link.removeAttribute('aria-current');
   }
- },{rootMargin:'0px 0px -6% 0px',threshold:.02});
- for(const section of sections){
-  if(!reducedMotion.matches&&section.getBoundingClientRect().top>innerHeight*.96)section.classList.add('motion-pending');
-  else reveal(section,true);
-  observer.observe(section);
- }
- document.addEventListener('focusin',event=>revealTarget(event.target));
- window.addEventListener('hashchange',revealHash);revealHash();
+ },{rootMargin:'-12% 0px -45% 0px',threshold:0});
+ targets.forEach(target=>observer.observe(target));
 }
-reducedMotion.addEventListener('change',event=>{
- if(event.matches){for(const animation of activeAnimations)animation.cancel();for(const section of sections)reveal(section,true);}
-});
+
+// A real capture remains alongside the explanation; scrolling changes only the
+// selected stage. Touch and reduced-motion users choose with the same buttons.
+for(const story of document.querySelectorAll('[data-review-story]')){
+ const controls=[...story.querySelectorAll('[data-review-select]')];
+ const captures=[...story.querySelectorAll('[data-review-capture]')];
+ const steps=[...story.querySelectorAll('[data-review-step]')];
+ const wide=matchMedia('(min-width:960px)');
+ let current=-1,frame=0;
+ function select(index){
+  if(index===current)return;current=index;
+  story.dataset.reviewCurrent=String(index);
+  controls.forEach((control,i)=>control.setAttribute('aria-pressed',String(i===index)));
+  captures.forEach((capture,i)=>{capture.hidden=i!==index;});
+  steps.forEach((step,i)=>step.toggleAttribute('data-current',i===index));
+ }
+ select(0);story.classList.add('review-ready');
+ controls.forEach((control,index)=>control.addEventListener('click',()=>select(index)));
+ function update(){
+  frame=0;
+  if(!wide.matches||reducedMotion.matches)return;
+  const bounds=story.getBoundingClientRect();
+  if(bounds.top>innerHeight*.8||bounds.bottom<innerHeight*.2)return;
+  let nearest=0,distance=Infinity;
+  steps.forEach((step,index)=>{
+   const box=step.getBoundingClientRect();
+   const delta=Math.abs(box.top+Math.min(box.height,innerHeight)*.35-innerHeight*.48);
+   if(delta<distance){nearest=index;distance=delta;}
+  });
+  select(nearest);
+ }
+ window.addEventListener('scroll',()=>{if(!frame)frame=requestAnimationFrame(update);},{passive:true});
+ wide.addEventListener('change',update);
+ reducedMotion.addEventListener('change',()=>{if(!reducedMotion.matches)update();});
+}
 
 for(const example of document.querySelectorAll('[data-route-example]')){
  const button=example.querySelector('[data-route-run]'),status=example.querySelector('[data-route-status]');
@@ -151,11 +153,13 @@ for(const example of document.querySelectorAll('[data-route-example]')){
   if(busy)return;busy=true;button.disabled=true;example.dataset.running='true';
   const own=example.dataset.routeExample==='propria';
   const stages=own?['O pedido usa a chave do seu provedor.','A resposta informa os tokens processados.','O uso aparece no histórico local. O provedor fatura sua conta.']:
-   ['O serviço confere a assinatura e reserva a cota.','O pedido aguarda uma vaga e recebe a resposta.','A cota é conciliada com o uso informado. Confira o saldo em Plano e uso.'];
-  if(reducedMotion.matches){status.textContent=stages.at(-1);busy=false;button.disabled=false;example.dataset.running='false';return;}
-  status.textContent=stages[0];
-  setTimeout(()=>{status.textContent=stages[1];},650);
-  setTimeout(()=>{status.textContent=stages[2];busy=false;button.disabled=false;example.dataset.running='false';},1350);
+   ['O serviço confere a assinatura e reserva a cota.','O pedido aguarda uma vaga e recebe a resposta.','A cota é conciliada com o uso informado. Confira o saldo em Uso e limites.'];
+  const stops=[...example.querySelectorAll('[data-route-stop]')];
+  const stage=index=>{status.textContent=stages[index];stops.forEach((stop,i)=>{stop.dataset.reached=String(i<=index);stop.dataset.active=String(i===index);});};
+  if(reducedMotion.matches){stage(2);busy=false;button.disabled=false;example.dataset.running='false';return;}
+  stage(0);
+  setTimeout(()=>stage(1),650);
+  setTimeout(()=>{stage(2);busy=false;button.disabled=false;example.dataset.running='false';},1350);
  });
 }
 for(const example of document.querySelectorAll('[data-scope-example]')){

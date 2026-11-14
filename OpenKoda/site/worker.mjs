@@ -1,11 +1,22 @@
 const securityHeaders = {
- 'Content-Security-Policy': "default-src 'self'; script-src 'self' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; connect-src 'self' https://ynjcyvnrfxsrijrwpaye.supabase.co https://challenges.cloudflare.com; style-src 'self'; img-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'",
+ 'Content-Security-Policy': "default-src 'self'; script-src 'self' https://challenges.cloudflare.com; frame-src 'self' https://challenges.cloudflare.com; connect-src 'self' https://ynjcyvnrfxsrijrwpaye.supabase.co https://challenges.cloudflare.com; style-src 'self'; img-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'",
  'X-Frame-Options': 'DENY',
  'X-Content-Type-Options': 'nosniff',
  'Strict-Transport-Security': 'max-age=31536000',
  'Referrer-Policy': 'no-referrer',
  'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=()'
 };
+export function demoSecurityHeaders(origin) {
+ const headers=new Headers(securityHeaders);
+ // Modules need CORS because the iframe intentionally has an opaque origin.
+ // This exception applies only to the public demo assets, never account routes.
+ headers.set('Access-Control-Allow-Origin','*');
+ headers.set('Cross-Origin-Resource-Policy','cross-origin');
+ headers.delete('X-Frame-Options');
+ // allow-forms permits React's local submit event; form-action none still blocks navigation/submission.
+ headers.set('Content-Security-Policy',`default-src 'none'; script-src ${origin}; style-src ${origin} 'unsafe-inline'; img-src ${origin} data:; font-src ${origin}; connect-src 'none'; frame-src 'none'; worker-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'; sandbox allow-scripts allow-forms`);
+ return headers;
+}
 const projectOrigin='https://ynjcyvnrfxsrijrwpaye.supabase.co';
 // Supabase publishable key. The bridge operates only as the authenticated user.
 const publishableKey='sb_publishable_7HcLt5Ibu4dnsyj6DvvW9A_8OOCuI3N';
@@ -225,7 +236,7 @@ export async function downloadInstaller(request,installer,send=fetch){
 export default {
  fetch(request,env) {
   const url = new URL(request.url);
-  const headers = new Headers(securityHeaders);
+  const headers = url.pathname==='/demo-app'||url.pathname.startsWith('/demo-app/')?demoSecurityHeaders(url.origin):new Headers(securityHeaders);
   headers.set('Cache-Control',url.pathname.startsWith('/conta')?'private, no-store':'public, max-age=0, must-revalidate');
   if(url.pathname.startsWith('/conta/api/'))return sessionBridge(request,fetch,env);
   if (url.protocol !== 'https:') {
@@ -243,7 +254,7 @@ export default {
   if (!file) return new Response('Página não encontrada.',{status:404,headers});
   headers.set('Content-Type',file.type);
   if(request.method==='HEAD')return new Response(null,{headers});
-  const body=file.type==='image/png'?Uint8Array.from(atob(file.body),value=>value.charCodeAt(0)):file.body;
+  const body=file.binary?Uint8Array.from(atob(file.body),value=>value.charCodeAt(0)):file.body;
   return new Response(body,{headers});
  }
 };
