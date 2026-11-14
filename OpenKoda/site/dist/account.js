@@ -166,8 +166,9 @@ async function refreshAccount(){
   const saved=Boolean(r.consent?.acceptedAt && r.consent.termsVersion===r.consent.requiredTermsVersion && r.consent.privacyVersion===r.consent.requiredPrivacyVersion);
   root.querySelector('#consent [name=agreement]').checked=saved;
   const list=root.querySelector('#tickets');
-  if(list){const {tickets}=await edge('support_list');list.replaceChildren();
-   root.querySelector('#tickets-empty').hidden=Boolean(tickets?.length);
+  const empty=root.querySelector('#tickets-empty');
+  if(list&&empty){const {tickets}=await edge('support_list');list.replaceChildren();
+   empty.hidden=Boolean(tickets?.length);
    for(const ticket of tickets??[]){
    const row=document.createElement('li');row.textContent=ticket.subject+' · '+ticket.status;
    for(const reply of ticket.replies??[]){const p=document.createElement('p');p.textContent=reply.message;row.append(p);}
