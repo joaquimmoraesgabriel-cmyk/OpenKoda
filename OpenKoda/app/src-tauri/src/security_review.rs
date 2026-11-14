@@ -393,6 +393,7 @@ pub(super) fn run(
                 }
                 Ok(key)
             };
+            if let Err(reason)=ai.require_reasoning_subscription(job.provider,job.reasoning){stopped=Some(reason);break 'batch;}
             let key = {
                 let _guard = store
                     .scope_gate

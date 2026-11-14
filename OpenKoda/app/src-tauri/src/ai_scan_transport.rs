@@ -339,14 +339,14 @@ impl ScanTransport for HttpScan {
                 "format":if matches!(settings.format,ReviewFormat::DecisionSchema){"decision"}else{"report"}});
             if let Some(level)=reasoning{body["reasoning"]=json!(level);}
             request.header("apikey",crate::commercial::PUBLISHABLE).json(&body)
-        }else{request.json(&scan_body(
+        }else{let mut body=scan_body(
             provider,
             model,
             prompt,
             instructions,
             maximum,
             settings,
-        ))};
+        );super::reasoning::apply(&mut body,provider,reasoning)?;request.json(&body)};
         let (send, receive) = std::sync::mpsc::sync_channel(1);
         let expected_model=model.to_owned();
         let expected_request=request_id.to_owned();

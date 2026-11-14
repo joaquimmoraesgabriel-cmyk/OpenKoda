@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { Check, Folder, Globe2, LayoutDashboard, Maximize2, Network, PanelRight, PanelLeft, Pencil, Plus, X } from 'lucide-react';
 import { type Action, type Assessment, type Project, type Snapshot } from '../types';
 import Projects from './Projects';
@@ -25,6 +25,19 @@ export default function ProjectDesk({sourceOnly=false,snapshot,busy,action,selec
   const [split,setSplit]=useState(false);
   const [tree,setTree]=useState(false);
   const [treeCollapsed,setTreeCollapsed]=useState(false);
+  const desk=useRef<HTMLElement>(null);
+  const drag=useRef<{start:number;width:number;scale:number}|undefined>(undefined);
+  const [treeWidth,setTreeWidth]=useState(()=>{try{const n=Number(localStorage.getItem('openkoda.project-tree.width'));return Number.isFinite(n)&&n>=185&&n<=420?n:240;}catch{return 240;}});
+  const [maximumWidth,setMaximumWidth]=useState(420);
+  const [resizing,setResizing]=useState(false);
+  useEffect(()=>{
+    const el=desk.current;if(!el)return;
+    const update=()=>{if(window.matchMedia('(max-width:760px)').matches)return;const max=Math.max(185,Math.min(420,el.clientWidth-360));setMaximumWidth(max);setTreeWidth(w=>Math.min(w,max));};
+    update();const observer=new ResizeObserver(update);observer.observe(el);return()=>observer.disconnect();
+  },[]);
+  function resizeTree(width:number){const next=Math.round(Math.max(185,Math.min(maximumWidth,width)));setTreeWidth(next);return next;}
+  function persistWidth(width:number){try{localStorage.setItem('openkoda.project-tree.width',String(width));}catch{/* Layout stays usable without storage. */}}
+
   const [error,setError]=useState('');
   const [editingTitle,setEditingTitle]=useState<{id:string;text:string}>();
   const renameButton=useRef<HTMLButtonElement>(null);
@@ -46,6 +59,7 @@ export default function ProjectDesk({sourceOnly=false,snapshot,busy,action,selec
     title:'',objective:'',status:'draft',events:[],evidence:[],coverage:[],summary:'',
     aiSelection:draft.selection,createdAt:'',updatedAt:'',
   } : saved;
+  useEffect(()=>{window.dispatchEvent(new CustomEvent('openkoda:active-provider',{detail:chat?.aiSelection?.provider??snapshot.settings.provider}));},[chat?.id,chat?.aiSelection?.provider,snapshot.settings.provider]);
   const ProjectIcon=project?.kind==='network'?Network:project?.kind==='web'?Globe2:Folder;
   useEffect(()=>{
     const projects=new Set(snapshot.projects.filter(p=>!p.archived).map(p=>p.id));
@@ -124,9 +138,18 @@ export default function ProjectDesk({sourceOnly=false,snapshot,busy,action,selec
     }catch(e){setError(e instanceof Error?e.message:String(e));}
   }
   const showTree=live.length>0;
-  return <section className={'project-desk'+(showTree?' with-tree':'')+(tree?' tree-open':'')+(treeCollapsed?' tree-collapsed':'')} aria-label="Área de projetos"
+  return <section ref={desk} style={{'--project-tree-width':treeWidth+'px'} as CSSProperties} data-resizing={resizing} className={'project-desk'+(showTree?' with-tree':'')+(tree?' tree-open':'')+(treeCollapsed?' tree-collapsed':'')} aria-label="Área de projetos"
     onKeyDown={event=>{if(event.key==='Escape'&&tree&&!event.defaultPrevented){event.preventDefault();dismissTree();}}}>
     {showTree && <ProjectTree projects={live} assessments={snapshot.assessments} projectId={launch?undefined:project?.id} assessmentId={launch?undefined:chat?.id} busy={busy} onNew={()=>newProject()} onChat={openChat} onProject={openProject} onNewChat={p=>void newChat(p)}/>}
+    {showTree&&!treeCollapsed&&<div className="project-tree-resizer" role="separator" aria-label="Largura da lista de projetos" aria-orientation="vertical" aria-controls="project-tree" aria-valuemin={185} aria-valuemax={maximumWidth} aria-valuenow={treeWidth} tabIndex={0}
+      onPointerDown={event=>{if(event.button!==0)return;event.preventDefault();event.currentTarget.focus();event.currentTarget.setPointerCapture(event.pointerId);drag.current={start:event.clientX,width:treeWidth,scale:(desk.current?.getBoundingClientRect().width??1)/(desk.current?.clientWidth??1)};setResizing(true);}}
+      onPointerMove={event=>{if(drag.current)resizeTree(drag.current.width+(event.clientX-drag.current.start)/drag.current.scale);}}
+      onPointerUp={event=>{if(!drag.current)return;persistWidth(treeWidth);drag.current=undefined;setResizing(false);event.currentTarget.releasePointerCapture(event.pointerId);}}
+      onLostPointerCapture={()=>{drag.current=undefined;setResizing(false);}}
+      onPointerCancel={()=>{drag.current=undefined;setResizing(false);}}
+      onDoubleClick={()=>{persistWidth(resizeTree(240));}}
+      onKeyDown={event=>{const next=event.key==='ArrowLeft'?treeWidth-16:event.key==='ArrowRight'?treeWidth+16:event.key==='Home'?185:event.key==='End'?maximumWidth:undefined;
+        if(next!==undefined){event.preventDefault();persistWidth(resizeTree(next));}}}/>}
     {tree&&<button className="tree-dismiss" aria-label="Fechar lista de projetos" tabIndex={-1} onClick={dismissTree}/>}
     <div className="desk-main" ref={main} tabIndex={-1}>
       {showTree&&<button ref={mobileMenu} type="button" className="tree-mobile-toggle" aria-controls="project-tree" aria-expanded={tree} onClick={()=>setTree(!tree)}><PanelLeft size={16}/>Projetos</button>}

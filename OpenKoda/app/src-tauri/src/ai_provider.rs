@@ -145,7 +145,7 @@ impl ProviderModelPreference {
 impl AiSelection {
     pub fn validate(&self) -> Result<(), String> {
         if !valid_model(&self.model) { return Err("Identificador de modelo inválido.".into()); }
-        if self.reasoning.is_some() && self.provider != ProviderId::OpenKoda { return Err("O nível de raciocínio requer um modelo da assinatura.".into()); }
+        if self.reasoning.is_some() && !matches!(self.provider,ProviderId::OpenKoda|ProviderId::OpenRouter|ProviderId::OpenAI) { return Err("Esta conexão não oferece ajuste de raciocínio.".into()); }
         Ok(())
     }
 }

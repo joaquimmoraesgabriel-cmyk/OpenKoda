@@ -23,15 +23,15 @@
 .project-shell .rail-button[aria-current] { color: var(--rail-selected-fg); background: var(--rail-selected); }
 .project-shell .rail-button:focus-visible { outline-color: var(--rail-fg); }
 .rail-label { display: none; }
-@media (min-width: 1181px) {
-  :root[data-sidebar-style="auto"] .project-shell { grid-template-columns: 9.5rem minmax(0, 1fr); }
-  :root[data-sidebar-style="auto"] .project-rail { padding-inline: .55rem; align-items: stretch; }
-  :root[data-sidebar-style="auto"] .rail-brand { width: auto; justify-content: start; padding-inline-start: .6rem; }
-  :root[data-sidebar-style="auto"] .rail-button { width: auto; min-height: 40px; height: auto; justify-content: start; padding: .45rem .6rem; }
-  :root[data-sidebar-style="auto"] .rail-label { display: inline; font-size: .8125rem; overflow-wrap: anywhere; text-align: start; }
-  :root[data-sidebar-style="auto"] .rail-hint { display: none; }
-  :root[data-sidebar-style="icons"] .app-shell.project-shell { grid-template-columns: 56px minmax(0, 1fr); }
-}
+/* Keep the rail compact on every screen; names are revealed on hover or focus. */
+.project-shell .rail-destination { display:contents; }
+.project-shell .rail-slot-settings { display:flex; flex-direction:column; align-items:center; gap:7px; margin-block-start:auto; }
+.project-shell .rail-slot-settings .rail-settings { margin-block-start:0; }
+.project-shell .rail-hint { border-radius:14px; padding:8px 12px; }
+.project-shell .workspace-main { border-start-start-radius:20px; }
+.project-shell :is(.desk-bar,.tree-row,.tree-chat,.tree-project,.desk-chat-title,.desk-title-editor button,.desk-tree-toggle,.desk-panel-tabs button) { border-radius:13px; }
+.project-shell :is(.chat-model-dialog,.composer-menu,.chat-attachment-menu,.project-composer,.provider-dialog,.provider-model-menu) { border-radius:20px; }
+.project-shell .tree-list { mask-image:linear-gradient(to bottom,transparent,black 8px,black calc(100% - 12px),transparent); padding-block:8px 12px; }
 .project-shell :is(.welcome-content h1, .launch-page h1, .workspace-heading h1, .detail-heading h1,
     .person-hero h2, .desk-welcome h2, .settings-sheet .settings-section-title, .chat-heading h2) {
   font-family: var(--display-font);
@@ -79,3 +79,7 @@
 @media (max-width: 760px) {
   .project-shell .workspace-main { border-start-start-radius: 10px; }
 }
+
+.tree-edition { font-size:.72rem; font-weight:500; color:var(--muted); margin-inline-start:3px; }
+.reasoning-note { font-size:.7rem; color:var(--muted); max-width:22rem; line-height:1.45; }
+.project-shell .reasoning-auto { border-radius:99px; font-size:.72rem; padding:4px 9px; }

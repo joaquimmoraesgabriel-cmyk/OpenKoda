@@ -47,7 +47,7 @@ export default function App() {
     setSnapshot(next);
   }, []);
   useEffect(() => {
-    const update = () => { void refresh().catch(cause => setError(errorMessage(cause))); };
+    const update = () => { budgetChanged(); void refresh().catch(cause => setError(errorMessage(cause))); };
     window.addEventListener('openkoda:security-scan-updated', update);
     window.addEventListener('openkoda:chat-admitted', update);
     return () => {
@@ -90,7 +90,7 @@ export default function App() {
       runningRequests.current.add(id);setError('');setNotice('');
       try{const result=await request<T>(name,payload);await refresh();return result;}
       catch(e){await refresh().catch(()=>{});setError(errorMessage(e));throw e;}
-      finally{runningRequests.current.delete(id);scopeChanged();}
+      finally{runningRequests.current.delete(id);scopeChanged();budgetChanged();}
     }
     if (busyRef.current) throw new Error('Aguarde a ação em andamento.');
     busyRef.current = true; setBusy(true); setError(''); setNotice('');
@@ -129,7 +129,7 @@ export default function App() {
   return <div className="app-shell workspace-shell project-shell">
     <CloseWorkPrompt onReview={reviewCloseActivity}/>
     <a className="skip-link" href="#main-content">Ir para o conteúdo</a>
-    <Rail sourceOnly view={view} navigate={navigate}/>
+    <Rail sourceOnly view={view} navigate={navigate} onUsage={openUsageHistory} activeProvider={snapshot?.assessments.find(a=>a.id===selected)?.aiSelection?.provider??snapshot?.settings.provider}/>
     <main ref={main} id="main-content" tabIndex={-1} className="main-content workspace-main" aria-busy={loading||busy}>
       {snapshot&&<div className="workspace-projection"><ProjectionNotice projection={snapshot.projection}/></div>}
       {!native&&<div className="preview-banner">Prévia no navegador · Dados locais de demonstração</div>}

@@ -28,6 +28,22 @@ export function ChatModelPicker({ value, onChange, disabled, onModels, forAnalys
   const [saving, setSaving] = useState(false);
   const [commercial,setCommercial]=useState<CommercialModel[]>([]);
   const [sessionRevision,setSessionRevision]=useState(0);
+  const [personalReasoning,setPersonalReasoning]=useState<{key:string;levels:Reasoning[];subscribed:boolean}>();
+  useEffect(()=>{
+    setPersonalReasoning(undefined);
+    if(!native||!value||value.provider==='openkoda')return;
+    let current=true;
+    const selection=value;
+    async function load(){
+      try{
+        const session=await request<{user:{id:string}|null}>('account.session');
+        if(!current||!session?.user)return;
+        const result=await request<{reasoningLevels:Reasoning[];subscribed:boolean}>('ai.models',{provider:selection.provider,reasoningModel:selection.model});
+        if(current)setPersonalReasoning({key:selection.provider+':'+selection.model,levels:result.reasoningLevels??[],subscribed:result.subscribed===true});
+      }catch{if(current)setPersonalReasoning(undefined);}
+    }
+    void load();return()=>{current=false;};
+  },[value?.provider,value?.model,sessionRevision]);
   useEffect(()=>{
     const reset=()=>{setCommercial([]);setSessionRevision(n=>n+1);};
     window.addEventListener(accountChanged,reset);return ()=>window.removeEventListener(accountChanged,reset);
@@ -118,7 +134,8 @@ export function ChatModelPicker({ value, onChange, disabled, onModels, forAnalys
   }
   const term = query.toLocaleLowerCase().trim();
   const allGroups:Group[]=commercial.length?[{provider:'openkoda',models:commercial.map(m=>m.id)},...groups]:groups;
-  const levels=value?.provider==='openkoda'?commercial.find(m=>m.id===value.model)?.reasoningLevels??[]:[];
+  const personal=personalReasoning?.key===value?.provider+':'+value?.model?personalReasoning:undefined;
+  const levels=value?.provider==='openkoda'?commercial.find(m=>m.id===value.model)?.reasoningLevels??[]:personal?.levels??[];
   const levelLabel:Record<Reasoning,string>={low:'Leve',medium:'Médio',high:'Alto'};
   const visible = allGroups.filter(g => !filter || g.provider === filter).map(g => ({
     ...g, models: g.models.filter(m => (m + ' ' + providers[g.provider].name).toLocaleLowerCase().includes(term)),
@@ -184,9 +201,13 @@ export function ChatModelPicker({ value, onChange, disabled, onModels, forAnalys
       {error && <p role="alert">{error}</p>}
       {onModels && <footer><button type="button" disabled={saving} onClick={() => { close(false); onModels(); }}><Plus size={15}/>Configurar modelos</button></footer>}
     </div>
-    {value?.provider==='openkoda'&&levels.length>0&&<label className="reasoning-control">Raciocínio · {levelLabel[value.reasoning??levels[0]]}
-      <input aria-label="Nível de raciocínio" type="range" min={0} max={levels.length-1} step={1} disabled={disabled||saving||levels.length===1}
-        value={Math.max(0,levels.indexOf(value.reasoning??levels[0]))} aria-valuetext={levelLabel[value.reasoning??levels[0]]}
-        onChange={event=>void choose({...value,reasoning:levels[event.target.valueAsNumber]})}/></label>}
+    {value&&levels.length>0&&<label className="reasoning-control">Raciocínio · {value.reasoning?levelLabel[value.reasoning]:'Automático'}
+      <input aria-label="Nível de raciocínio" type="range" min={0} max={levels.length} step={1} disabled={disabled||saving}
+        value={value.reasoning?Math.max(0,levels.indexOf(value.reasoning)+1):0} aria-valuetext={value.reasoning?levelLabel[value.reasoning]:'Automático'}
+        onChange={event=>void choose(event.target.valueAsNumber===0?{provider:value.provider,model:value.model}:{...value,reasoning:levels[event.target.valueAsNumber-1]})}/></label>}
+    {value?.reasoning&&<button type="button" className="button quiet reasoning-auto" disabled={disabled||saving}
+      onClick={()=>void choose({provider:value.provider,model:value.model})}>Automático</button>}
+    {personal?.subscribed&&levels.length>0&&<span className="reasoning-note">Uso cobrado na sua chave.</span>}
+    {personal?.subscribed&&!levels.length&&<span className="reasoning-note">Este modelo não oferece ajuste nesta conexão.</span>}
   </>;
 }

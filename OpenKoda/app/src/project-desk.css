@@ -11,7 +11,7 @@
 .rail-avatar{background:#2e6b92;color:white;border-radius:50%;width:28px;height:28px;display:grid;place-items:center;font-size:.72rem;font-weight:650}
 .rail-avatar[data-color=verde]{background:#326756}.rail-avatar[data-color=ameixa]{background:#745179}.rail-avatar[data-color=cobre]{background:#925638}
 .project-desk{display:grid;flex:1 1 0!important;min-height:0;min-width:0;grid-template-columns:minmax(0,1fr);overflow:hidden}
-.project-desk.with-tree{grid-template-columns:clamp(185px,18vw,270px) minmax(0,1fr)}
+.project-desk.with-tree{grid-template-columns:var(--project-tree-width,240px) 5px minmax(0,1fr)}
 .project-tree{background:var(--subtle);border-inline-end:1px solid var(--line);display:flex;flex-direction:column;min-height:0;padding:20px 9px}
 .tree-new,.tree-project,.tree-add,.tree-toggle,.tree-chat{border:0;background:transparent;color:var(--text);border-radius:8px;text-align:left}
 .tree-new,.tree-project,.tree-add,.tree-toggle{display:flex;align-items:center;gap:8px}
@@ -175,3 +175,11 @@
 }
 @media(max-width:960px){.desk-split{grid-template-columns:minmax(0,1fr);grid-template-rows:1fr 1fr}.desk-split .desk-panel{border-top:1px solid var(--line)}}
 @media(max-width:760px){.app-shell.project-shell{grid-template-columns:45px minmax(0,1fr)}.project-desk.with-tree{grid-template-columns:minmax(0,1fr);position:relative}.project-tree{display:none}.tree-open .project-tree{display:flex;position:absolute;z-index:8;inset:36px auto 0 0;width:min(260px,85%);box-shadow:4px 5px 24px #0002}.tree-add{opacity:1}.tree-mobile-toggle{display:inline-flex;align-self:flex-start;padding:4px 10px;min-height:34px}.desk-actions button span{display:none}.rail-button{width:33px}.desk-panel .target-row{display:flex;flex-wrap:wrap}}
+
+.project-tree-resizer { position:relative; background:var(--subtle); cursor:col-resize; touch-action:none; outline-offset:-1px; z-index:4; }
+.project-tree-resizer::after { content:''; position:absolute; inset:0 1px; border-radius:99px; background:var(--accent); opacity:0; transition:opacity .15s; }
+.project-tree-resizer:is(:hover,:focus-visible)::after,.project-desk[data-resizing=true] .project-tree-resizer::after { opacity:.6; }
+.project-desk[data-resizing=true] { user-select:none; cursor:col-resize; }
+.project-desk[data-resizing=true] .desk-main { pointer-events:none; }
+.project-tree { border-inline-end:0; }
+@media(max-width:760px) { .project-tree-resizer { display:none; } }

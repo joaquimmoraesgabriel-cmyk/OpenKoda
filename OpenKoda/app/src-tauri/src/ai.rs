@@ -14,6 +14,8 @@ const AI_METHOD:&str="ai.remote-review.v1";
 
 #[path = "ai_chat.rs"]
 mod chat;
+#[path = "ai_reasoning.rs"]
+mod reasoning;
 #[path = "chat_compaction.rs"]
 mod chat_compaction;
 #[path = "chat_skill_match.rs"]
@@ -79,6 +81,14 @@ fn authenticate(request:reqwest::blocking::RequestBuilder, provider:ProviderId, 
 }
 
 trait Provider:Send+Sync {
+    fn reasoning_response(&self,provider:ProviderId,model:&str,key:&str,prompt:&str,instructions:&str,maximum:u32,reasoning:Option<crate::ai_provider::Reasoning>)->Result<Value,String>{
+        if reasoning.is_some(){return Err("O transporte não oferece raciocínio configurável.".into());}
+        self.response(provider,model,key,prompt,instructions,maximum)
+    }
+    fn reasoning_chat_response(&self,provider:ProviderId,model:&str,key:&str,prompt:&str,instructions:&str,maximum:u32,reasoning:Option<crate::ai_provider::Reasoning>,stop:&std::sync::atomic::AtomicBool,progress:Arc<Mutex<chat::Progress>>)->Result<Value,String>{
+        if reasoning.is_some(){return Err("O transporte não oferece raciocínio configurável.".into());}
+        self.chat_response(provider,model,key,prompt,instructions,maximum,stop,progress)
+    }
     fn response(&self,provider:ProviderId,model:&str,key:&str,prompt:&str,instructions:&str,max_output_tokens:u32)->Result<Value,String>;
     fn chat_response(&self,provider:ProviderId,model:&str,key:&str,prompt:&str,instructions:&str,maximum:u32,_stop:&std::sync::atomic::AtomicBool,_progress:Arc<Mutex<chat::Progress>>)->Result<Value,String>{self.response(provider,model,key,prompt,instructions,maximum)}
     fn models(&self,provider:ProviderId,key:&str,scan_prices:Option<&std::collections::HashSet<String>>)->Result<Vec<String>,String>{
@@ -137,7 +147,14 @@ fn commercial_models(key:&str)->Result<Value,String>{
     read_bounded_response(response,2*1024*1024)
 }
 impl Provider for HttpProvider {
-    fn chat_response(&self,provider:ProviderId,model:&str,key:&str,prompt:&str,instructions:&str,maximum:u32,stop:&std::sync::atomic::AtomicBool,progress:Arc<Mutex<chat::Progress>>)->Result<Value,String>{chat::http_chat(provider,model,key,prompt,instructions,maximum,stop,progress)}
+    fn reasoning_response(&self,provider:ProviderId,model:&str,key:&str,prompt:&str,instructions:&str,maximum:u32,reasoning:Option<crate::ai_provider::Reasoning>)->Result<Value,String>{
+        let mut body=provider.body(model,prompt,instructions,maximum);
+        self::reasoning::apply(&mut body,provider,reasoning)?;
+        let response=authenticate(client()?.post(provider.inference_url()),provider,key).json(&body).send().map_err(network_error)?;
+        provider.normalize(read_bounded_response(response,MAX_RESPONSE)?)
+    }
+    fn reasoning_chat_response(&self,provider:ProviderId,model:&str,key:&str,prompt:&str,instructions:&str,maximum:u32,reasoning:Option<crate::ai_provider::Reasoning>,stop:&std::sync::atomic::AtomicBool,progress:Arc<Mutex<chat::Progress>>)->Result<Value,String>{chat::http_chat(provider,model,key,prompt,instructions,maximum,reasoning,stop,progress)}
+    fn chat_response(&self,provider:ProviderId,model:&str,key:&str,prompt:&str,instructions:&str,maximum:u32,stop:&std::sync::atomic::AtomicBool,progress:Arc<Mutex<chat::Progress>>)->Result<Value,String>{chat::http_chat(provider,model,key,prompt,instructions,maximum,None,stop,progress)}
     fn response(&self,provider:ProviderId,model:&str,key:&str,prompt:&str,instructions:&str,max_output_tokens:u32)->Result<Value,String>{
         let body=provider.body(model,prompt,instructions,max_output_tokens);
         let response=authenticate(client()?.post(provider.inference_url()),provider,key).json(&body).send().map_err(network_error)?;
@@ -175,7 +192,7 @@ struct ConfigureProvider {
 struct ProviderInput { provider:Option<ProviderId> }
 #[derive(Deserialize)]
 #[serde(rename_all="camelCase",deny_unknown_fields)]
-struct CatalogInput {provider:Option<ProviderId>,#[serde(default)] for_analysis:bool}
+struct CatalogInput {provider:Option<ProviderId>,#[serde(default)] for_analysis:bool,#[serde(default)] reasoning_model:Option<String>}
 #[derive(Deserialize)]
 #[serde(rename_all="camelCase",deny_unknown_fields)]
 struct AssessmentSelection { assessment_id:String, ai_selection:Option<AiSelection> }
@@ -383,6 +400,13 @@ impl AiService {
                 let provider=self.selected_provider(input.provider,store)?;
                 let _work=work.as_ref().ok_or("work_owned_operation")?;
                 let (key,revision) = self.provider_credential(provider)?;
+                if let Some(model)=input.reasoning_model {
+                    if !crate::ai_provider::valid_model(&model){return Err("Modelo inválido.".into());}
+                    self.require_enabled_model(&store.snapshot()?,provider,&model)?;
+                    let subscribed=reasoning::subscribed(&self.account.edge("account",json!({}))?,chrono::Utc::now());
+                    let levels=if subscribed{reasoning::model_levels(provider,&model,&key)?}else{vec![]};
+                    return Ok(json!({"provider":provider,"model":model,"subscribed":subscribed,"reasoningLevels":levels}));
+                }
                 let prices=if input.for_analysis {Some(self.budget.priced_scan_models(provider)?)}else{None};
                 let models=self.provider.models(provider,&key,prices.as_ref())?;
                 Ok(json!({"provider":provider,"models":models,"credentialRevision":revision,"note":"O catálogo inclui os modelos disponíveis para a chave. O teste de conexão verifica a geração de texto pelo modelo selecionado."}))
@@ -624,6 +648,8 @@ impl AiService {
         // Removal/rotation shares this gate. A credential copied before revocation cannot dispatch.
         let current_revision=self.revision(provider)?;
         if current_revision.as_deref()!=Some(revision) {return Err("A credencial mudou antes do envio. Revise a conexão e tente novamente.".into());}
+        let reasoning=data.as_ref().and_then(|d|d.spec.destination_context.get("reasoning")).map(|v|serde_json::from_value::<crate::ai_provider::Reasoning>(v.clone()).map_err(|_|"Nível de raciocínio inválido.".to_string())).transpose()?;
+        self.validate_personal_reasoning(provider,model,key,reasoning)?;
         let id = work.request_id(request_id)?;
         let since=if assessment=="connection-test" {(chrono::Utc::now()-chrono::Duration::hours(1)).to_rfc3339()}else{String::new()};
         let count:i64 = self.db.lock().map_err(failure)?.query_row("SELECT COUNT(*) FROM requests WHERE assessment=?1 AND created>=?2",params![assessment,since],|r|r.get(0)).map_err(failure)?;
@@ -692,7 +718,7 @@ impl AiService {
                 let result=if provider==ProviderId::OpenKoda {
                     chat::commercial_chat(&id,model,key,prompt,instructions,max_output_tokens,
                         data.as_ref().and_then(|d|d.spec.destination_context["reasoning"].as_str()),&live.token,live.progress.clone())
-                }else{self.provider.chat_response(provider,model,key,prompt,instructions,max_output_tokens,&live.token,live.progress.clone())};
+                }else{self.provider.reasoning_chat_response(provider,model,key,prompt,instructions,max_output_tokens,reasoning,&live.token,live.progress.clone())};
                 if result.is_err() {
                     interrupted_generation=live.progress.lock().map_err(failure)?.generation_id.clone();
                 }
@@ -702,7 +728,7 @@ impl AiService {
             let progress=Arc::new(Mutex::new(chat::Progress::default()));
             chat::commercial_chat(&id,model,key,prompt,instructions,max_output_tokens,
                 data.as_ref().and_then(|d|d.spec.destination_context["reasoning"].as_str()),&std::sync::atomic::AtomicBool::new(false),progress)
-        }else{self.provider.response(provider,model,key,prompt,instructions,max_output_tokens)};
+        }else{self.provider.reasoning_response(provider,model,key,prompt,instructions,max_output_tokens,reasoning)};
         let result=self.commit_response(&id,assessment,key,history_message,interrupted_generation.as_deref(),raw_result);
         if let (Some((store,_,_)),Some(receipt))=(authority,receipt.as_ref()){
             let status:String=self.db.lock().map_err(failure)?.query_row("SELECT status FROM requests WHERE id=?1",[&id],|r|r.get(0)).map_err(failure)?;

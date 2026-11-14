@@ -21,7 +21,6 @@ test('Geral compartilha o perfil, a busca encontra categorias sem acentos e font
   await page.getByLabel('Fonte de interface',{exact:true}).fill('Arial');
   await page.getByLabel('Tamanho do texto',{exact:true}).selectOption('18');
   await page.getByLabel('Tamanho do código',{exact:true}).selectOption('15');
-  await page.getByRole('combobox',{name:'Navegação principal',exact:true}).selectOption('icons');
   await page.getByLabel('Avaliações e achados',{exact:true}).selectOption('line');
   await page.getByRole('radio',{name:'Névoa',exact:true}).check();
   await page.getByRole('button',{name:'Salvar alterações'}).click();
@@ -29,7 +28,7 @@ test('Geral compartilha o perfil, a busca encontra categorias sem acentos e font
   await page.getByRole('button',{name:'Perfil',exact:true}).click();
   await expect(page.getByRole('heading',{name:'Usuária de teste'})).toBeVisible();
   expect(await page.getByRole('heading',{name:'Perfil',exact:true}).evaluate(el=>getComputedStyle(el).fontFamily)).toContain('Arial');
-  await expect(page.locator('html')).toHaveAttribute('data-sidebar-style','icons');
+  await expect(page.locator('.rail-settings .rail-label')).toBeHidden();
   await page.reload();
   await page.getByRole('button',{name:'Configurações',exact:true}).click();
   await expect(page.getByLabel('Atalho de envio')).toHaveValue('enter');
@@ -150,7 +149,7 @@ test('as quatro paletas chegam aos painéis e acompanham a mudança do sistema',
     for (const [scheme, background] of [['light',light], ['dark',dark]] as const) {
       await page.emulateMedia({colorScheme: scheme});
       await expect(surface).toHaveCSS('background-color', background);
-      const ratios = await page.locator('.settings-content .appearance-row small').first().evaluate(node => {
+      await expect.poll(async()=>{const ratios = await page.locator('.settings-content .appearance-row small').first().evaluate(node => {
         const lum = (css: string) => {
           const [r,g,b] = css.match(/[\d.]+/g)!.slice(0,3).map(Number).map(n => {
             const channel = n / 255;
@@ -166,7 +165,7 @@ test('as quatro paletas chegam aos painéis e acompanham a mudança do sistema',
         const button = getComputedStyle(document.querySelector('.rail-button[aria-current]')!);
         return [contrast(getComputedStyle(node).color,sheet.backgroundColor), contrast(button.color,button.backgroundColor)];
       });
-      expect(Math.min(...ratios), name + ' em ' + scheme).toBeGreaterThanOrEqual(4.5);
+      return Math.min(...ratios);},{message:name+' em '+scheme}).toBeGreaterThanOrEqual(4.5);
     }
   }
   await choose('OpenKoda');
@@ -195,7 +194,7 @@ test('papel de parede, imagem local, movimento, escala e navegação afetam a ja
   const panel = page.locator('.settings-layout');
   const nav = page.getByRole('navigation', {name:'Navegação principal'});
   const settingsLabel = nav.locator('.rail-settings .rail-label');
-  await expect(settingsLabel).toBeVisible();
+  await expect(settingsLabel).toBeHidden();
   for (const [name,key] of [['Névoa','mist'], ['Dunas','dunes']]) {
     await page.getByRole('radio', {name,exact:true}).check();
     await save.click();
@@ -242,13 +241,8 @@ test('papel de parede, imagem local, movimento, escala e navegação afetam a ja
     await save.click();
     expect(await page.locator('html').evaluate(el=>Number(getComputedStyle(el).zoom))).toBe(Number(value)/100);
   }
-  const sidebar = page.getByRole('combobox',{name:'Navegação principal',exact:true});
-  await sidebar.selectOption('icons');
-  await save.click();
-  await expect(settingsLabel).toBeHidden();
-  await sidebar.selectOption('auto');
-  await save.click();
-  await expect(settingsLabel).toBeVisible();
+  await nav.getByRole('button',{name:'Configurações',exact:true}).hover();
+  await expect(nav.locator('.rail-settings .rail-hint')).toBeVisible();
   await page.getByLabel('Fonte de interface',{exact:true}).fill('Tahoma');
   await page.getByLabel('Fonte de código',{exact:true}).fill('Courier New');
   await page.getByLabel('Tamanho do código',{exact:true}).selectOption('19');

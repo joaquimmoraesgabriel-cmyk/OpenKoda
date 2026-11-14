@@ -62,11 +62,12 @@ impl LiveChat<'_>{pub fn admit(&self,message_id:Option<String>)->Result<(),Strin
 }}
 impl Drop for LiveChat<'_>{fn drop(&mut self){if let Ok(mut state)=self.control.0.lock(){state.take();}}}
 
-pub(super) fn http_chat(provider:ProviderId,model:&str,key:&str,prompt:&str,instructions:&str,maximum:u32,stop:&AtomicBool,progress:Arc<Mutex<Progress>>)->Result<Value,String>{
+pub(super) fn http_chat(provider:ProviderId,model:&str,key:&str,prompt:&str,instructions:&str,maximum:u32,reasoning:Option<crate::ai_provider::Reasoning>,stop:&AtomicBool,progress:Arc<Mutex<Progress>>)->Result<Value,String>{
     let client=reqwest::Client::builder().https_only(true).redirect(reqwest::redirect::Policy::none()).no_proxy().timeout(Duration::from_secs(90)).connect_timeout(Duration::from_secs(15)).build().map_err(network_error)?;
     let builder=client.post(provider.inference_url());
     let builder=if provider==ProviderId::Anthropic{builder.header("x-api-key",key).header("anthropic-version","2023-06-01")}else{builder.bearer_auth(key)};
     let mut body=chat_body(provider,model,prompt,instructions,maximum)?;
+    super::reasoning::apply(&mut body,provider,reasoning)?;
     body["stream"]=json!(true);
     if matches!(provider,ProviderId::OpenRouter|ProviderId::DeepSeek|ProviderId::Gemini|ProviderId::Xai) {
         body["stream_options"]=json!({"include_usage":true});

@@ -113,9 +113,7 @@ export function AppearanceCustomization({draft, change}: Props) {
     </section>
     <section className="pref-group">
       <h3>Barra lateral e painéis</h3>
-      <div className="appearance-row"><label htmlFor="sidebar-style">Navegação principal</label>
-        <select id="sidebar-style" value={draft.sidebarStyle} onChange={e => change('sidebarStyle', e.target.value as DeviceAppearance['sidebarStyle'])}>
-          <option value="auto">Adaptar à janela</option><option value="icons">Somente ícones</option></select></div>
+      <div className="appearance-row"><div><strong>Navegação principal</strong><small>Barra compacta com nomes ao passar o mouse ou focar pelo teclado.</small></div></div>
       <div className="appearance-row"><label htmlFor="list-style">Avaliações e achados</label>
         <select id="list-style" value={draft.listStyle} onChange={e => change('listStyle', e.target.value as DeviceAppearance['listStyle'])}>
           <option value="preview">Lista com prévia</option><option value="line">Uma linha por item</option></select></div>

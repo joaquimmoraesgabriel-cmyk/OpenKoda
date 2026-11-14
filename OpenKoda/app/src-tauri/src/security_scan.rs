@@ -421,6 +421,8 @@ impl Service {
         let objective_digest=core::hash(prompt);
         check_disclosure(&state,&input.assessment_id,provider,&objective_digest,input.acknowledge_sensitive)?;
         let (key,revision)=ai.security_key(store,&input.assessment_id,provider,&model)?;
+        let reasoning=lookup(&state,&input.assessment_id)?.ai_selection.as_ref().and_then(|s|s.reasoning);
+        ai.validate_personal_reasoning(provider,&model,&key,reasoning)?;
         use crate::data_projection::{DataRedactor,RedactionMode};
         let redactor=ai.data_redactor();
         if redactor.mode()==RedactionMode::MetadataOnly{return Err("Credenciais indisponíveis para revisar o objetivo da varredura.".into());}

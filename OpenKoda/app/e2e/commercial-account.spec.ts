@@ -3,15 +3,15 @@ import {emptySnapshot} from '../src/preview';
 import type {Page} from '@playwright/test';
 import {installScopeFixture} from './scope-fixture';
 
-async function desktop(page:Page,subscribed=false){
+async function desktop(page:Page,subscribed=false,personal=false,onlyLow=false){
   await installScopeFixture(page);
   const snapshot=emptySnapshot(),at='2026-11-13T08:00:00Z';
-  if(subscribed)Object.assign(snapshot.settings,{provider:'openkoda',model:'fixture/vision',endpoint:'https://ynjcyvnrfxsrijrwpaye.supabase.co/functions/v1/openkoda'});
+  if(subscribed)Object.assign(snapshot.settings,{provider:personal?'openrouter':'openkoda',model:'fixture/vision',endpoint:personal?'https://openrouter.ai/api/v1':'https://ynjcyvnrfxsrijrwpaye.supabase.co/functions/v1/openkoda'});
   snapshot.projects=[{id:'fixture',kind:'code',name:'Fonte sintética',target:'D:/Fixture',description:'',createdAt:at}];
   snapshot.assessments=[{id:'assessment',projectId:'fixture',kind:'code',title:'Chat sintético',target:'D:/Fixture',
     objective:'Revisar a fixture',createdAt:at,updatedAt:at,status:'draft',coverage:[],evidence:[],events:[],summary:'',
-    aiSelection:subscribed?{provider:'openkoda',model:'fixture/vision',reasoning:'medium'}:{provider:'openai',model:'fixture/byok'}}];
-  await page.addInitScript(({snapshot,subscribed})=>{
+    aiSelection:subscribed?{provider:personal?'openrouter':'openkoda',model:'fixture/vision',reasoning:'medium'}:{provider:'openai',model:'fixture/byok'}}];
+  await page.addInitScript(({snapshot,subscribed,personal,onlyLow})=>{
     let signed=subscribed;
     const scope=window.__scopeFixture(snapshot,['ai.remote-review.v1']);
     const tickets:{id:string;subject:unknown;message:unknown;replies:unknown[]}[]=[];
@@ -40,13 +40,42 @@ async function desktop(page:Page,subscribed=false){
         case 'account.skills':return {skills:[{id:'code-review',name:'Revisar código',description:'Avaliar os trechos revisados.',
           revision:'fixture',invocation:'explicit'}]};
         case 'account.models':return {models:[{id:'fixture/vision',reasoningLevels:['low','medium','high'],image:true}]};
+        case 'ai.models':return payload.reasoningModel?{subscribed:signed&&subscribed,reasoningLevels:signed&&subscribed?(onlyLow?['low']:['low','medium','high']):[]}:{models:['fixture/vision']};
+        case 'ai.status':return {provider:payload.provider,hasApiKey:personal&&payload.provider==='openrouter',enabledModels:['fixture/vision']};
         case 'ai.selection.save':snapshot.assessments[0].aiSelection=payload.aiSelection as typeof snapshot.assessments[0]['aiSelection'];return {};
         default:return {};
       }
     }}});
-  },{snapshot,subscribed});
+  },{snapshot,subscribed,personal,onlyLow});
   await page.goto('/',{waitUntil:'commit'});
 }
+
+test('assinante ajusta raciocínio com chave própria e volta ao automático sem mudar provedor',async({page})=>{
+  await desktop(page,true,true);
+  const slider=page.getByRole('slider',{name:'Nível de raciocínio'});
+  await expect(slider).toHaveAttribute('aria-valuetext','Médio');
+  await expect(page.getByText('Uso cobrado na sua chave.')).toBeVisible();
+  await slider.focus();await slider.press('ArrowRight');
+  await expect(slider).toHaveAttribute('aria-valuetext','Alto');
+  await page.getByRole('button',{name:'Automático',exact:true}).click();
+  await expect(page.getByText('Raciocínio · Automático')).toBeVisible();
+  const selection=await page.evaluate(()=>Reflect.get(window,'commercialCalls').filter((c:{action:string})=>c.action==='ai.selection.save').at(-1)?.payload.aiSelection);
+  expect(selection).toEqual({provider:'openrouter',model:'fixture/vision'});
+});
+
+test('conta gratuita não exibe barra de raciocínio de chave própria',async({page})=>{
+  await desktop(page);
+  await expect(page.getByRole('slider',{name:'Nível de raciocínio'})).toHaveCount(0);
+});
+
+test('um modelo com esforço único permite sair de Automático e selecionar Leve',async({page})=>{
+  await desktop(page,true,true,true);
+  await page.getByRole('button',{name:'Automático',exact:true}).click();
+  const slider=page.getByRole('slider',{name:'Nível de raciocínio'});
+  await expect(slider).toHaveAttribute('aria-valuetext','Automático');
+  await slider.focus();await slider.press('ArrowRight');
+  await expect(slider).toHaveAttribute('aria-valuetext','Leve');
+});
 test('cadastro protegido abre o site e a conta pode entrar e sair sem alterar o provedor pessoal',async({page})=>{
   await desktop(page);
   await page.getByRole('button',{name:'Perfil',exact:true}).click();
