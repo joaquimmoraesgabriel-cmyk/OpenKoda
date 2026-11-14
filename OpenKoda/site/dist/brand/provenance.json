@@ -1,0 +1,37 @@
+{
+  "brand": "OpenGlitch",
+  "product": "OpenKoda",
+  "generated": "2026-11-14",
+  "symbol": {
+    "viewBox": "0 0 32 32",
+    "geometry": "Original seven-module open portal",
+    "module": 8,
+    "displacement": [
+      2,
+      -2
+    ]
+  },
+  "wordmark": {
+    "width": 176.0,
+    "fontFamily": "Liberation Sans",
+    "license": "GPL-2.0 with Liberation document embedding exception; see LICENSE-Liberation.txt",
+    "height": 31,
+    "sourcePackage": "pdfjs-dist/standard_fonts",
+    "outlineMethod": "System.Drawing GraphicsPath, PrivateFontCollection",
+    "sha256": "361c61b82d575c5c35fd9157fda8b0194bcfcd0d88ea8521a4fb5dd53d33dddc",
+    "source": "LiberationSans-Bold.ttf"
+  },
+  "colors": {
+    "accentOnDark": "#b8a4ff",
+    "ink": "#202124",
+    "accent": "#6942e7",
+    "paper": "#f5f4ef"
+  },
+  "lockup": {
+    "width": 222.0,
+    "wordmarkY": 2,
+    "wordmarkX": 46,
+    "symbolY": -3,
+    "height": 36
+  }
+}

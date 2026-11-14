@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="description" content="Conheça o OpenKoda, aplicativo para Windows da OpenGlitch: converse com IA sobre arquivos autorizados e confira as evidências no código.">
+  <title>OpenGlitch | OpenKoda para Windows</title>
+  <link rel="icon" type="image/svg+xml" href="../dist/brand/favicon.svg">
+  <link rel="stylesheet" href="./openglitch-opening.css">
+</head>
+<body>
+  <!-- Isolated prototype. Serve prototypes/ and dist/ as sibling directories;
+       map the existing public routes, including /demo-app/, to dist/.
+       No production template, route, stylesheet or application asset is changed.
+       Visual/browser QA is intentionally pending. -->
+  <a class="skip-link" href="#main">Pular para o conteúdo</a>
+  <header class="site-header">
+    <div class="container header-inner">
+      <a class="brand" href="/" aria-label="OpenGlitch, início">
+        <img class="brand-ink" src="../dist/brand/openglitch-lockup-ink.svg" width="222" height="36" alt="">
+        <img class="brand-paper" src="../dist/brand/openglitch-lockup-paper.svg" width="222" height="36" alt="">
+        <span class="brand-text" aria-hidden="true">OpenGlitch</span>
+      </a>
+      <nav class="desktop-nav" aria-label="Principal">
+        <a href="/produto/">OpenKoda</a>
+        <a href="/guias/">Guias</a>
+        <a href="/precos/">Preços</a>
+        <a href="/suporte/">Suporte</a>
+      </nav>
+      <div class="desktop-tools">
+        <label class="visually-hidden" for="appearance-desktop">Aparência</label>
+        <select id="appearance-desktop" data-appearance-select disabled aria-label="Aparência">
+          <option value="system">Sistema</option>
+          <option value="light">Clara</option>
+          <option value="dark">Escura</option>
+        </select>
+        <a class="account-link" href="/conta/">Minha conta</a>
+      </div>
+      <details class="mobile-menu">
+        <summary>Menu</summary>
+        <div class="mobile-menu-panel">
+          <nav aria-label="Principal no celular">
+            <a href="/produto/">OpenKoda</a>
+            <a href="/guias/">Guias</a>
+            <a href="/precos/">Preços</a>
+            <a href="/suporte/">Suporte</a>
+            <a href="/conta/">Minha conta</a>
+          </nav>
+          <div class="mobile-appearance">
+            <label for="appearance-mobile">Aparência</label>
+            <select id="appearance-mobile" data-appearance-select disabled>
+              <option value="system">Sistema</option>
+              <option value="light">Clara</option>
+              <option value="dark">Escura</option>
+            </select>
+          </div>
+        </div>
+      </details>
+    </div>
+  </header>
+
+  <main id="main" tabindex="-1">
+    <section class="opening" aria-labelledby="opening-title" data-matter-section>
+      <div class="matter-layer" aria-hidden="true">
+        <picture class="matter-static matter-static-light">
+          <source media="(max-width: 699px)" srcset="./openglitch-aperture-mobile-light.svg">
+          <img src="./openglitch-aperture-desktop-light.svg" width="1440" height="800" alt="" fetchpriority="high">
+        </picture>
+        <picture class="matter-static matter-static-dark">
+          <source media="(max-width: 699px)" srcset="./openglitch-aperture-mobile-dark.svg">
+          <img src="./openglitch-aperture-desktop-dark.svg" width="1440" height="800" alt="" fetchpriority="high">
+        </picture>
+        <div class="matter-runtime" data-matter-fallback-runtime hidden></div>
+        <canvas class="matter-canvas" data-matter-field="aperture" aria-hidden="true"></canvas>
+      </div>
+      <div class="container opening-inner">
+        <div class="opening-copy">
+          <h1 id="opening-title">Revise código.<br>Converse com IA.</h1>
+          <p>No OpenKoda para Windows, converse sobre arquivos autorizados e confira as evidências.</p>
+          <div class="opening-actions">
+            <a class="primary-action" href="/download/">Baixar para Windows</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="product-section" id="demonstracao" aria-labelledby="demo-title">
+      <div class="container">
+        <div class="demo-heading">
+          <h2 id="demo-title">Entre no projeto.<br>Siga a investigação.</h2>
+          <div>
+            <p>Esta é a interface do OpenKoda. Escreva uma pergunta, abra o relatório ou crie um projeto de exemplo.</p>
+            <a class="text-link" href="#depois-da-demonstracao">Pular demonstração</a>
+          </div>
+        </div>
+        <div class="demo-frame">
+          <iframe src="/demo-app/" title="Demonstração interativa do aplicativo OpenKoda" sandbox="allow-scripts allow-forms" referrerpolicy="no-referrer" loading="lazy"></iframe>
+        </div>
+        <div class="demo-caption" id="depois-da-demonstracao" tabindex="-1">
+          <p>Dados fictícios, respostas preparadas e nenhum consumo de IA.</p>
+          <a class="text-link" href="/guias/primeiro-projeto/">Começar com seu código</a>
+        </div>
+        <noscript><p class="script-note">A demonstração precisa de JavaScript. Explore o aplicativo nos <a href="/guias/">guias ilustrados</a>.</p></noscript>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-inner">
+      <p>OpenKoda é um aplicativo da OpenGlitch.</p>
+      <nav aria-label="Informações"><a href="/politicas/">Políticas</a><a href="/suporte/">Contato</a></nav>
+    </div>
+  </footer>
+
+  <script type="module" src="./openglitch-opening.js"></script>
+</body>
+</html>
