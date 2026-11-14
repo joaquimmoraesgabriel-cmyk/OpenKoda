@@ -1,4 +1,5 @@
 import {project,turnstileSiteKey} from './cloud.js';
+import {enhanceMotion} from './motion-ui.js';
 const root=document.querySelector('#account');
 const params=new URLSearchParams(location.search);
 const callback=location.origin+'/conta/retorno/';
@@ -29,6 +30,7 @@ function content(html,title='Minha conta',subtitle=''){
   const description=document.createElement('p');description.className='account-intro';description.textContent=subtitle;root.append(description);
  }
  root.insertAdjacentHTML('beforeend',html);root.append(notice);
+ queueMicrotask(()=>enhanceMotion(root));
 }
 function payload(form){return Object.fromEntries(new FormData(form));}
 async function call(operation,data={}){
@@ -154,7 +156,7 @@ function account(){
  <div class="account-task-list"><a href="#plano"><span><strong>Seu plano</strong><small>Veja a situação da assinatura e as opções disponíveis.</small></span><span aria-hidden="true">01</span></a><a href="#chamados"><span><strong>Precisa de ajuda?</strong><small>Abra um chamado e acompanhe as respostas no mesmo lugar.</small></span><span aria-hidden="true">02</span></a><a href="#dados"><span><strong>Você controla seus dados</strong><small>Exporte as informações da conta ou consulte a exclusão.</small></span><span aria-hidden="true">03</span></a></div>
  </section>
  <section class="account-panel" data-account-section="plano" aria-labelledby="heading-plano" hidden><div class="account-section-heading"><p class="account-eyebrow">Plano</p><h2 id="heading-plano" tabindex="-1">Uma assinatura, limites claros.</h2><p>Veja o que está ativo antes de escolher qualquer alteração.</p></div><div class="account-plan-state" data-plan-state aria-live="polite"><p>Consultando seu plano…</p></div>
- <section class="account-surface"><h3>Explore os planos</h3><p class="account-callout">A simulação interna está disponível somente para contas de teste autorizadas. Ela libera recursos de teste, sem cobrança, renovação automática ou crédito de IA gerenciada.</p><form id="checkout" hidden><fieldset class="plan-choice"><legend>Plano para simulação</legend>
+ <section class="account-surface"><h3>Explore os planos</h3><p class="account-callout">A simulação interna está disponível somente para contas de teste autorizadas. Ela libera recursos de teste, sem cobrança, renovação automática ou crédito de IA gerenciada.</p><form id="checkout" hidden><fieldset class="plan-choice" data-plan-switch><legend>Plano para simulação</legend>
  <label><input type="radio" name="plan" value="plus" checked><span>Plus</span><span>R$ 219 por mês</span></label><label><input type="radio" name="plan" value="pro"><span>Pro</span><span>R$ 999 por mês</span></label><label><input type="radio" name="plan" value="ultra"><span>Ultra</span><span>R$ 1.999 por mês</span></label></fieldset><button>Simular assinatura</button>${feedback('checkout')}</form><a class="account-inline-link" href="/precos/">Compare os recursos dos planos</a></section>
  <section class="account-surface"><h3>Cancelamento</h3><p>Consulte a situação acima. Um pedido de cancelamento é registrado na sua conta, sem contratar um novo plano.</p><button class="secondary" data-do="cancel">Cancelar renovação ou simulação</button>${feedback('cancel')}<a class="account-inline-link" href="/reembolso/">Leia a política de cancelamento e reembolso</a></section></section>
  <section class="account-panel" data-account-section="uso" aria-labelledby="heading-uso" hidden><div class="account-section-heading"><p class="account-eyebrow">Uso e limites</p><h2 id="heading-uso" tabindex="-1">Acompanhe sua cota.</h2><p>Os valores abaixo pertencem à IA da assinatura. O uso com chave própria é acompanhado no aplicativo e no seu provedor.</p></div><div data-usage-detail aria-live="polite"><p>Consultando seu uso…</p></div><button class="secondary" data-do="refresh">Atualizar uso</button>${feedback('refresh')}<div class="account-explainer"><h3>Como a cota funciona</h3><p>A cota do ciclo mensal é liberada em janelas de até sete dias. O saldo da janela e o limite mensal valem ao mesmo tempo. A próxima liberação aparece quando existe uma assinatura ativa.</p><a href="/guias/uso/">Entenda os limites de uso</a></div></section>

@@ -489,3 +489,18 @@ test('uma resposta longa acompanha o final e preserva a posição ao subir para 
   await jump.click();
   await expect.poll(endDistance).toBeLessThan(4);
 });
+
+test('streaming contém uma palavra longa e separa eventos antigos da requisição atual',async({page})=>{
+  await page.setViewportSize({width:860,height:760});
+  await installChat(page,[],true);
+  await page.evaluate(()=>{window.__conversationTest.processingMs=1800;window.__conversationTest.partialText='https://example.invalid/'+ 'a'.repeat(500);});
+  const reply=page.getByLabel('Resposta em andamento');
+  await expect(reply).toContainText('https://example.invalid/');
+  const overflow=()=>reply.evaluate(el=>el.scrollWidth-el.clientWidth);
+  await expect.poll(overflow).toBeLessThanOrEqual(1);
+  await page.getByRole('button',{name:'Ver histórico recente da conversa'}).click();
+  const history=page.getByRole('region',{name:'Histórico recente desta conversa'});
+  await expect(history).toContainText('Leitura concluída');
+  await expect(history).toContainText('Histórico recente desta conversa');
+  await expect(history).not.toContainText('Recebendo resposta');
+});

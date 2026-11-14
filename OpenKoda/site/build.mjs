@@ -77,15 +77,15 @@ for (const [route,[name,body]] of Object.entries(pages)) {
  const html=`<!doctype html><html lang="pt-BR"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="referrer" content="no-referrer"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; style-src 'self'; img-src 'self'; connect-src 'self' https://ynjcyvnrfxsrijrwpaye.supabase.co https://challenges.cloudflare.com; object-src 'none'; base-uri 'none'; form-action 'self'"><title>${name} | OpenGlitch</title><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/tema.css"><script src="/tema.js" defer></script><body><a class="skip" href="#main">Pular para o conteúdo</a><header class="site-header"><div class="header-inner">${brand}${menu(route)}</div></header><main id="main" tabindex="-1" class="${layout}">${body}</main>${footer(brand,route)}<aside id="cookie-box" hidden aria-label="Cookies e armazenamento"><p>Usamos cookies essenciais para sua sessão e a verificação de segurança. Consulte a <a href="/privacidade/#cookies-e-marketing">política de privacidade</a>.</p><button type="button" id="accept-essential">Entendi</button></aside><script type="module" src="/site.js"></script><script type="module" src="/matter-field.js"></script><script type="module" src="/openglitch.js"></script>${route.startsWith('conta')?'<script type="module" src="/account.js"></script>':''}</body></html>`;
  const enhanced=html.replace('<title>', '<link rel="icon" type="image/svg+xml" href="/brand/favicon.svg"><title>')
   .replace('frame-src https://challenges.cloudflare.com', "frame-src 'self' https://challenges.cloudflare.com")
-  .replace('<body>',(route===''?'<link rel="stylesheet" href="/demo.css">':'')+(route.startsWith('conta')?'<link rel="stylesheet" href="/account-dashboard.css">':'')+'<link rel="stylesheet" href="/openglitch.css"><body>')
-  .replace('</body>',(route===''?'<script type="module" src="/demo.js"></script>':'')+(route==='download'?'<script type="module" src="/download.js"></script>':'')+'</body>');
+  .replace('<body>',(route===''?'<link rel="stylesheet" href="/demo.css">':'')+(route.startsWith('conta')?'<link rel="stylesheet" href="/account-dashboard.css">':'')+'<link rel="stylesheet" href="/openglitch.css"><link rel="stylesheet" href="/motion-ui.css"><body>')
+  .replace('</body>',(route===''?'<script type="module" src="/demo.js"></script>':'')+(route==='download'?'<script type="module" src="/download.js"></script>':'')+'<script type="module" src="/motion-ui.js"></script></body>');
  await writeFile(directory+'/index.html',enhanced);
 }
 
 // Serve the same reviewed files through a Worker so security headers also
 // protect direct visits to the OAuth callback and account forms.
 const files = [...Object.keys(pages).map(route=>(route?route+'/':'')+'index.html'),
- 'openglitch.css','openglitch.js','matter-field.js','brand/favicon.svg',
+ 'openglitch.css','openglitch.js','matter-field.js','motion-ui.css','motion-ui.js','motion-core.js','motion-controls.js','motion-editorial.js','brand/favicon.svg',
  'brand/openglitch-aperture-desktop-dark.svg','brand/openglitch-aperture-desktop-light.svg',
  'brand/openglitch-aperture-mobile-dark.svg','brand/openglitch-aperture-mobile-light.svg',
  'style.css','tema.css','tema.js','account.js','account-dashboard.css','site.js','cloud.js','demo.css','demo.js','download.js','painel.png','conversa.png','projeto.png','relatorio.png','aparencia.png','uso.png','modelos.png','favicon.svg'];

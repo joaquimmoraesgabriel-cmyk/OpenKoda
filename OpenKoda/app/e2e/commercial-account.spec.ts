@@ -167,6 +167,36 @@ test('assinatura usa níveis reais e seleciona skills por barra ou menu',async({
   await expect(page.getByText('Avaliar os trechos revisados.')).toBeVisible();
 });
 
+test('habilidades aceitam teclado e uma busca vazia não vira chamada paga',async({page})=>{
+  await desktop(page,true);
+  const input=page.getByRole('textbox',{name:'Mensagem da conversa'});
+  await input.fill('/code');
+  await expect(page.getByRole('button',{name:'/code-review · Revisar código'})).toBeVisible();
+  await input.dispatchEvent('keydown',{key:'Enter',keyCode:229,isComposing:false});
+  await expect(input).toHaveValue('/code');
+  await expect(page.getByRole('button',{name:'Remover skill'})).toHaveCount(0);
+  await input.dispatchEvent('keydown',{key:'Enter',altKey:true});
+  await expect(input).toHaveValue('/code');
+  await expect(page.getByRole('button',{name:'Remover skill'})).toHaveCount(0);
+  await input.press('Shift+Enter');
+  await expect(input).toHaveValue('/code\n');
+  await expect(page.getByRole('button',{name:'Remover skill'})).toHaveCount(0);
+  await input.fill('/inexistente');
+  await expect(page.getByText('Nenhuma habilidade encontrada. Tente outro nome ou função.')).toBeVisible();
+  await input.press('Enter');
+  await expect(input).toHaveValue('/inexistente');
+  await input.fill('/code');
+  const option=page.getByRole('button',{name:'/code-review · Revisar código'});
+  await expect(option).toBeVisible();
+  await input.press('ArrowDown');
+  await expect(option).toBeFocused();
+  await option.press('Enter');
+  await expect(page.getByRole('button',{name:'Remover skill'})).toBeVisible();
+  await expect(input).toBeFocused();
+  await expect(input).toHaveValue('');
+  expect(await page.evaluate(()=>Reflect.get(window,'commercialCalls').filter((call:{action:string})=>call.action==='ai.ask').length)).toBe(0);
+});
+
 test('skill explícita funciona com chave própria e a troca de conta descarta a autorização',async({page})=>{
   await desktop(page,true,true);
   await page.evaluate(()=>{

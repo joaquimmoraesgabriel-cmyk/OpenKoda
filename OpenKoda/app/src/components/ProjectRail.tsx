@@ -31,12 +31,13 @@ export function Rail({view,navigate,sourceOnly=false,onUsage,activeProvider}:{vi
 }
 
 interface TreeProps {
+  hidden?:boolean;
   projects:Project[]; assessments:Assessment[]; projectId?:string; assessmentId?:string;
   busy:boolean; onNew:()=>void; onProject:(id:string)=>void; onChat:(id:string)=>void; onNewChat:(project:Project)=>void;
 }
-export function ProjectTree({projects,assessments,projectId,assessmentId,busy,onNew,onProject,onChat,onNewChat}:TreeProps) {
+export function ProjectTree({hidden=false,projects,assessments,projectId,assessmentId,busy,onNew,onProject,onChat,onNewChat}:TreeProps) {
   const [collapsed,setCollapsed]=useState<string[]>([]);
-  return <aside id="project-tree" className="project-tree" aria-label="Projetos e conversas">
+  return <aside id="project-tree" className="project-tree" aria-label="Projetos e conversas" aria-hidden={hidden||undefined} inert={hidden}>
     <div className="tree-brand">OpenKoda <span className="tree-edition">{version}</span></div>
     <button className="tree-new" type="button" onClick={onNew} disabled={busy}><Plus size={18}/>Novo projeto</button>
     <h2>Projetos <span>{projects.filter(p=>!p.archived).length}</span></h2>

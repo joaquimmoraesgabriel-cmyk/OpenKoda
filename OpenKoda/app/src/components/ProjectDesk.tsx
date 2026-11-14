@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
+import { springAnimate, springs } from './motion/spring';
 import { Check, Folder, Globe2, LayoutDashboard, Maximize2, Network, PanelRight, PanelLeft, Pencil, Plus, X } from 'lucide-react';
 import { type Action, type Assessment, type Project, type Snapshot } from '../types';
 import Projects from './Projects';
@@ -25,6 +26,9 @@ export default function ProjectDesk({sourceOnly=false,snapshot,busy,action,selec
   const [split,setSplit]=useState(false);
   const [tree,setTree]=useState(false);
   const [treeCollapsed,setTreeCollapsed]=useState(false);
+  const [narrow,setNarrow]=useState(()=>window.matchMedia('(max-width:760px)').matches);
+  const collapseAnimation=useRef<Animation|undefined>(undefined);
+  const previousCollapsed=useRef(treeCollapsed);
   const desk=useRef<HTMLElement>(null);
   const drag=useRef<{start:number;width:number;scale:number}|undefined>(undefined);
   const [treeWidth,setTreeWidth]=useState(()=>{try{const n=Number(localStorage.getItem('openkoda.project-tree.width'));return Number.isFinite(n)&&n>=185&&n<=420?n:240;}catch{return 240;}});
@@ -32,11 +36,20 @@ export default function ProjectDesk({sourceOnly=false,snapshot,busy,action,selec
   const [resizing,setResizing]=useState(false);
   useEffect(()=>{
     const el=desk.current;if(!el)return;
-    const update=()=>{if(window.matchMedia('(max-width:760px)').matches)return;const max=Math.max(185,Math.min(420,el.clientWidth-360));setMaximumWidth(max);setTreeWidth(w=>Math.min(w,max));};
+    const update=()=>{const mobile=window.matchMedia('(max-width:760px)').matches;setNarrow(mobile);if(mobile)return;const max=Math.max(185,Math.min(420,el.clientWidth-360));setMaximumWidth(max);setTreeWidth(w=>Math.min(w,max));};
     update();const observer=new ResizeObserver(update);observer.observe(el);return()=>observer.disconnect();
   },[]);
   function resizeTree(width:number){const next=Math.round(Math.max(185,Math.min(maximumWidth,width)));setTreeWidth(next);return next;}
   function persistWidth(width:number){try{localStorage.setItem('openkoda.project-tree.width',String(width));}catch{/* Layout stays usable without storage. */}}
+  useLayoutEffect(()=>{
+    const el=desk.current;
+    if(!el||narrow||previousCollapsed.current===treeCollapsed)return;
+    const start=previousCollapsed.current?0:treeWidth,end=treeCollapsed?0:treeWidth;
+    collapseAnimation.current?.cancel();
+    collapseAnimation.current=springAnimate(el,v=>({gridTemplateColumns:`${Math.max(0,start+(end-start)*v)}px ${Math.max(0,(treeCollapsed?1-v:v)*5)}px minmax(0,1fr)`}),springs.soft);
+    previousCollapsed.current=treeCollapsed;
+  },[treeCollapsed,narrow,treeWidth]);
+  useEffect(()=>()=>collapseAnimation.current?.cancel(),[]);
 
   const [error,setError]=useState('');
   const [editingTitle,setEditingTitle]=useState<{id:string;text:string}>();
@@ -140,8 +153,8 @@ export default function ProjectDesk({sourceOnly=false,snapshot,busy,action,selec
   const showTree=live.length>0;
   return <section ref={desk} style={{'--project-tree-width':treeWidth+'px'} as CSSProperties} data-resizing={resizing} className={'project-desk'+(showTree?' with-tree':'')+(tree?' tree-open':'')+(treeCollapsed?' tree-collapsed':'')} aria-label="Área de projetos"
     onKeyDown={event=>{if(event.key==='Escape'&&tree&&!event.defaultPrevented){event.preventDefault();dismissTree();}}}>
-    {showTree && <ProjectTree projects={live} assessments={snapshot.assessments} projectId={launch?undefined:project?.id} assessmentId={launch?undefined:chat?.id} busy={busy} onNew={()=>newProject()} onChat={openChat} onProject={openProject} onNewChat={p=>void newChat(p)}/>}
-    {showTree&&!treeCollapsed&&<div className="project-tree-resizer" role="separator" aria-label="Largura da lista de projetos" aria-orientation="vertical" aria-controls="project-tree" aria-valuemin={185} aria-valuemax={maximumWidth} aria-valuenow={treeWidth} tabIndex={0}
+    {showTree && <ProjectTree hidden={treeCollapsed&&!narrow} projects={live} assessments={snapshot.assessments} projectId={launch?undefined:project?.id} assessmentId={launch?undefined:chat?.id} busy={busy} onNew={()=>newProject()} onChat={openChat} onProject={openProject} onNewChat={p=>void newChat(p)}/>}
+    {showTree&&<div className="project-tree-resizer" role="separator" aria-hidden={treeCollapsed&&!narrow||undefined} aria-label="Largura da lista de projetos" aria-orientation="vertical" aria-controls="project-tree" aria-valuemin={185} aria-valuemax={maximumWidth} aria-valuenow={treeWidth} tabIndex={treeCollapsed?-1:0}
       onPointerDown={event=>{if(event.button!==0)return;event.preventDefault();event.currentTarget.focus();event.currentTarget.setPointerCapture(event.pointerId);drag.current={start:event.clientX,width:treeWidth,scale:(desk.current?.getBoundingClientRect().width??1)/(desk.current?.clientWidth??1)};setResizing(true);}}
       onPointerMove={event=>{if(drag.current)resizeTree(drag.current.width+(event.clientX-drag.current.start)/drag.current.scale);}}
       onPointerUp={event=>{if(!drag.current)return;persistWidth(treeWidth);drag.current=undefined;setResizing(false);event.currentTarget.releasePointerCapture(event.pointerId);}}

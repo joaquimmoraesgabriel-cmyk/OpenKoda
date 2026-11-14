@@ -5,6 +5,7 @@ import { accountChanged, site, usdMicros, type AccountView, type SimulationOutco
 import { useDesktopSession } from '../desktop-session';
 import { errorMessage } from '../types';
 import { AccountSignIn } from './DesktopEntry';
+import { PlanSwitch } from './motion/PlanSwitch';
 
 export function accountPlanLabel(account:AccountView|null){
   if(account?.plan&&account.subscription?.status==='active')return `Plano ${account.plan.id[0].toUpperCase()+account.plan.id.slice(1)}`;
@@ -60,6 +61,7 @@ export function AccountSecurity(){
 
 export function AccountPlans(){
   const session=useDesktopSession(),work=useAccountAction();
+  const [previewPlan,setPreviewPlan]=useState('plus');
   const operation=useRef<{id:string;key:string}|undefined>(undefined);
   const account=session.account,simulation=account?.simulation;
   const activeSimulation=simulation?.status==='active';
@@ -88,11 +90,12 @@ export function AccountPlans(){
     </dl>{account.usage.windowEnd&&<p>Próxima liberação: {new Date(account.usage.windowEnd).toLocaleString('pt-BR')}.</p>}</div>}
     {session.loading?<p role="status">Consultando seu plano…</p>:!account?<div className="account-empty"><p>Não foi possível consultar os planos. As permissões pagas não serão presumidas sem conexão.</p><button type="button" className="button" onClick={()=>void session.refresh()}>Tentar novamente</button></div>:<>
       <h3 className="plans-heading">Planos OpenKoda</h3><p>Escolha de modelos conforme o plano e a compatibilidade da tarefa. Recursos e consumo são controlados pela conta.</p>
+      {!!account.plans?.length&&<PlanSwitch value={account.plans.some(plan=>plan.id===previewPlan)?previewPlan:account.plans[0].id} onChange={setPreviewPlan} items={account.plans.map(plan=>({id:plan.id,label:plan.id[0].toUpperCase()+plan.id.slice(1)}))}/>}
       <div className="desktop-plan-grid">{account.plans?.map(plan=>{
         const selected=simulationOnly?simulation.plan===plan.id:account.plan?.id===plan.id;
         const simulated=activeSimulation&&simulation.plan===plan.id;
         const title=plan.id[0].toUpperCase()+plan.id.slice(1);
-        return <section key={plan.id} className="desktop-plan" data-selected={selected}><div className="desktop-plan-heading"><h4>{title}</h4>{selected&&<span><Check size={13}/>Atual</span>}</div>
+        return <section key={plan.id} className="desktop-plan" data-selected={selected} data-previewed={previewPlan===plan.id}><div className="desktop-plan-heading"><h4>{title}</h4>{selected&&<span><Check size={13}/>Atual</span>}</div>
           <p className="desktop-plan-price">{new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(plan.priceBrlCents/100)}<small>/mês</small></p>
           <p>{usdMicros(plan.monthlyLimitMicros)} de uso de IA por ciclo mensal, distribuído em janelas de 7 dias.</p>
           <ul><li>Modelos de IA pela Koda, conforme o catálogo disponível</li><li>Ajuste de raciocínio nos modelos compatíveis</li><li>Skills e histórico de uso</li></ul>

@@ -1,12 +1,12 @@
-import { Check, Copy } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { CopyFeedback } from './motion/CopyFeedback';
 
 export default function CopyTargetButton({ target }: { target: string }) {
   const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle');
   const writing = useRef(false);
   useEffect(() => {
     if (state !== 'copied') return;
-    const timer = window.setTimeout(() => setState('idle'), 2200);
+    const timer = window.setTimeout(() => setState('idle'), 1800);
     return () => window.clearTimeout(timer);
   }, [state]);
 
@@ -23,10 +23,9 @@ export default function CopyTargetButton({ target }: { target: string }) {
     }
   }
 
-  const Icon = state === 'copied' ? Check : Copy;
   return <div className="target-copy-action">
-    <button className="button" type="button" onClick={() => void copy()}>
-      <Icon size={15} aria-hidden="true"/><span>Copiar alvo</span>
+    <button className="button" type="button" aria-label="Copiar alvo" onClick={() => void copy()}>
+      <CopyFeedback copied={state==='copied'} label="Copiar alvo" done="Alvo copiado"/>
     </button>
     <span role="status">{state === 'copied' ? 'Alvo copiado.' : state === 'failed' ? 'Selecione o alvo acima e copie manualmente.' : ''}</span>
   </div>;

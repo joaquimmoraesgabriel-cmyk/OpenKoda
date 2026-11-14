@@ -4,7 +4,7 @@ import {readFile} from 'node:fs/promises';
 
 // The browser asset is an ES module without imposing a package type on the site.
 const source = await readFile(new URL('../dist/matter-field.js', import.meta.url), 'utf8');
-const {createMatterField, stepMatterField, resetMatterField, paintMatterField, renderMatterSvg, mountMatterFields, matterLimits} = await import('data:text/javascript;base64,' + Buffer.from(source).toString('base64'));
+const {createMatterField, evolveMatterField, stepMatterField, resetMatterField, paintMatterField, renderMatterSvg, mountMatterFields, matterLimits, matterPauseKey} = await import('data:text/javascript;base64,' + Buffer.from(source).toString('base64'));
 
 test('the two compositions are deterministic, distinct, bounded and recomposed for portrait', () => {
   for (const scene of ['aperture', 'constellation']) {
@@ -75,9 +75,58 @@ test('a paused tab cannot introduce a large delta jump, and reset clears only in
   assert.equal(stepMatterField(a, pointer, NaN), false);
 });
 
+test('the living volume evolves at 0, 3 and 8 seconds without input, with bounded buffers and no drift', () => {
+  for (const scene of ['aperture', 'constellation']) {
+    for (const [width, height] of [[1440, 800], [390, 844]]) {
+      const field = createMatterField(scene, width, height), anchors = [...field.x];
+      const buffers = [field.flowX, field.flowY, field.coverage];
+      const at = () => [...field.flowX, ...field.flowY, ...field.coverage];
+      const initial = at();
+      for (let frame = 0; frame < 180; frame++) evolveMatterField(field, 1 / 60);
+      const three = at();
+      for (let frame = 0; frame < 300; frame++) evolveMatterField(field, 1 / 60);
+      const eight = at();
+      assert.notDeepEqual(initial, three); assert.notDeepEqual(three, eight);
+      assert.ok([...field.flowX, ...field.flowY].some(value => Math.abs(value) > 4));
+      for (let i = 0; i < field.count; i++) {
+        assert.ok(Math.hypot(field.flowX[i], field.flowY[i]) <= matterLimits.ambientDisplacement);
+        assert.ok(field.coverage[i] >= 0.79 && field.coverage[i] <= 1.21);
+      }
+      assert.deepEqual([...field.x], anchors);
+      assert.equal(field.flowX, buffers[0]); assert.equal(field.flowY, buffers[1]); assert.equal(field.coverage, buffers[2]);
+      const frozen = at(); resetMatterField(field); assert.deepEqual(at(), frozen, 'resetting input never resets the living base');
+    }
+  }
+});
+
+test('leaving a stationary pointer restores the current living volume, not its initial frame', () => {
+  const field = createMatterField('constellation', 1440, 800);
+  for (let tick = 0; tick < 120; tick++) {
+    evolveMatterField(field, 1 / 60);
+    stepMatterField(field, {active: true, x: field.x[200], y: field.y[200]}, 1 / 60);
+  }
+  assert.ok(Math.abs(field.dx[200]) + Math.abs(field.dy[200]) > 1);
+  const interactingTime = field.time;
+  for (let tick = 0; tick < 300; tick++) { evolveMatterField(field, 1 / 60); stepMatterField(field, {active: false}, 1 / 60); }
+  assert.ok(field.time > interactingTime + 4.9);
+  assert.ok([...field.flowX].some(value => Math.abs(value) > 4));
+  assert.ok([...field.dx, ...field.dy, ...field.heat].every(value => value === 0));
+  const same = createMatterField('constellation', 1440, 800); same.time = field.time; evolveMatterField(same, 0);
+  assert.deepEqual(field.flowX, same.flowX); assert.deepEqual(field.flowY, same.flowY);
+});
+
+test('autonomous time is frame-rate independent and a long suspension is clamped', () => {
+  const at60 = createMatterField('aperture', 1440, 800), at120 = createMatterField('aperture', 1440, 800);
+  for (let i = 0; i < 180; i++) evolveMatterField(at60, 1 / 60);
+  for (let i = 0; i < 360; i++) evolveMatterField(at120, 1 / 120);
+  for (let i = 0; i < at60.count; i++) assert.ok(Math.abs(at60.flowX[i] - at120.flowX[i]) < 0.0001);
+  const previous = at60.time; evolveMatterField(at60, 30);
+  assert.ok(at60.time - previous <= matterLimits.maxDelta + 0.000001);
+});
+
 function context() {
-  return {clears: 0, squares: 0, dots: 0, transform: null,
-    clearRect() { this.clears++; }, fillRect() { this.squares++; }, beginPath() {}, arc() { this.dots++; }, fill() {},
+  return {clears: 0, squares: 0, dots: 0, transform: null, marks: [],
+    clearRect() { this.clears++; this.marks = []; }, fillRect(...values) { this.squares++; if (this.marks.length < 12) this.marks.push(values); }, beginPath() {}, arc(...values) { this.dots++; if (this.marks.length < 12) this.marks.push(values); }, fill() {},
     setTransform(...args) { this.transform = args; }};
 }
 
@@ -113,8 +162,10 @@ class Events {
   count() { return [...this.listeners.values()].reduce((sum, handlers) => sum + handlers.size, 0); }
 }
 
-function browserFixture({reduced = false, coarse = false, noContext = false} = {}) {
+function browserFixture({reduced = false, coarse = false, noContext = false, paused = false} = {}) {
   const win = new Events(), doc = new Events(), motions = new Map(), callbacks = new Map();
+  const stored = new Map([[matterPauseKey, String(paused)]]);
+  win.localStorage = {getItem: key => stored.get(key), setItem: (key, value) => stored.set(key, value)};
   let id = 0, time = 0;
   win.devicePixelRatio = 4; win.navigator = {deviceMemory: 8}; win.performance = {now: () => time};
   win.matchMedia = query => { if (!motions.has(query)) motions.set(query, Object.assign(new Events(), {matches: query.includes('reduced') ? reduced : coarse})); return motions.get(query); };
@@ -122,12 +173,14 @@ function browserFixture({reduced = false, coarse = false, noContext = false} = {
   win.cancelAnimationFrame = handle => callbacks.delete(handle);
   win.getComputedStyle = () => ({getPropertyValue: name => name === '--matter-ink' ? '#18171b' : '#7042ed'});
   const observers = [];
-  win.IntersectionObserver = class { constructor(callback) { this.callback = callback; this.targets = []; observers.push(this); } observe(node) { this.targets.push(node); } disconnect() { this.targets.length = 0; } };
+  win.IntersectionObserver = class { constructor(callback) { this.kind = 'intersection'; this.callback = callback; this.targets = []; observers.push(this); } observe(node) { this.targets.push(node); } disconnect() { this.targets.length = 0; } };
   win.ResizeObserver = class { constructor(callback) { this.callback = callback; this.targets = []; observers.push(this); } observe(node) { this.targets.push(node); } disconnect() { this.targets.length = 0; } };
   win.MutationObserver = class { constructor(callback) { this.callback = callback; this.targets = []; observers.push(this); } observe(node) { this.targets.push(node); } disconnect() { this.targets.length = 0; } };
   doc.defaultView = win; doc.hidden = false; doc.documentElement = {};
   const sections = ['aperture', 'constellation'].map(scene => {
     const section = Object.assign(new Events(), {dataset: {}});
+    const button = Object.assign(new Events(), {hidden: true, attributes: {}, setAttribute(name, value) { this.attributes[name] = value; }});
+    section.button = button; section.querySelector = () => button;
     const canvas = Object.assign(new Events(), {dataset: {matterField: scene}, width: 0, height: 0,
       getBoundingClientRect: () => ({width: 1024, height: 640, left: 0, top: 0}),
       closest: () => section, setAttribute() {}, getContext: () => noContext ? null : canvas.context, context: context()});
@@ -135,7 +188,7 @@ function browserFixture({reduced = false, coarse = false, noContext = false} = {
   });
   doc.querySelectorAll = () => sections.map(section => section.canvas);
   const flush = () => { time += 1000 / 60; const pending = [...callbacks.values()]; callbacks.clear(); for (const callback of pending) callback(time); };
-  return {win, doc, sections, observers, motions, callbacks, flush};
+  return {win, doc, sections, observers, motions, callbacks, flush, stored};
 }
 
 test('one coordinated frame serves visible sections; hidden/offscreen work pauses and cleanup removes resources', () => {
@@ -149,7 +202,10 @@ test('one coordinated frame serves visible sections; hidden/offscreen work pause
     assert.equal(section.dataset.matterReady, 'true');
     assert.equal(section.canvas.width, Math.round(1024 * matterLimits.maxDpr));
   }
-  assert.equal(env.callbacks.size, 0, 'no ambient battery loop');
+  assert.equal(env.callbacks.size, 1, 'one autonomous coordinator runs while a scene is visible');
+  const firstFrame = env.sections[0].canvas.context.marks;
+  for (let i = 0; i < 10; i++) env.flush();
+  assert.notDeepEqual(env.sections[0].canvas.context.marks, firstFrame);
   env.sections[1].emit('pointermove', {pointerType: 'mouse', clientX: 900, clientY: 390});
   assert.equal(env.callbacks.size, 1); env.flush(); assert.equal(env.callbacks.size, 1);
   env.doc.hidden = true; env.doc.emit('visibilitychange'); assert.equal(env.callbacks.size, 0);
@@ -158,22 +214,68 @@ test('one coordinated frame serves visible sections; hidden/offscreen work pause
   env.sections[1].emit('pointermove', {pointerType: 'mouse', clientX: 900, clientY: 390});
   assert.equal(env.callbacks.size, 0);
   cleanup(); cleanup();
-  for (const section of env.sections) { assert.equal(section.count(), 0); assert.equal(section.canvas.count(), 0); assert.equal(section.dataset.matterReady, undefined); }
+  for (const section of env.sections) { assert.equal(section.count(), 0); assert.equal(section.canvas.count(), 0); assert.equal(section.button.count(), 0); assert.equal(section.dataset.matterReady, undefined); }
   for (const observer of env.observers) assert.equal(observer.targets.length, 0);
   for (const motion of env.motions.values()) assert.equal(motion.count(), 0);
   assert.equal(env.win.count(), 0); assert.equal(env.doc.count(), 0);
 });
 
-test('reduced motion and touch keep a complete static field without hijacking gestures', () => {
+test('reduced motion freezes the field while touch keeps autonomous motion without hijacking gestures', () => {
   for (const mode of [{reduced: true}, {coarse: true}]) {
     const env = browserFixture(mode), cleanup = mountMatterFields(env.doc);
     env.observers[0].callback(env.sections.map(target => ({target, isIntersecting: true}))); env.flush();
     env.sections[0].emit('pointermove', {pointerType: 'mouse', clientX: 800, clientY: 400});
     env.sections[0].emit('pointermove', {pointerType: 'touch', clientX: 800, clientY: 400});
-    assert.equal(env.callbacks.size, 0); assert.equal(env.sections[0].dataset.matterReady, 'true');
+    assert.equal(env.callbacks.size, mode.reduced ? 0 : 1); assert.equal(env.sections[0].dataset.matterReady, 'true');
     assert.equal(env.sections[0].listeners.has('touchmove'), false);
     assert.equal(env.sections[0].listeners.has('wheel'), false);
     cleanup();
+  }
+});
+
+test('manual pause freezes the current frame, syncs controls and persists across mounting', () => {
+  const env = browserFixture(), cleanup = mountMatterFields(env.doc);
+  env.observers[0].callback(env.sections.map(target => ({target, isIntersecting: true})));
+  for (let i = 0; i < 30; i++) env.flush();
+  const current = env.sections[0].canvas.context.marks;
+  env.sections[0].button.emit('click'); env.flush();
+  assert.equal(env.callbacks.size, 0); assert.deepEqual(env.sections[0].canvas.context.marks, current);
+  assert.equal(env.stored.get(matterPauseKey), 'true');
+  for (const section of env.sections) { assert.equal(section.button.attributes['aria-pressed'], 'true'); assert.equal(section.button.textContent, 'Retomar animação'); }
+  const reduce = env.motions.get('(prefers-reduced-motion: reduce)');
+  reduce.matches = true; reduce.emit('change'); env.flush();
+  assert.equal(env.sections[0].button.disabled, true);
+  reduce.matches = false; reduce.emit('change'); env.flush();
+  assert.equal(env.callbacks.size, 0, 'system preference does not override the manual pause');
+  cleanup();
+  const remount = mountMatterFields(env.doc);
+  const intersection = env.observers.findLast(observer => observer.kind === 'intersection' && observer.targets.includes(env.sections[0]));
+  intersection.callback(env.sections.map(target => ({target, isIntersecting: true}))); env.flush();
+  assert.equal(env.callbacks.size, 0, 'remount restores persisted pause');
+  env.sections[1].button.emit('click'); env.flush();
+  assert.equal(env.callbacks.size, 1); assert.equal(env.stored.get(matterPauseKey), 'false');
+  remount();
+});
+
+test('cross-tab pause and blocked preference storage do not break the artwork', () => {
+  const env = browserFixture(); env.win.localStorage = {getItem() { throw new Error('blocked'); }, setItem() { throw new Error('blocked'); }};
+  const cleanup = mountMatterFields(env.doc);
+  env.observers[0].callback(env.sections.map(target => ({target, isIntersecting: true}))); env.flush();
+  env.win.emit('storage', {key: matterPauseKey, newValue: 'true'}); env.flush(); assert.equal(env.callbacks.size, 0);
+  env.sections[0].button.emit('click'); env.flush(); assert.equal(env.callbacks.size, 1);
+  cleanup();
+});
+
+test('ten mounts and cleanups never accumulate frames, listeners or observers', () => {
+  const env = browserFixture();
+  for (let cycle = 0; cycle < 10; cycle++) {
+    const cleanup = mountMatterFields(env.doc);
+    const observer = env.observers.findLast(item => item.kind === 'intersection' && item.targets.includes(env.sections[0]));
+    observer.callback(env.sections.map(target => ({target, isIntersecting: true}))); env.flush();
+    cleanup();
+    assert.equal(env.callbacks.size, 0); assert.equal(env.win.count(), 0); assert.equal(env.doc.count(), 0);
+    for (const section of env.sections) assert.equal(section.count() + section.canvas.count() + section.button.count(), 0);
+    assert.ok(env.observers.every(item => item.targets.length === 0));
   }
 });
 

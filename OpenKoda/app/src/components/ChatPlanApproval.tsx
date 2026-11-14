@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
-import { Play, ShieldCheck } from 'lucide-react';
+import { LoaderCircle, Play, ShieldCheck } from 'lucide-react';
+import './motion/motion-controls.css';
 import { operationLabels, type OperationAdapter } from '../ai-operation';
 import { errorMessage, type Action, type ExecutionPlan } from '../types';
 import type { ApprovalMode } from '../project-chat';
@@ -39,8 +40,8 @@ export function ChatPlanApproval({ plan, mode, disabled, action }: {
       setReview(false);
     }
   }
-  return <section className="chat-approval" aria-label="Operação pendente">
-    <ShieldCheck size={18}/><h3>{label}</h3><p>{plan.target}</p>
+  return <section className="chat-approval tool-approval" aria-label="Operação pendente" aria-busy={working}>
+    <header className="tool-approval-state">{working?<LoaderCircle size={16}/>:<ShieldCheck size={16}/>}<span>{working?'Operação em andamento':error?'Não foi possível concluir':review?'Revise antes de autorizar':'Operação preparada'}</span></header><h3>{label}</h3><p className="tool-approval-target">{plan.target}</p>
     <details open={review || undefined}>
       <summary>Detalhes da operação</summary>
       <p>Prazo de {plan.timeoutSeconds} segundos · saída de até {plan.outputLimitKiB} KiB</p>

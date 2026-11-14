@@ -17,7 +17,8 @@ import { ConversationTimeline, type ChatMessage } from './ConversationTimeline';
 import { ConversationText } from './ConversationText';
 import { ChatModelPicker } from './ChatModelPicker';
 import { ChatComposerMenus } from './ChatComposerMenus';
-import { ChatSkills } from './ChatSkills';
+import { ChatSkills, type ChatSkillsHandle } from './ChatSkills';
+import { AgentProgress } from './AgentProgress';
 import ChatCodeAnalysis from './ChatCodeAnalysis';
 import SecurityScanPanel, { useSecurityScan } from './SecurityScan';
 import { scanActive, scanStateLabel } from '../security-scan';
@@ -44,6 +45,7 @@ function Conversation({draftKey,unsaved=false,analysisSource,onAnalysisAdmitted,
   const [acceptedMessage,setAcceptedMessage]=useState<string>();
   const {text:draft,attachment,skill,proposing:requestedProposal}=useChatDraft(inputId);
   const [skillsOpen,setSkillsOpen]=useState(false);
+  const skillsPanel=useRef<ChatSkillsHandle>(null);
   const proposing=!sourceOnly&&requestedProposal;
   const [mode,setMode]=useState<ApprovalMode>(()=>{
     try{const saved=localStorage.getItem('openkoda.chat.approval.'+assessment.id);return saved==='always'||saved==='scope'?saved:'risk';}catch{return 'risk';}
@@ -324,8 +326,8 @@ function Conversation({draftKey,unsaved=false,analysisSource,onAnalysisAdmitted,
       {!sourceOnly&&(plans??[]).filter(plan=>plan.assessmentId===assessment.id&&['proposed','approved'].includes(plan.status)&&Date.parse(plan.expiresAt)>Date.now()).map(plan=>
         <ChatPlanApproval key={plan.id} plan={plan} mode={mode} disabled={busy||!!phase||!!remote.requestId||!!approval} action={action}/>)}
       {pendingLine&&!messages.some(message=>message.id===acceptedMessage)&&<article className="project-chat-turn user"><header><strong>Você</strong></header><p>{pendingLine}</p></article>}
-      {partial&&<article className="project-chat-turn assistant" data-live-answer={remote.requestId} aria-label="Resposta em andamento"><header><strong>OpenKoda</strong></header><ConversationText text={partial}/></article>}
-      {workLabel&&<p className="chat-progress" role="status"><LoaderCircle size={16}/>{workLabel}</p>}
+      {partial&&<article className="project-chat-turn assistant" data-live-answer={remote.requestId} aria-label="Resposta em andamento"><header><strong>OpenKoda</strong></header><ConversationText key={remote.requestId} text={partial} streaming/></article>}
+      {workLabel&&<AgentProgress label={workLabel} events={assessment.events}/>}
       {approval&&<section className="chat-approval"><ShieldCheck size={20}/><h3>Autorizar envio para {providers[approval.selection.provider].name}?</h3><p>{approval.selection.model} · {approval.context.bytes.toLocaleString('pt-BR')} bytes preparados{approval.budget?' · reserva de '+usd(approval.budget.reservedUsd):''}.</p>{approval.image&&<img alt="Imagem selecionada para envio" src={'data:image/jpeg;base64,'+approval.image}/>}
         {approval.context.autoSkill&&<p>Skill sugerida para esta mensagem: <strong>/{approval.context.autoSkill}</strong>. As instruções estão no conteúdo do envio.</p>}
         <details><summary>Ver conteúdo do envio</summary>{approval.context.packetPreview.prompts.map(p=><pre key={p.index}>{p.instructions}{'\n'}{p.prompt.replace(/"reviewedJpeg":"[A-Za-z0-9+/=]+"/g,'"imagem":"Prévia acima"')}</pre>)}</details>
@@ -336,9 +338,9 @@ function Conversation({draftKey,unsaved=false,analysisSource,onAnalysisAdmitted,
       {awayFromEnd&&<button type="button" className="chat-jump" aria-label="Voltar à mensagem mais recente" title="Voltar à mensagem mais recente" onClick={followEnd}><ArrowDown size={17}/></button>}
       {error&&<div className="chat-error" role="alert">{error}{onAdvanced&&<button type="button" onClick={onAdvanced}>Revisar avaliação</button>}</div>}
       {compactionNotice&&<p role="status">{compactionNotice}</p>}
-      {skillsAllowed&&!!sel&&(skillsOpen||slash)&&<ChatSkills query={slash?draft.slice(1):''}
+      {skillsAllowed&&!!sel&&(skillsOpen||slash)&&<ChatSkills ref={skillsPanel} fromComposer={slash} query={slash?draft.slice(1):''}
         onSelect={item=>{updateDraft(inputId,{skill:item,...(slash?{text:''}:{})});setSkillsOpen(false);input.current?.focus();}}
-        onClose={()=>{setSkillsOpen(false);if(slash)updateDraft(inputId,{text:''});}}/>}
+        onClose={()=>{setSkillsOpen(false);if(slash)updateDraft(inputId,{text:''});input.current?.focus();}}/>}
       {analyzing&&sel&&onAnalysisAdmitted?<ChatCodeAnalysis draftId={inputId} source={analysisSource} selection={sel} projectId={assessment.projectId}
         newConversation={!unsaved} action={action} onClose={()=>setAnalyzing(false)} onAdmitted={onAnalysisAdmitted}/>:
       <><form className="project-composer" onSubmit={e=>{e.preventDefault();if(canSend)void prepare(draft);}}>
@@ -346,6 +348,7 @@ function Conversation({draftKey,unsaved=false,analysisSource,onAnalysisAdmitted,
         {attachment&&<div className="chat-attachment">{attachment.image?<img alt="Anexo selecionado" src={'data:image/jpeg;base64,'+attachment.image}/>:<FileText size={16}/>}<span>{attachment.name}</span><button type="button" disabled={disabled} onClick={()=>updateDraft(inputId,{attachment:undefined})} aria-label="Remover anexo"><X size={14}/></button></div>}
         {proposing&&<div className="chat-attachment"><ListChecks size={16}/><span>Verificação</span><button type="button" disabled={disabled} aria-label="Voltar à conversa" onClick={()=>updateDraft(inputId,{proposing:false})}><X size={14}/></button></div>}
         <textarea ref={input} aria-label="Mensagem da conversa" rows={2} maxLength={8000} value={draft} disabled={!!approval} onChange={e=>updateDraft(inputId,{text:e.target.value})} placeholder={proposing?'O que você quer verificar neste alvo?':'Envie uma mensagem sobre o projeto…'} onKeyDown={e=>{
+          if(skillsPanel.current?.keyDown(e))return;
           if(!matchesComposerShortcut(e.nativeEvent,composerShortcut()))return;
           e.preventDefault();
           if(!e.repeat && canSend)e.currentTarget.form?.requestSubmit();

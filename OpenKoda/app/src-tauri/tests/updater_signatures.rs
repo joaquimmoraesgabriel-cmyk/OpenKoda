@@ -2,6 +2,25 @@ use serde_json::json;
 use std::time::Duration;
 use tauri_plugin_updater::UpdaterExt;
 #[test]
+#[ignore = "opt-in public-network diagnostic; never downloads or installs a candidate"]
+fn updater_probe_production_feed() {
+    let endpoint="https://github.com/joaquimmoraesgabriel-cmyk/OpenKoda/releases/download/desktop-updates/latest.json";
+    let config:serde_json::Value=serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
+    let mut context=tauri::test::mock_context(tauri::test::noop_assets());
+    context.config_mut().plugins.0.insert("updater".into(),config["plugins"]["updater"].clone());
+    let app=tauri::test::mock_builder().plugin(tauri_plugin_updater::Builder::new().build()).build(context).unwrap();
+    let updater=app.updater_builder().endpoints(vec![url::Url::parse(endpoint).unwrap()]).unwrap().target("windows-x86_64").timeout(Duration::from_secs(20)).build().unwrap();
+    let started=std::time::Instant::now();
+    match tauri::async_runtime::block_on(updater.check()) {
+        Ok(Some(update))=>eprintln!("official-feed ok: version={} rollout={} elapsed_ms={}",update.version,update.raw_json["rolloutPercent"],started.elapsed().as_millis()),
+        Ok(None)=>eprintln!("official-feed ok: no newer candidate elapsed_ms={}",started.elapsed().as_millis()),
+        Err(error)=>{
+            let detail=format!("{error:?}").split_whitespace().map(|part|if part.contains("https://")||part.contains("http://"){"<url redacted>"}else{part}).collect::<Vec<_>>().join(" ");
+            panic!("official-feed failed after {} ms: {}",started.elapsed().as_millis(),detail);
+        }
+    }
+}
+#[test]
 #[ignore = "requires an explicitly selected local installer; no network"]
 fn updater_verify_packaged_candidate() {
     let file=std::path::PathBuf::from(std::env::var_os("OPENKODA_VERIFY_UPDATE_FILE").expect("Set OPENKODA_VERIFY_UPDATE_FILE"));

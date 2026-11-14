@@ -165,8 +165,10 @@
   :root:not([data-motion=reduced]) :is(.welcome-content,.launch-page,.desk-panel,.workspace-main>.single-page,.settings-content>section) { animation:workspace-enter var(--motion-enter) ease-out; }
 }
 @media(min-width:761px) {
-  .project-desk.with-tree.tree-collapsed { grid-template-columns:minmax(0,1fr); }
-  .tree-collapsed .project-tree { display:none; }
+  .project-desk.with-tree.tree-collapsed { grid-template-columns:0px 0px minmax(0,1fr); }
+  .project-desk.with-tree .project-tree { overflow:hidden; }
+  .tree-collapsed .project-tree { padding-inline:0; visibility:hidden; }
+  .tree-collapsed .project-tree-resizer { visibility:hidden; }
 }
 @media(max-width:760px) {
   .desk-location-icon,.desk-tree-toggle { display:none; }

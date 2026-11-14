@@ -1,5 +1,6 @@
 // Original OpenGlitch compositions. Shapes are sampled once onto an ordered
-// lattice; pointer input changes those same marks instead of regenerating noise.
+// lattice. A coherent living base and pointer input move those same marks;
+// neither layer regenerates random noise while rendering.
 const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
 const TAU = Math.PI * 2;
 const clamp = (value, low, high) => Math.min(high, Math.max(low, value));
@@ -9,7 +10,8 @@ const smooth = (low, high, value) => {
 };
 const finite = (value, fallback) => Number.isFinite(value) ? value : fallback;
 
-export const matterLimits = Object.freeze({desktop: 2400, compact: 950, maxDpr: 1.75, maxPixels: 6000000, maxDimension: 8192, maxDelta: 0.05});
+export const matterLimits = Object.freeze({desktop: 2400, compact: 950, maxDpr: 1.5, maxPixels: 6000000, maxDimension: 8192, maxDelta: 0.05, ambientDisplacement: 20});
+export const matterPauseKey = 'openglitch.motion-paused';
 
 /** Deterministic composition in CSS pixels. Called on layout changes, not frames. */
 export function createMatterField(scene, width, height, options = {}) {
@@ -22,10 +24,13 @@ export function createMatterField(scene, width, height, options = {}) {
   const clusters = compact
     ? [[0.2, 0.7, 0.42, 0.2], [0.76, 0.89, 0.45, 0.24], [0.9, 0.52, 0.29, 0.2]]
     : [[0.63, 0.23, 0.19, 0.32], [0.88, 0.61, 0.25, 0.35], [0.59, 1.01, 0.23, 0.29]];
-  let row = 0;
-  for (let y = -spacing; y <= height + spacing; y += spacing, row++) {
-    let column = 0;
-    for (let x = -spacing; x <= width + spacing; x += spacing, column++) {
+  // Extend beyond the canvas by more than the combined input/ambient reach.
+  // Keep the Bayer indices anchored when the simulation margin changes.
+  const marginCells = Math.ceil((26 + matterLimits.ambientDisplacement) / spacing) + 1;
+  let row = 1 - marginCells;
+  for (let y = -spacing * marginCells; y <= height + spacing * marginCells; y += spacing, row++) {
+    let column = 1 - marginCells;
+    for (let x = -spacing * marginCells; x <= width + spacing * marginCells; x += spacing, column++) {
       // The quiet region belongs to the composition, not an opaque text overlay.
       const quiet = compact ? smooth(0.36, 0.62, y / height) : smooth(0.32, 0.57, x / width);
       if (!quiet) continue;
@@ -61,14 +66,34 @@ export function createMatterField(scene, width, height, options = {}) {
     }
   }
   const count = Math.min(limit, samples.length);
-  const field = {scene, width, height, count, compact, maxDisplacement: Math.min(26, spacing * 1.7),
+  const field = {scene, width, height, count, compact, time: 0, maxDisplacement: Math.min(26, spacing * 1.7),
     x: new Float32Array(count), y: new Float32Array(count), size: new Float32Array(count), alpha: new Float32Array(count), tone: new Float32Array(count),
+    flowX: new Float32Array(count), flowY: new Float32Array(count), coverage: new Float32Array(count).fill(1),
+    phase: new Float32Array(count), crossPhase: new Float32Array(count), originWave: new Float32Array(count), originCross: new Float32Array(count),
     heat: new Float32Array(count), dx: new Float32Array(count), dy: new Float32Array(count), vx: new Float32Array(count), vy: new Float32Array(count)};
   for (let i = 0; i < count; i++) {
     const sample = samples[Math.floor(i * samples.length / count)];
     field.x[i] = sample[0]; field.y[i] = sample[1]; field.size[i] = sample[2]; field.alpha[i] = sample[3]; field.tone[i] = sample[4];
+    field.phase[i] = sample[0] / width * 6 + sample[1] / height * 4;
+    field.crossPhase[i] = sample[0] / width * 3 - sample[1] / height * 7;
+    field.originWave[i] = Math.sin(field.phase[i]); field.originCross[i] = Math.sin(field.crossPhase[i]);
   }
   return field;
+}
+
+/** A bounded, deterministic base volume; time advances only while the scene runs. */
+export function evolveMatterField(field, elapsed) {
+  field.time += clamp(finite(elapsed, 0), 0, matterLimits.maxDelta);
+  const rate = field.scene === 'aperture' ? 0.34 : 0.25;
+  const reach = field.compact ? 0.8 : 1;
+  for (let i = 0; i < field.count; i++) {
+    const wave = Math.sin(field.phase[i] + field.time * rate) - field.originWave[i];
+    const cross = Math.sin(field.crossPhase[i] - field.time * rate * 0.7) - field.originCross[i];
+    field.flowX[i] = (wave * 5 + cross * 2) * reach;
+    field.flowY[i] = (cross * 5 - wave * 2) * reach;
+    // Coverage travels across the volume without binary occupancy flicker.
+    field.coverage[i] = 1 + wave * 0.1;
+  }
 }
 
 export function resetMatterField(field) {
@@ -106,7 +131,7 @@ export function stepMatterField(field, pointer, elapsed) {
   for (let i = 0; i < field.count; i++) {
     let influence = 0, targetX = 0, targetY = 0;
     if (active) {
-      const px = field.x[i] - pointer.x, py = field.y[i] - pointer.y;
+      const px = field.x[i] + field.flowX[i] - pointer.x, py = field.y[i] + field.flowY[i] - pointer.y;
       const distance = Math.hypot(px, py);
       if (distance < radius) {
         influence = 1 - smooth(0, radius, distance);
@@ -148,15 +173,15 @@ export function paintMatterField(context, field, palette) {
   // Two color passes keep color-state changes independent of the element count.
   context.fillStyle = palette.ink;
   for (let i = 0; i < field.count; i++) {
-    context.globalAlpha = field.alpha[i];
-    mark(field.x[i] + field.dx[i], field.y[i] + field.dy[i], field.size[i]);
+    context.globalAlpha = Math.min(1, field.alpha[i] * field.coverage[i]);
+    mark(field.x[i] + field.flowX[i] + field.dx[i], field.y[i] + field.flowY[i] + field.dy[i], field.size[i] * Math.sqrt(field.coverage[i]));
   }
   context.fillStyle = palette.accent;
   for (let i = 0; i < field.count; i++) {
     const strength = Math.max(field.tone[i], field.heat[i]);
     if (strength < 0.008) continue;
-    context.globalAlpha = field.alpha[i] * strength;
-    mark(field.x[i] + field.dx[i], field.y[i] + field.dy[i], field.size[i]);
+    context.globalAlpha = Math.min(1, field.alpha[i] * field.coverage[i]) * strength;
+    mark(field.x[i] + field.flowX[i] + field.dx[i], field.y[i] + field.flowY[i] + field.dy[i], field.size[i] * Math.sqrt(field.coverage[i]));
   }
   context.globalAlpha = 1;
 }
@@ -171,21 +196,44 @@ export function mountMatterFields(root = document) {
   const reduce = win.matchMedia('(prefers-reduced-motion: reduce)');
   const coarse = win.matchMedia('(pointer: coarse)');
   const items = [];
-  let frame = 0, previous = 0, disposed = false;
-  const staticMode = () => reduce.matches || coarse.matches;
+  let frame = 0, previous = 0, disposed = false, paused = false;
+  try { paused = win.localStorage?.getItem(matterPauseKey) === 'true'; } catch { /* Storage can be unavailable. */ }
+  const staticMode = () => reduce.matches || paused;
+  const needsFrame = item => !item.failed && item.visible && (item.dirty || item.animating || item.resize || !staticMode());
   function schedule() {
-    if (!disposed && !doc.hidden && !frame && items.some(item => item.visible && (item.dirty || item.animating || item.resize))) frame = win.requestAnimationFrame(draw);
+    const active = !disposed && !doc.hidden && items.some(needsFrame);
+    if (active && !frame) frame = win.requestAnimationFrame(draw);
+    else if (!active && frame) { win.cancelAnimationFrame(frame); frame = 0; previous = 0; }
+  }
+  function updateControls() {
+    for (const item of items) {
+      const button = item.button;
+      if (!button) continue;
+      button.hidden = item.failed;
+      button.disabled = reduce.matches;
+      button.setAttribute('aria-pressed', String(paused));
+      button.textContent = reduce.matches ? 'Movimento reduzido' : paused ? 'Retomar animação' : 'Pausar animação';
+      // The label states both the action and scope; no color-only state.
+    }
+  }
+  function setPaused(value, persist = true) {
+    paused = value;
+    if (persist) try { win.localStorage?.setItem(matterPauseKey, String(paused)); } catch { /* Keep the current visit usable. */ }
+    for (const item of items) { item.pointer.active = false; item.animating = false; item.dirty = true; }
+    previous = 0; updateControls(); schedule();
+    if (persist && win.CustomEvent) win.dispatchEvent(new win.CustomEvent('openglitch:motion-change', {detail: {paused}}));
   }
   function fail(item) {
     item.failed = true; item.dirty = item.animating = item.resize = false;
     delete item.canvas.dataset.matterReady; delete item.section.dataset.matterReady;
+    updateControls();
   }
   function draw(now) {
     frame = 0;
     const dt = previous ? Math.min((now - previous) / 1000, matterLimits.maxDelta) : 1 / 60;
     previous = now;
     for (const item of items) {
-      if (item.failed || !item.visible || !(item.dirty || item.animating || item.resize)) continue;
+      if (!needsFrame(item)) continue;
       try {
         if (item.resize) {
           const rect = item.canvas.getBoundingClientRect();
@@ -194,19 +242,23 @@ export function mountMatterFields(root = document) {
             Math.sqrt(matterLimits.maxPixels / (rect.width * rect.height)), matterLimits.maxDimension / Math.max(rect.width, rect.height));
           item.canvas.width = Math.round(rect.width * dpr); item.canvas.height = Math.round(rect.height * dpr);
           item.context.setTransform(dpr, 0, 0, dpr, 0, 0);
+          const activeTime = item.field?.time || 0;
           item.field = createMatterField(item.scene, rect.width, rect.height, {coarse: coarse.matches, density: item.density});
+          item.field.time = activeTime; evolveMatterField(item.field, 0);
           const css = win.getComputedStyle(item.section);
           item.palette = {ink: css.getPropertyValue('--matter-ink').trim() || '#1a1920', accent: css.getPropertyValue('--matter-accent').trim() || '#6f42e8'};
           item.resize = false;
         }
         if (!item.field) continue;
+        if (!staticMode()) evolveMatterField(item.field, dt);
         item.animating = !staticMode() && stepMatterField(item.field, item.pointer, dt);
         const start = win.performance.now();
         paintMatterField(item.context, item.field, item.palette);
         item.slow = win.performance.now() - start > 12 ? item.slow + 1 : Math.max(0, item.slow - 1);
         if (item.slow >= 10 && item.density > 0.4) { item.density *= 0.72; item.resize = true; item.slow = 0; }
         item.dirty = false;
-        item.canvas.dataset.matterReady = 'true'; item.section.dataset.matterReady = 'true';
+        if (item.canvas.dataset.matterReady !== 'true') item.canvas.dataset.matterReady = 'true';
+        if (item.section.dataset.matterReady !== 'true') item.section.dataset.matterReady = 'true';
       } catch { fail(item); }
     }
     schedule();
@@ -237,20 +289,25 @@ export function mountMatterFields(root = document) {
     if (!context) continue;
     canvas.setAttribute('aria-hidden', 'true');
     const item = {canvas, section, scene, context, field: null, dirty: true, animating: false, resize: true, visible: !intersection, failed: false,
-      pointer: {active: false, x: 0, y: 0}, density: win.navigator.deviceMemory && win.navigator.deviceMemory <= 4 ? 0.75 : 1, slow: 0};
+      pointer: {active: false, x: 0, y: 0}, density: win.navigator.deviceMemory && win.navigator.deviceMemory <= 4 ? 0.75 : 1, slow: 0,
+      button: section.querySelector?.('[data-matter-pause]')};
     const move = event => {
-      if (staticMode() || item.failed || !item.visible || event.pointerType === 'touch') return;
+      if (staticMode() || coarse.matches || item.failed || !item.visible || event.pointerType === 'touch') return;
       const rect = canvas.getBoundingClientRect();
       item.pointer.x = event.clientX - rect.left; item.pointer.y = event.clientY - rect.top; item.pointer.active = true; item.dirty = true; schedule();
     };
     const leave = () => { item.pointer.active = false; item.dirty = true; schedule(); };
     section.addEventListener('pointermove', move, {passive: true}); section.addEventListener('pointerleave', leave, {passive: true});
     const lost = () => fail(item);
-    const restored = () => { item.failed = false; item.resize = item.dirty = true; schedule(); };
+    const restored = () => { item.failed = false; item.resize = item.dirty = true; updateControls(); schedule(); };
+    const toggle = () => setPaused(!paused);
+    item.button?.addEventListener('click', toggle);
     canvas.addEventListener('contextlost', lost); canvas.addEventListener('contextrestored', restored);
     item.remove = () => {
       section.removeEventListener('pointermove', move); section.removeEventListener('pointerleave', leave);
       canvas.removeEventListener('contextlost', lost); canvas.removeEventListener('contextrestored', restored);
+      item.button?.removeEventListener('click', toggle);
+      if (item.button) item.button.hidden = true;
     };
     items.push(item); mounted.add(canvas); intersection?.observe(section); resize?.observe(canvas);
     theme?.observe(section, themeAttributes);
@@ -258,7 +315,7 @@ export function mountMatterFields(root = document) {
   function layout() { for (const item of items) item.resize = true; schedule(); }
   function mode() {
     for (const item of items) { item.pointer.active = false; if (item.field) resetMatterField(item.field); item.animating = false; item.resize = item.dirty = true; }
-    previous = 0; schedule();
+    previous = 0; updateControls(); schedule();
   }
   function visibility() {
     if (doc.hidden && frame) { win.cancelAnimationFrame(frame); frame = 0; }
@@ -272,9 +329,15 @@ export function mountMatterFields(root = document) {
     for (const item of items) { item.remove(); mounted.delete(item.canvas); delete item.canvas.dataset.matterReady; delete item.section.dataset.matterReady; }
     reduce.removeEventListener('change', mode); coarse.removeEventListener('change', mode);
     doc.removeEventListener('visibilitychange', visibility); win.removeEventListener('resize', layout); win.removeEventListener('pagehide', cleanup);
+    win.removeEventListener('storage', storage);
+    win.removeEventListener('openglitch:motion-change', sharedPause);
   }
+  const storage = event => { if (event.key === matterPauseKey || event.key === null) setPaused(event.newValue === 'true', false); };
+  const sharedPause = event => { if (typeof event.detail?.paused === 'boolean') setPaused(event.detail.paused, false); };
   reduce.addEventListener('change', mode); coarse.addEventListener('change', mode);
   doc.addEventListener('visibilitychange', visibility); win.addEventListener('resize', layout, {passive: true}); win.addEventListener('pagehide', cleanup, {once: true});
+  win.addEventListener('storage', storage); updateControls();
+  win.addEventListener('openglitch:motion-change', sharedPause);
   schedule();
   return cleanup;
 }
