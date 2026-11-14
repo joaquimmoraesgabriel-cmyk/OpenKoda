@@ -187,6 +187,41 @@ export async function sessionBridge(request,send=fetch,env={}){
  }catch(e){return reply({code:e instanceof SiteError?e.message:'service_unavailable'},e instanceof SiteError?e.status:503);}
 }
 
+// Fixed release only. Never forwards browser credentials, cookies or a user URL.
+export async function downloadInstaller(request,installer,send=fetch){
+ const headers=new Headers(securityHeaders);
+ headers.set('Cache-Control','no-store');
+ const fail=(message,status)=>new Response(message,{status,headers});
+ if(!['GET','HEAD'].includes(request.method)){headers.set('Allow','GET, HEAD');return fail('Método não permitido.',405);}
+ let range=request.headers.get('Range');
+ const unsatisfied=()=>{headers.set('Content-Range','bytes */'+installer.bytes);return fail('Intervalo de download inválido.',416);};
+ if(range&&!/^bytes=(?:\d+-\d*|-\d+)$/.test(range))return unsatisfied();
+ if(range){
+  const [start,end]=range.slice(6).split('-').map(v=>v===''?null:Number(v));
+  if(start===null){if(!Number.isSafeInteger(end)||end<=0)return unsatisfied();range='bytes='+Math.max(0,installer.bytes-end)+'-'+(installer.bytes-1);}
+  else {
+   if(!Number.isSafeInteger(start)||start>=installer.bytes||end!==null&&(!Number.isSafeInteger(end)||end<start))return unsatisfied();
+   range='bytes='+start+'-'+Math.min(end??installer.bytes-1,installer.bytes-1);
+  }
+ }
+ const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),25000);
+ try{
+  const upstreamHeaders=new Headers({'Accept':'application/octet-stream','User-Agent':'OpenKoda-Download/1.0'});
+  if(range){upstreamHeaders.set('Range',range);const condition=request.headers.get('If-Range');if(condition&&condition.length<=512)upstreamHeaders.set('If-Range',condition);}
+  const upstream=await send(installer.url,{method:request.method,headers:upstreamHeaders,redirect:'follow',signal:controller.signal});
+  clearTimeout(timer);
+  if(![200,206].includes(upstream.status)){await upstream.body?.cancel();return fail('Download temporariamente indisponível. Use o link alternativo no GitHub em /download/.',503);}
+  headers.set('Content-Type','application/octet-stream');
+  headers.set('Content-Disposition','attachment; filename="'+installer.filename+'"');
+  headers.set('Accept-Ranges','bytes');
+  for(const key of ['Content-Length','Content-Range','ETag','Last-Modified']){
+   const value=upstream.headers.get(key);if(value)headers.set(key,value);
+  }
+  return new Response(request.method==='HEAD'?null:upstream.body,{status:upstream.status,headers});
+ }catch{return fail('Não foi possível iniciar a transferência. Abra /download/ e use o link alternativo.',503);}
+ finally{clearTimeout(timer);}
+}
+
 export default {
  fetch(request,env) {
   const url = new URL(request.url);
@@ -202,6 +237,7 @@ export default {
    headers.set('Allow','GET, HEAD');
    return new Response(null,{status:405,headers});
   }
+  if(url.pathname==='/download/windows')return downloadInstaller(request,desktopInstaller);
   const path=url.pathname;
   const file=websiteAssets[path] ?? websiteAssets[path.replace(/\/?$/,'/index.html')];
   if (!file) return new Response('Página não encontrada.',{status:404,headers});

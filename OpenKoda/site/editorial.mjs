@@ -1,12 +1,21 @@
 const repository = 'https://github.com/joaquimmoraesgabriel-cmyk/OpenKoda';
-export const desktopVersion = '0.2.6';
+export const desktopVersion = '1.0.0';
+export const desktopInstaller={version:desktopVersion,filename:'OpenKoda_'+desktopVersion+'_x64-setup.exe',url:repository+'/releases/download/desktop-v'+desktopVersion+'/OpenKoda_'+desktopVersion+'_x64-setup.exe',bytes:181850126};
 const release = version => repository+'/releases/tag/desktop-v'+version;
 const entry = version => '/novidades/openkoda-'+version.replaceAll('.','-')+'/';
 const currentEntry = entry(desktopVersion);
-const date = '<time datetime="2026-11-13">13 de novembro de 2026</time>';
+const date = version => version === '1.0.0' ? '<time datetime="2026-11-14">14 de novembro de 2026</time>' : '<time datetime="2026-11-13">13 de novembro de 2026</time>';
 const download = '<a class="primary" href="/download/">Baixar para Windows</a>';
 
 const changes = [
+  {version:'1.0.0',title:'Mais espaço para trabalhar, mais contexto sobre o uso',
+   summary:'A barra compacta devolve espaço ao projeto. Ajuste a largura da lista de conversas e consulte o consumo sem sair do chat.',
+   paragraphs:[
+    'A navegação mostra ícones com nomes ao passar o mouse ou usar o teclado. Arraste a divisória entre os projetos e a conversa para ajustar o espaço. O aplicativo guarda sua escolha neste dispositivo.',
+    'O indicador acima de Configurações abre um resumo do uso. Consulte provedores, modelos e a atividade recente. Na conexão da assinatura, ele considera a cota da janela e do ciclo. Com chave própria, apresenta o orçamento local configurado.',
+    'Assinantes também podem ajustar o raciocínio em modelos compatíveis usando sua própria chave. Esse consumo continua na conta do provedor. O modo Automático usa o comportamento padrão do modelo.',
+    'Esta edição inaugura a numeração 1.0 e continua em pré-lançamento. O checkout público permanece em simulação. As versões anteriores seguem disponíveis no GitHub.'
+   ],more:'/guias/uso/',label:'Entender o painel de uso'},
   {version:'0.2.6', title:'As cores do OpenKoda, do site à conversa',
    summary:'O aplicativo ganhou a paleta do site. Você pode escolher outra paleta e ver a sua escolha na área do projeto, no chat e nas configurações.',
    paragraphs:[
@@ -38,15 +47,9 @@ function newsItems(items){
 }
 
 export function home(demo, connections, readingCards){
-  return `<section class="cover">
+  return `<section class="cover interactive-cover">
     <div class="cover-words"><h1>Revise seu código linha por linha.</h1><p>Escolha os arquivos do projeto no Windows. Converse com a IA e confira no código a origem de cada possível problema.</p>
-    <div class="actions">${download}<a class="text-action" href="#demonstracao">Ver demonstração</a></div></div>
-    <figure class="code-plate"><figcaption><span>Calculadora</span><span>Projeto de exemplo</span></figcaption>
-    <div class="source-piece"><p>api.py</p><pre><code><span class="source-line">4</span> expression = request.args[<em>"formula"</em>]
-<span class="source-line">5</span> <b>return</b> str(compute_formula(expression))</code></pre></div>
-    <div class="source-piece"><p>math_worker.py</p><pre><code><span class="source-line">1</span> <b>def</b> compute_formula(user_expression):
-<span class="source-line">2</span>     <mark>return eval(user_expression)</mark></code></pre></div>
-    <p class="plate-note">A mesma entrada atravessa dois arquivos até a operação destacada.</p></figure>
+    <div class="actions">${download}<a class="text-action" href="#experimente-openkoda">Experimentar agora</a></div></div>
   </section>
   <div class="edition-band"><a href="${currentEntry}">O que mudou no OpenKoda ${desktopVersion}</a><span>Pré-lançamento para Windows x64</span></div>
   ${demo}
@@ -57,7 +60,8 @@ export function home(demo, connections, readingCards){
 
 export const screenshot = '<figure class="screen-print" id="aplicativo"><a href="/conversa.png" aria-label="Abrir captura do aplicativo no tamanho original"><img src="/conversa.png" width="1280" height="955" loading="lazy" decoding="async" alt="Projeto Calculadora no OpenKoda, com o histórico do chat e a explicação das duas linhas de código."></a><figcaption>Conversa ilustrativa no aplicativo. Abra a imagem para ver em tamanho original.</figcaption></figure>';
 
-export const launch = `<div class="install-panel"><div><h2>Instalador x64</h2><p>OpenKoda ${desktopVersion} para Windows, em pré-lançamento.</p></div><a class="primary" href="${repository}/releases/download/desktop-v${desktopVersion}/OpenKoda_${desktopVersion}_x64-setup.exe">Baixar instalador x64</a></div>
+export const launch = `<div class="install-panel"><div><h2>Instalador x64</h2><p>OpenKoda ${desktopVersion} para Windows, em pré-lançamento.</p><p>${Math.ceil(desktopInstaller.bytes/1e6)} MB · Windows 10 e 11</p></div><a class="primary" data-installer download="${desktopInstaller.filename}" href="/download/windows">Baixar instalador x64</a></div>
+  <div class="download-assistance"><p id="download-status" role="status">O arquivo será transferido pelo endereço do OpenKoda.</p><p>Se o download não começar, <a href="${desktopInstaller.url}" rel="noopener" target="_blank">baixar diretamente pelo GitHub</a> ou <a href="${release(desktopVersion)}" rel="noopener" target="_blank">abrir a página da versão</a>. Em navegadores dentro de outros aplicativos, abra esta página no seu navegador habitual.</p></div>
   <div class="install-facts"><section><h2>Confira o arquivo</h2><p>Esta prévia é distribuída sem assinatura digital. Nas notas da versão, compare o SHA-256 com o do arquivo baixado antes de instalar.</p><a href="${release(desktopVersion)}">Verificar o instalador no GitHub</a></section>
   <section><h2>Prepare a primeira revisão</h2><p>Separe uma pasta pequena e uma chave do seu provedor de IA. Depois de instalar, abra <strong>Configurações</strong> e escolha <strong>IA e modelos</strong> para cadastrar sua conexão.</p><a href="/guias/primeiro-projeto/">Configurar um projeto</a></section></div>
   <p><a href="/novidades/">Histórico de versões</a> <span class="separate-links"><a href="${repository}">Código-fonte e licença</a></span></p>`;
@@ -78,7 +82,7 @@ const comparison = [
 ];
 export const pricing = `<div class="pricing-intro"><strong>Pré-lançamento</strong><p>O download com chave própria está disponível. Os planos pagos têm preços previstos. Hoje você pode simular o checkout sem informar cartão.</p></div>
   <section class="offer-section" aria-label="Escolha do plano"><div class="offer-grid">${planCards.map((p,i)=>`<article class="offer"><h2>${p.name}</h2><p class="offer-audience">${p.audience}</p><p class="offer-price"><strong>R$ ${p.price}</strong> <span>/ mês</span></p><a class="${i===0?'primary':'plan-link'}" href="${p.href}">${p.action}</a><h3>${p.highlight}</h3><ul>${p.features.map(f=>'<li>'+f+'</li>').join('')}</ul></article>`).join('')}</div></section>
-  <section class="comparison-section"><h2>Compare os recursos</h2><p class="small-screen-scroll">Deslize a tabela para consultar todos os planos.</p><div class="comparison-scroll" role="region" aria-label="Comparação dos quatro planos" tabindex="0"><table><caption class="sr-only">Recursos do Gratuito, Plus, Pro e Ultra</caption><thead><tr><th scope="col">Recurso</th>${planCards.map(p=>'<th scope="col">'+p.name+'</th>').join('')}</tr></thead><tbody>${comparison.map(([name,...cells])=>`<tr><th scope="row">${name}</th>${cells.map(c=>'<td>'+c+'</td>').join('')}</tr>`).join('')}</tbody></table></div><p class="table-note">¹ Os níveis de raciocínio dependem do modelo selecionado. O uso da chave própria é cobrado diretamente pelo seu provedor.</p></section>
+  <section class="comparison-section"><h2>Compare os recursos</h2><p class="small-screen-scroll">Deslize a tabela para consultar todos os planos.</p><div class="comparison-scroll" role="region" aria-label="Comparação dos quatro planos" tabindex="0"><table><caption class="sr-only">Recursos do Gratuito, Plus, Pro e Ultra</caption><thead><tr><th scope="col">Recurso</th>${planCards.map(p=>'<th scope="col">'+p.name+'</th>').join('')}</tr></thead><tbody>${comparison.map(([name,...cells])=>`<tr><th scope="row">${name}</th>${cells.map(c=>'<td>'+c+'</td>').join('')}</tr>`).join('')}</tbody></table></div><p class="table-note">¹ Assinantes também podem ajustar o raciocínio com chave própria em conexões e modelos compatíveis. Esse uso é cobrado pelo seu provedor e não desconta a cota de IA incluída.</p></section>
   <section class="quota-example"><div><h2>Como a cota é distribuída?</h2><p>O limite do ciclo é dividido em janelas de até sete dias. Em um ciclo de 30 dias, são quatro janelas completas e uma última de dois dias. A cota disponível vence no fim de cada janela.</p><p>Na conta, você vê o consumo e a próxima liberação. Se os lugares estiverem ocupados, pode aguardar na fila ou cancelar a espera.</p></div>
   <table><caption>Exemplo para um ciclo de 30 dias</caption><thead><tr><th>Plano</th><th>Ciclo completo</th><th>Sete dias*</th></tr></thead><tbody>${planCards.filter(p=>p.quota).map(({name:n,quota:q})=>`<tr><th scope="row">${n}</th><td>US$ ${q}</td><td>US$ ${(Number(q)*7/30).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})}</td></tr>`).join('')}</tbody></table><p class="table-note">* Valores aproximados. A duração do ciclo determina a fração liberada em cada janela.</p></section>
   <section class="reading-section"><h2>Renovação e cancelamento</h2><p>A simulação pode ser encerrada em Minha conta. Quando as vendas abrirem, a contratação exibirá o valor total, a renovação mensal e a data da próxima cobrança.</p><p><a href="/reembolso/">Consultar cancelamento e reembolso</a></p></section>`;
@@ -92,7 +96,7 @@ const policyResources = [
 ];
 const directory = rows => '<ul class="guide-directory">'+rows.map(([slug,title,desc])=>`<li><a href="/${slug}/"><strong>${title}</strong><span>${desc}</span></a></li>`).join('')+'</ul>';
 const news = Object.fromEntries(changes.map(item=>[`novidades/openkoda-${item.version.replaceAll('.','-')}`,[item.title,
-  `<a class="back-link" href="/novidades/">Novidades do OpenKoda</a><p class="story-meta">OpenKoda ${item.version} <span>${date}</span></p><h1>${item.title}</h1><p class="lead">${item.summary}</p><div class="story-body">${item.paragraphs.map(text=>'<p>'+text+'</p>').join('')}<h2>Para usar esta versão</h2><p><a href="${item.more}">${item.label}</a></p><p><a href="${release(item.version)}">Ver o lançamento ${item.version} no GitHub</a></p></div>`]]));
+  `<a class="back-link" href="/novidades/">Novidades do OpenKoda</a><p class="story-meta">OpenKoda ${item.version} <span>${date(item.version)}</span></p><h1>${item.title}</h1><p class="lead">${item.summary}</p><div class="story-body">${item.paragraphs.map(text=>'<p>'+text+'</p>').join('')}<h2>Para usar esta versão</h2><p><a href="${item.more}">${item.label}</a></p><p><a href="${release(item.version)}">Ver o lançamento ${item.version} no GitHub</a></p></div>`]]));
 
 export const editorialPages = {
   novidades:['Novidades',`<h1>Novidades do OpenKoda</h1><p class="lead">Acompanhe as mudanças nas versões para Windows. Cada nota descreve o que você pode fazer no aplicativo e onde encontrar o recurso.</p><section class="news-archive"><h2>Novembro de 2026</h2>${newsItems(changes)}</section>`],

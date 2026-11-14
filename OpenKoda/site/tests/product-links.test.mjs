@@ -36,6 +36,7 @@ test('a navegação pública resolve páginas, recursos e seções da compilaç�
   for(const [,value] of html.matchAll(/\b(?:href|src)="([^"]+)"/gi)){
    const target=new URL(value,new URL(route,origin));
    if(target.origin!==origin)continue;
+   if(target.pathname==='/download/windows')continue; // Validated as a streamed Worker route in download.test.mjs.
    if(target.pathname.endsWith('/')){
     assert.ok(pages.has(target.pathname),route+' → '+value);
     if(target.hash){

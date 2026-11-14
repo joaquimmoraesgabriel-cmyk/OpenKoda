@@ -1,7 +1,8 @@
 import { mkdir, readFile, writeFile, copyFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { productChapters, publicPages } from './product-pages.mjs';
-import { home, launch, pricing, screenshot, editorialPages } from './editorial.mjs';
+import { home, launch, pricing, screenshot, editorialPages, desktopInstaller } from './editorial.mjs';
+import { interactiveDemo } from './demo.mjs';
 
 import { walkthrough, connections, readingCards, connectionPages } from './showcase.mjs';
 import { menu, footer } from './navigation.mjs';
@@ -10,13 +11,13 @@ const output = fileURLToPath(new URL('./dist/', import.meta.url));
 const contact = 'joaquimmoraesgabriel@gmail.com';
 const mail = (subject, label) => '<a href="mailto:' + contact + '?subject=' + encodeURIComponent(subject) + '">' + label + '</a>';
 const mark = '<svg viewBox="0 0 26 24" width="26" height="24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 3.5v17M21.5 3.5l-9 8.5 9 8.5"/></svg>';
-const brand = '<a class="brand" href="/" aria-label="OpenKoda, início">'+mark+'<span>OpenKoda</span></a>';
+const brand = '<a class="brand" href="/" aria-label="OpenKoda, início">'+mark+'<span>OpenKoda 1.0</span></a>';
 const download = '<a class="primary" href="/download/">Baixar para Windows</a>';
 const compatibility = '<section class="resource-shelf" data-motion><div><h2>Escolha a conexão da sua IA.</h2><p>Selecione o modelo adequado ao tipo de trabalho. O catálogo disponível depende do provedor e da sua credencial.</p><a href="/guias/primeiro-projeto/#conexao">Configurar uma conexão</a></div><dl class="capabilities"><dt>Conversa</dt><dd>Um modelo de texto pode explicar o código e responder perguntas sobre os trechos autorizados.</dd><dt>Análise de código</dt><dd>Respostas estruturadas permitem organizar candidatos, arquivos e linhas no relatório.</dd><dt>Imagens</dt><dd>Para conversar sobre uma captura de tela, escolha um modelo que receba entrada visual.</dd></dl></section>';
 const intro = (title, lead) => '<h1>' + title + '</h1><p class="lead">' + lead + '</p>';
 const pages = {
  ...publicPages, ...editorialPages, ...connectionPages,
- '': ['Revisão de código para Windows', home(walkthrough, connections, readingCards)],
+ '': ['Revisão de código para Windows', home(interactiveDemo+walkthrough, connections, readingCards)],
  produto: ['Funcionalidades', intro('Do projeto ao relatório', 'Use a revisão para investigar uma pergunta concreta. Escolha a entrada de dados, acompanhe os trechos citados e consulte o histórico quando retomar o projeto.') + walkthrough + '<section class="project-feature" data-motion><div><h2>Dentro do aplicativo</h2><p>O projeto reúne as conversas e o material autorizado na investigação. Abra a captura para ver o chat e os arquivos citados em detalhe.</p>'+download+'</div>'+screenshot+'</section>'+compatibility],
  download: ['Download', intro('OpenKoda para Windows', 'Revise código e converse sobre um projeto com uma chave de IA própria.') + launch],
  precos: ['Preços', intro('Escolha como usar a IA', 'Use sua própria chave na edição local ou conheça as cotas previstas para os planos da Koda.') + pricing],
@@ -59,13 +60,16 @@ for (const [route,[name,body]] of Object.entries(pages)) {
  const layout=route.startsWith('conta')?'account-page':route in policySections?'policies inner':route==='novidades'||route==='politicas'||route==='exemplos'?'collection inner':route.startsWith('novidades/')||route.startsWith('exemplos/')?'document story inner':route==='produto'?'product inner':route==='precos'?'pricing inner':
   route==='conexoes'?'product inner':route.startsWith('conexoes/')?'document story inner':route==='guias' || route.startsWith('guias/')?'guides inner':route?'document inner':'home';
  const html=`<!doctype html><html lang="pt-BR"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="referrer" content="no-referrer"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; style-src 'self'; img-src 'self'; connect-src 'self' https://ynjcyvnrfxsrijrwpaye.supabase.co https://challenges.cloudflare.com; object-src 'none'; base-uri 'none'; form-action 'self'"><title>${name} | OpenKoda</title><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/tema.css"><script src="/tema.js" defer></script><body><a class="skip" href="#main">Pular para o conteúdo</a><header class="site-header"><div class="header-inner">${brand}${menu(route)}</div></header><main id="main" tabindex="-1" class="${layout}">${body}</main>${footer(brand,route)}<aside id="cookie-box" hidden aria-label="Cookies e armazenamento"><p>Usamos cookies essenciais para sua sessão e a verificação de segurança. Consulte a <a href="/privacidade/#cookies-e-marketing">política de privacidade</a>.</p><button type="button" id="accept-essential">Entendi</button></aside><script type="module" src="/site.js"></script>${route.startsWith('conta')?'<script type="module" src="/account.js"></script>':''}</body></html>`;
- await writeFile(directory+'/index.html',html.replace('<title>', '<link rel="icon" type="image/svg+xml" href="/favicon.svg"><title>'));
+ const enhanced=html.replace('<title>', '<link rel="icon" type="image/svg+xml" href="/favicon.svg"><title>')
+  .replace('</head>',(route===''?'<link rel="stylesheet" href="/demo.css">':'')+'</head>')
+  .replace('</body>',(route===''?'<script type="module" src="/demo.js"></script>':'')+(route==='download'?'<script type="module" src="/download.js"></script>':'')+'</body>');
+ await writeFile(directory+'/index.html',enhanced);
 }
 
 // Serve the same reviewed files through a Worker so security headers also
 // protect direct visits to the OAuth callback and account forms.
 const files = [...Object.keys(pages).map(route=>(route?route+'/':'')+'index.html'),
- 'style.css','tema.css','tema.js','account.js','site.js','cloud.js','painel.png','conversa.png','projeto.png','relatorio.png','favicon.svg'];
+ 'style.css','tema.css','tema.js','account.js','site.js','cloud.js','demo.css','demo.js','download.js','painel.png','conversa.png','projeto.png','relatorio.png','aparencia.png','uso.png','favicon.svg'];
 await writeFile(output+'favicon.svg',mark.replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" ').replace('currentColor', '#171719'));
 const assets = {};
 for (const file of files) {
@@ -78,4 +82,4 @@ const handler = await readFile(new URL('./worker.mjs',import.meta.url),'utf8');
 await mkdir(output+'server',{recursive:true});
 await mkdir(output+'.openai',{recursive:true});
 await copyFile(new URL('./.openai/hosting.json',import.meta.url),output+'.openai/hosting.json');
-await writeFile(output+'server/index.js','const websiteAssets = '+JSON.stringify(assets)+';\n'+handler);
+await writeFile(output+'server/index.js','const websiteAssets = '+JSON.stringify(assets)+';\nconst desktopInstaller = '+JSON.stringify(desktopInstaller)+';\n'+handler);
