@@ -8,6 +8,7 @@ const user={id:'fixture',email:'user@example.invalid',email_confirmed_at:'2026-1
 const access='synthetic.jwt.onlytestcredentials',refresh='synthetic-refresh-token';
 const session={access_token:access,refresh_token:refresh,user,expires_in:3600};
 const captchaToken='only-a-fixture', captchaSecret='fixture-server-config';
+const nativeCaptchaToken='second-native-fixture';
 const captchaOk={success:true,hostname:new URL(origin).hostname,action:'login'};
 function request(action,body={},headers={},method='POST'){
  return new Request(origin+'/conta/api/'+action,{method,headers:{origin,'content-type':'application/json',...headers},
@@ -20,8 +21,10 @@ function fixture(upstream,siteverify=()=>Response.json(captchaOk),env={TURNSTILE
    if(raw==='https://challenges.cloudflare.com/turnstile/v0/siteverify'){
     assert.equal(init.redirect,'manual');assert.equal(init.method,'POST');
     assert.equal(init.headers.Authorization,undefined);assert.equal(init.headers.apikey,undefined);
-    assert.deepEqual(JSON.parse(init.body),{secret:captchaSecret,response:captchaToken});
-    return siteverify();
+    const packet=JSON.parse(init.body);
+    assert.deepEqual(Object.keys(packet).sort(),['response','secret']);
+    assert.equal(packet.secret,captchaSecret);assert.ok([captchaToken,nativeCaptchaToken].includes(packet.response));
+    return siteverify(packet.response);
    }
    const url=new URL(raw);assert.equal(url.origin,auth);assert.equal(init.redirect,'manual');assert.ok(!('cache' in init));
    assert.equal(init.headers['Cache-Control'],'no-store');assert.equal(init.headers.Pragma,'no-cache');assert.ok(init.signal instanceof AbortSignal);
@@ -118,13 +121,18 @@ test('Google starts only after server verification for this hostname and action'
  }
  const redirect=await fixture(noNetwork,()=>new Response(null,{status:302,headers:{Location:'https://evil.example'}})).run('google',{captchaToken});
  assert.equal(redirect.status,503);assert.deepEqual(redirect.headers.getSetCookie(),[]);
- let verifications=0;
- const f=fixture(noNetwork,()=>{verifications++;return Response.json(captchaOk);});
+ const redeemed=new Set();
+ const f=fixture(noNetwork,token=>{
+   if(redeemed.has(token))return Response.json({success:false,'error-codes':['timeout-or-duplicate']});
+   redeemed.add(token);return Response.json(captchaOk);
+ });
  const web=await f.run('google',{captchaToken});assert.equal(web.status,200);
  assert.match((await web.json()).challenge,/^[A-Za-z0-9_-]{43}$/);assert.equal(web.headers.getSetCookie().length,1);
- const native=await f.run('google',{captchaToken,desktop:true});
+ const replay=await f.run('google',{captchaToken});
+ assert.equal(replay.status,403);assert.deepEqual(replay.headers.getSetCookie(),[]);
+ const native=await f.run('google',{captchaToken:nativeCaptchaToken,desktop:true});
  assert.equal(native.status,200);assert.deepEqual(await native.json(),{verified:true});
- assert.deepEqual(native.headers.getSetCookie(),[]);assert.equal(verifications,2);
+ assert.deepEqual(native.headers.getSetCookie(),[]);assert.equal(redeemed.size,2);
 });
 test('expired or revoked sessions cannot act; a transient outage cannot clear an active session',async()=>{
  for(const status of [400,503]){

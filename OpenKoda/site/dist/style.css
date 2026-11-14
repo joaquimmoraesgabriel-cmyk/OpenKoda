@@ -57,3 +57,44 @@ pre{overflow:auto;line-height:1.85}.code-sample pre{padding:.4rem 0;font:clamp(.
 }
 @media(max-width:430px){.actions{flex-wrap:wrap;gap:1rem}.hero h1{font-size:clamp(2.6rem,10.6vw,3.4rem)}.actions .primary,.actions .text-action{font-size:.9rem}.demo-nav button{padding:.42rem .67rem}.login{font-size:.85rem}.header-inner{gap:.35rem}.file{padding-inline:1rem}.stage-title h2{font-size:1.7rem}}
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+
+.resource-shelf,.product-chapters,.lesson-layout{display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr);gap:clamp(2rem,6vw,6rem);align-items:start}
+.resource-shelf,.product-chapters{padding:clamp(2.5rem,5vw,4.5rem) 0;border-top:1px solid var(--line)}
+.resource-shelf h2,.product-chapters h2{font-size:clamp(2rem,3.6vw,3.4rem)}.resource-shelf p{color:var(--muted);max-width:36ch;margin:1rem 0}
+.reading-list,.guide-directory,.lesson-index ul{margin:0;padding:0;list-style:none}
+.reading-list li,.guide-directory li,.product-chapters article+article,.capabilities dt:not(:first-child){border-top:1px solid var(--line)}
+.reading-list li:last-child,.guide-directory li:last-child{border-bottom:1px solid var(--line)}
+.reading-list a{display:block;padding:1.15rem .1rem;color:var(--ink);font-size:1.16rem;letter-spacing:-.025em;text-decoration:none}
+.reading-list a:hover,.guide-directory a:hover strong{text-decoration:underline;text-underline-offset:.22em}
+.resource-shelf .capabilities{margin:0}.capabilities dt{font-weight:650;padding-top:1rem}.capabilities dt:first-child{padding-top:0}
+.capabilities dd,.product-chapters article p{color:var(--muted);margin:.4rem 0 1.2rem}.product-chapters h3,.reading-section h2,.lesson-section h2{font-size:clamp(1.5rem,2.4vw,2.1rem)}
+.product-chapters article{padding:1.4rem 0}.product-chapters article:first-child{padding-top:.1rem}.product-chapters article p{max-width:50ch}
+.guide-directory{max-width:61rem}.guide-directory a{display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr);gap:2.5rem;padding:1.65rem .15rem;text-decoration:none;align-items:baseline}
+.guide-directory strong{font-size:clamp(1.2rem,2vw,1.8rem);font-weight:575;letter-spacing:-.035em}.guide-directory span{max-width:51ch;color:var(--muted)}
+.back-link{display:inline-block;color:var(--muted);text-decoration:none;margin:0 0 1.4rem}.guides>.lead{max-width:48rem}
+.lesson-layout{grid-template-columns:minmax(12rem,.46fr) minmax(0,1fr);max-width:65rem;margin-top:3.5rem}
+.lesson-index{align-self:start;position:sticky;top:1.5rem;border-top:1px solid var(--ink);padding-top:1rem}
+.lesson-index h2{font-size:1rem;letter-spacing:-.012em}.lesson-index ul{margin-top:.75rem}.lesson-index a{display:inline-block;color:var(--muted);padding:.27rem 0;text-decoration:none}
+.lesson-index a:hover,.lesson-index a[aria-current]{color:var(--ink);text-decoration:underline;text-underline-offset:.25em}
+.lesson-section,.reading-section{padding:clamp(1.55rem,3vw,2.5rem) 0;border-top:1px solid var(--line)}
+.lesson-section p,.reading-section p,.faq-list p{line-height:1.68;color:var(--muted);margin:.8rem 0 0;max-width:69ch}.lesson-section strong,.reading-section strong{font-weight:600;color:var(--ink)}
+.faq-list details{border-top:1px solid var(--line)}.faq-list details:last-child{border-bottom:1px solid var(--line)}
+.faq-list summary{cursor:pointer;padding:1.1rem 0;font-weight:585;line-height:1.48}.faq-list details[open] p{margin:0 0 1.4rem}
+.next-guide{padding-block:1.2rem;border-top:1px solid var(--ink);font-weight:600}
+.footer-inner{flex-wrap:wrap;gap:1rem 2rem;padding-block:2.4rem}.footer-brand{margin-right:auto}.site-footer .footer-explore{color:var(--ink)}
+.demo-nav{display:none}.nav-ready .demo-nav{display:inline-flex}
+@media(prefers-reduced-motion:no-preference){
+ html{scroll-behavior:smooth}
+ .primary,.text-action,.login,.demo-nav button,.reading-list a,.guide-directory a,.faq-list summary{transition:transform 150ms ease,color 150ms ease,background-color 150ms ease}
+ .primary:active,.login:active,.demo-nav button:active,.text-action:active{transform:scale(.976)}
+ .reading-list a:hover,.guide-directory a:hover{transform:translateX(4px)}
+ .entered{animation:koda-arrive .42s cubic-bezier(.15,.6,.2,1) both}
+ .demo-body.switched,.faq-list details[open] p{animation:koda-arrive .22s ease-out both}
+ @keyframes koda-arrive{from{transform:translateY(8px);opacity:.78}to{transform:translateY(0);opacity:1}}
+}
+@media(max-width:760px){
+ .resource-shelf,.product-chapters,.lesson-layout{grid-template-columns:minmax(0,1fr);gap:1.5rem}
+ .guide-directory a{grid-template-columns:minmax(0,1fr);gap:.35rem;padding-block:1.2rem}
+ .lesson-index{position:static}.lesson-layout{margin-top:2.15rem}.lesson-index ul{display:flex;flex-wrap:wrap;gap:.25rem 1rem}
+ .footer-inner{align-items:start;flex-direction:column}.footer-inner nav{gap:.25rem 1rem}.footer-inner nav a{padding:.3rem 0}
+}
