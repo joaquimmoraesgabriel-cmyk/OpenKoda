@@ -58,8 +58,70 @@ Não foram incorporadas marcas, capturas ou textos dos produtos de referência.
   disponível imediatamente: a asserção inicial falhou nessa consulta e uma
   consulta posterior reconciliou o custo. A inferência não foi repetida.
   O ensaio opt-in passou a repetir apenas a leitura do recibo por tempo limitado.
+- A primeira execução do workflow Windows 11 encontrou uma omissão na chamada
+  de empacotamento do ensaio: faltava `-SkipUpdaterSigning`, já presente no
+  workflow Windows Server. O teste de inicialização não precisa dos segredos
+  de publicação. A chamada foi corrigida e uma nova execução iniciada; isso
+  não desabilita a assinatura exigida no pacote distribuído nem no atualizador.
+- A execução [Windows release startup 43615102082](https://github.com/joaquimmoraesgabriel-cmyk/OpenKoda/actions/runs/43615102082)
+  passou em **Windows Server 2022 e 2025**: instalador 1.1.0, duas inicializações,
+  navegação por Windows UI Automation, entrada local explícita, preservação da
+  preferência de tempo limite e desinstalação. Esses ambientes de CI não são
+  apresentados como prova de login Google pessoal nem de atualização via canal.
+- O workflow corrigido [Windows 11 client startup 43615842310](https://github.com/joaquimmoraesgabriel-cmyk/OpenKoda/actions/runs/43615842310)
+  também passou: build x64 e execução do ensaio instalado no cliente Windows 11.
+  A falha anterior de configuração permanece registrada no histórico do CI.
+
+## Pacote final e instalação real
+
+[OpenKoda 1.1.0 no GitHub](https://github.com/joaquimmoraesgabriel-cmyk/OpenKoda/releases/tag/desktop-v1.1.0)
+foi publicado como pré-lançamento, preservando as versões anteriores. O pacote
+de produção não contém o feature nem o caminho de dados do ensaio. Possui
+182.251.856 bytes e SHA-256
+`1cc2a36637032eb299e818fcfd5b74495d4dd87ae3111fd83e8d07449cf9ed30`.
+A assinatura Tauri passou no verificador oficial com versão autenticada 1.1.0.
+O certificado Authenticode continua ausente e isso está nas notas da release.
+
+A instalação existente em `AppData/Local/OpenKoda` foi atualizada de **1.0.0
+para 1.1.0**. O binário instalado corresponde ao compilado, admitindo somente
+os três bytes do marcador NSIS documentado do Tauri. Antes de instalar foram
+copiados onze SQLite pela API de backup e verificados com `quick_check`.
+
+O teste abriu o executável instalado duas vezes e visitou Perfil, Conta e
+segurança, Plano, Aparência, Modelos, Histórico e Atualizações, além de projetos
+e conversas existentes. Não enviou prompts nem trocou a conta. A comparação
+separada com o **backup anterior à instalação**, e não somente entre as duas
+aberturas, preservou os hashes de todo o estado principal, todas as mensagens e
+todos os registros de solicitações: **10 projetos, 31 avaliações/conversas,
+35 mensagens e 21 solicitações**. As preferências também permaneceram iguais
+durante as duas aberturas.
+
+O site recebeu a versão 14, fonte `8b7583010f68fe4fc926bf4b16b63766abb1a9c5`,
+com o retorno de autenticação do desktop e o download atualizado. A rota pública
+`/download/windows` respondeu **206 em 1,84 s**, com os dois bytes `MZ` e
+`Content-Range: bytes 0-1/182251856`. Isso comprova início e suporte ao intervalo;
+não é apresentado como um segundo download integral dos 182 MB.
+
+O [canal `desktop-updates`](https://github.com/joaquimmoraesgabriel-cmyk/OpenKoda/releases/tag/desktop-updates)
+foi inicializado com `rolloutPercent: 0`. O instalador manual está disponível;
+a oferta automática de novos pacotes fica pausada até concluir o ensaio abaixo.
 
 ## Limites e próximos gates
+
+O ensaio com o canal técnico real encontrou intermitência na entrega dos assets
+do GitHub: consultas falharam por timeout; uma consulta seguinte identificou a
+versão, abriu detalhes e permitiu adiar. O download real chegou a 159.577.729 de
+182.241.536 bytes, mas o prazo global do **harness**, contado antes de uma
+repetição, encerrou essa tentativa. O teste foi corrigido para uma janela por
+tentativa, detecção imediata do erro nativo e quantidade limitada de repetições.
+Não foi alterado o transporte do produto nem injetado um instalador local.
+
+Na retomada, três consultas também falharam. As tentativas foram interrompidas:
+não houve instalação automática completa para declarar como aprovada. Vinte
+bancos SQLite do ensaio e onze do perfil real mantiveram hashes lógicos idênticos
+entre as tentativas. Os receipts, versões e capturas de falha foram preservados
+na pasta ignorada do ensaio; a publicação dos assets e o sucesso de testes de
+assinatura não substituem esse teste completo.
 
 O login Google de uma pessoa no instalador requer sua sessão pessoal. Os testes
 automatizados de callback usam Auth controlado, listener local real, state,

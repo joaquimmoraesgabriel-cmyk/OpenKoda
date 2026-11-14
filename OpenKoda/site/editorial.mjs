@@ -1,6 +1,6 @@
 const repository = 'https://github.com/joaquimmoraesgabriel-cmyk/OpenKoda';
 export const desktopVersion = '1.1.0';
-export const desktopInstaller={version:desktopVersion,filename:'OpenKoda_'+desktopVersion+'_x64-setup.exe',url:repository+'/releases/download/desktop-v'+desktopVersion+'/OpenKoda_'+desktopVersion+'_x64-setup.exe',bytes:181850126};
+export const desktopInstaller={version:desktopVersion,filename:'OpenKoda_'+desktopVersion+'_x64-setup.exe',url:repository+'/releases/download/desktop-v'+desktopVersion+'/OpenKoda_'+desktopVersion+'_x64-setup.exe',bytes:182251856};
 const release = version => repository+'/releases/tag/desktop-v'+version;
 const entry = version => '/novidades/openkoda-'+version.replaceAll('.','-')+'/';
 const currentEntry = entry(desktopVersion);
@@ -12,7 +12,7 @@ const changes = [
    summary:'Confira novas versões dentro do OpenKoda, acompanhe o download e instale quando terminar seu trabalho. A conta e as preferências também ganharam espaços próprios.',
    paragraphs:[
     'Em Configurações, abra Atualizações para consultar as versões publicadas no GitHub. O aplicativo verifica a assinatura do pacote e cria uma cópia de segurança dos dados antes de iniciar a instalação. Uma operação em andamento precisa terminar antes da atualização.',
-    'Quem usa uma versão anterior à 1.1 precisa baixar este instalador uma vez. A partir desta edição, as próximas atualizações podem ser feitas pelo próprio aplicativo. Projetos e conversas continuam no computador.',
+    'Quem usa uma versão anterior à 1.1 precisa baixar este instalador uma vez. Esta edição inclui os controles de atualização no aplicativo, mas o canal automático permanece pausado enquanto o ensaio completo entre versões não for concluído. Projetos e conversas continuam no computador.',
     'A tela de entrada oferece login ou uso local com chave própria. Perfil, preferências, conta, plano e uso têm seções próprias. O retorno do navegador identifica a tentativa iniciada pelo desktop; mantenha o aplicativo aberto durante o login.',
     'O catálogo distingue modelos de chat, recursos de análise e limites da conexão. O ajuste de raciocínio fica dentro do seletor e mostra as opções informadas pelo modelo. A simulação de assinatura está restrita a contas de teste autorizadas; não representa uma cobrança nem concede crédito de produção.',
     'Esta versão continua em pré-lançamento. Os pacotes do atualizador têm assinatura própria do OpenKoda. O certificado Authenticode do Windows e a abertura das vendas continuam pendentes.'
