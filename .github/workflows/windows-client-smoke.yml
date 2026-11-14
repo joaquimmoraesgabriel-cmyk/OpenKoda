@@ -53,7 +53,7 @@ jobs:
         run: npm ci
       - name: Build the unsigned x64 installer
         working-directory: OpenKoda/app
-        run: ./scripts/package-windows.ps1 -Jobs 4
+        run: ./scripts/package-windows.ps1 -Jobs 4 -SkipUpdaterSigning
       - name: Bind the two executables to the source commit
         id: transfer
         working-directory: OpenKoda/app
