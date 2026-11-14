@@ -48,6 +48,10 @@ def exercise_capacity(run, rpc, race, denied, model, digest):
     tokens = {i: initial[i]["queueToken"] for i in waiting}
     assert sorted(initial[i]["position"] for i in waiting)==list(range(1,27))
     first,second,third,fourth = ordered[:4]
+    # This section visits many independent branches using one Windows docker
+    # process per SQL call. Keep its fixtures alive while exercising ordering;
+    # expiry is tested explicitly below, without depending on host load.
+    run("update openkoda_private.capacity_waiters set lease_until=expires_at")
     denied("idempotency_conflict",admit,first,tokens[first],None,"c"*64)
     denied("queue_expired",admit,first,uid())
     denied("idempotency_conflict",admit,second,tokens[first],ids[first])

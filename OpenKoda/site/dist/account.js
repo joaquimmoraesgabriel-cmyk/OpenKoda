@@ -94,6 +94,10 @@ function oauthFailure(desktop){
   content('<button data-do="retryGoogle">Tentar com Google novamente</button><div class="auth-links"><button class="secondary" data-do="login">Entrar com e-mail</button></div>','O login não foi concluído','Tente outra vez ou escolha outra conta do Google.');attachCaptcha('login');
  }
 }
+function emailLinkFailure(){
+ content('<button data-do="recover">Solicitar nova recuperação</button><div class="auth-links"><button class="secondary" data-do="login">Voltar ao login</button><button class="secondary" data-do="signup">Confirmar um cadastro</button></div>',
+  'Este link não pôde ser usado','Abra o e-mail no navegador em que fez o pedido. Se o link já foi usado ou expirou, solicite um novo.');
+}
 function takeCaptcha(){
  if(!captcha?.token||captcha.expires<=Date.now())throw Error('Conclua a verificação de segurança.');
  const token=captcha.token;
@@ -225,7 +229,7 @@ async function handle(action,data){
    await call('signup',{email:data.email,password:data.password,gotrue_meta_security:security,data:{adult_requested:true,terms_requested:legalVersion,privacy_requested:legalVersion,marketing_requested:consent.marketing}});
    try{localStorage.setItem(namespace+'.signup',JSON.stringify({email:data.email.trim().toLowerCase(),consent,expires:Date.now()+86400000}));}catch{}
   }
-  login();return say('Confira seu e-mail para confirmar o cadastro. Ao entrar, registre os aceites no perfil.');
+  login();return say('Confira seu e-mail e abra o link no mesmo navegador em que iniciou o cadastro.');
  case 'recover':if(!turnstileSiteKey)throw Error('Para recuperar o acesso no pré-lançamento, entre em contato com o suporte.');if(!data){content('<form id="recover"><label>E-mail da conta<input type="email" required name="email"></label><button>Enviar recuperação</button></form>');attachCaptcha();return;}
   await call('recover',{email:data.email,gotrue_meta_security:security});return say('Se a conta existir, você receberá instruções. Abra o link no mesmo navegador.');
  case 'reset':{const result=await call('reset',{password:data.password});email=result.user.email;history.replaceState(null,'','/conta/');account();return say('Senha atualizada.');}
@@ -271,7 +275,11 @@ async function init(){
   const code=params.get('code'),failed=params.has('error')||new URLSearchParams(location.hash.slice(1)).has('error');history.replaceState(null,'',location.pathname);
   const desktop=JSON.parse(sessionStorage.getItem(namespace+'.desktop')||'null'),google=JSON.parse(sessionStorage.getItem(namespace+'.google')||'null');
   const native=desktop?.desktop&&desktop.expires>=Date.now();
-  if(failed){oauthFailure(native);return;}
+  if(failed){
+   if(!native&&(params.get('error_code')==='otp_expired'||fragment.get('error_code')==='otp_expired'))emailLinkFailure();
+   else oauthFailure(native);
+   return;
+  }
   if(!code){history.replaceState(null,'','/conta/');await loadAccount();return;}
   if(code.length>1024)throw Error('O retorno é inválido. Inicie novamente pelo dispositivo que solicitou o acesso.');
   let result;
@@ -280,7 +288,8 @@ async function init(){
    if(error.code==='unmatched_attempt'&&native){
     sessionStorage.removeItem(namespace+'.desktop');const url=new URL('http://127.0.0.1:'+Number(desktop.port)+'/openkoda/callback');url.search=new URLSearchParams({state:desktop.state,code});location.replace(url.href);return;
    }
-   oauthFailure(native);return;
+   if(!native&&!google&&error.code==='unmatched_attempt')emailLinkFailure();else oauthFailure(native);
+   return;
   }
   if(result.kind==='recover'){email=result.user.email;history.replaceState(null,'','/conta/?intent=nova-senha');resetForm();return;}
   if(result.kind==='google')sessionStorage.removeItem(namespace+'.google');

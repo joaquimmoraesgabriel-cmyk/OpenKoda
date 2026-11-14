@@ -81,7 +81,32 @@ export function createHandler({env, fetcher = fetch, waitUntil}) {
       body:JSON.stringify({from:env('KODA_SUPPORT_FROM'),to:['joaquimmoraesgabriel@gmail.com'],subject,
         text:message+' Consulte o painel administrativo: https://supabase.com/dashboard/project/'+project+'/editor?schema=openkoda_private'})});
     await notice.body?.cancel();
-    return notice.ok;
+    if (notice.ok) return 'sent';
+    return notice.status >= 500 || [408,429].includes(notice.status) ? 'retry' : 'failed';
+  }
+
+  async function notifySupport() {
+    if (!env('RESEND_API_KEY') || !env('KODA_SUPPORT_FROM')) return;
+    const deliver = async () => {
+      const {tickets} = await rpc('support_notice_claim',{});
+      let retrySoon = false;
+      for (const ticket of tickets) {
+        if (!uuid(ticket.id)) continue;
+        const outcome = await sendNotice('koda-support/'+ticket.id,'Koda · Novo chamado de suporte',
+          'Um chamado foi registrado.').catch(() => 'retry');
+        await rpc('support_notice_finish',{p_id:ticket.id,p_attempt:ticket.attempt,p_outcome:outcome});
+        if (ticket.attempt === 1 && outcome === 'retry') retrySoon = true;
+      }
+      return retrySoon;
+    };
+    const task = deliver().then(async retrySoon => {
+      if (retrySoon && waitUntil) {
+        await new Promise(resolve => setTimeout(resolve,9000));
+        await deliver();
+      }
+    }).catch(() => {});
+    if (waitUntil) waitUntil(task);
+    else await task;
   }
 
   async function deliverBudgetNotices() {
@@ -92,9 +117,9 @@ export function createHandler({env, fetcher = fetch, waitUntil}) {
           !(a.kind === 'daily_spike' ? a.threshold === 200 : [80,95].includes(a.threshold))) continue;
       const id = ['koda-budget',a.windowStart,a.kind,a.threshold].join('/');
       const message = 'A exposição do serviço atingiu '+a.threshold+'% do valor de referência ('+labels[a.kind]+'). Período UTC iniciado em '+a.windowStart+'.';
-      const sent = await sendNotice(id,'Koda · Alerta de orçamento',message).catch(() => false);
+      const outcome = await sendNotice(id,'Koda · Alerta de orçamento',message).catch(() => 'retry');
       await rpc('budget_notice_finish',{p_window:a.windowStart,p_kind:a.kind,p_threshold:a.threshold,
-        p_attempt:a.attempt,p_sent:sent}).catch(() => {});
+        p_attempt:a.attempt,p_sent:outcome === 'sent'}).catch(() => {});
     }
   }
 
@@ -157,12 +182,7 @@ export function createHandler({env, fetcher = fetch, waitUntil}) {
       if (Object.hasOwn(accountActions,action)) {
         const args = accountArgs(action,input);
         const value = await rpc(accountActions[action][0],{p_user:user,...args});
-        if (action === 'support' && value?.created === true && uuid(value.id) &&
-            env('RESEND_API_KEY') && env('KODA_SUPPORT_FROM')) {
-          try {
-            await sendNotice('koda-support/'+value.id,'Koda · Novo chamado de suporte','Um chamado foi registrado.');
-          } catch { /* The committed ticket remains available in the dashboard. */ }
-        }
+        if (action === 'support' || action === 'support_list') await notifySupport();
         if (action === 'delete') {
           requireValue(value?.scheduled === true,'deletion_pending',503);
           const res = await fetcher(supabase()+'/auth/v1/admin/users/'+user,{

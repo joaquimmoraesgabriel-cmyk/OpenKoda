@@ -331,19 +331,41 @@ test('initial consent delegates to the authenticated insert-once RPC and returns
   }
 });
 
-test('support notifies only on insert, omits private fields, and retains the ticket on delivery failure',async () => {
-  let created=true;
-  const f=fixture({env:{RESEND_API_KEY:'fake-resend',KODA_SUPPORT_FROM:'koda@example.test'},email:()=>{throw new Error('offline');},
-    rpc:name=>name==='support_create'&&json({id:requestId,created})});
+test('support retries transient failures with a stable key and never exports ticket content',async () => {
+  let created=true,attempt=0,queued=true;
+  const f=fixture({env:{RESEND_API_KEY:'fake-resend',KODA_SUPPORT_FROM:'koda@example.test'},
+    email:()=>{if(attempt===1)throw new Error('offline');return json({id:'sent'});},
+    rpc:(name,body)=>{
+      if(name==='support_create')return json({id:requestId,created});
+      if(name==='support_notice_claim')return json({tickets:queued?[{id:requestId,attempt:++attempt}]:[]});
+      if(name==='support_notice_finish'){
+        assert.equal(body.p_id,requestId);
+        assert.equal(body.p_outcome,attempt===1?'retry':'sent');
+        queued=body.p_outcome==='retry';return json({updated:true});
+      }
+    }});
   const ticket={action:'support',subject:'PRIVATE-SUBJECT',message:'PRIVATE-MESSAGE',requestId};
   assert.equal((await f.ask(ticket)).status,200);
   created=false;
   assert.equal((await f.ask(ticket)).status,200);
+  assert.equal((await f.ask({action:'support_list'})).status,200);
   const notices=f.calls.filter(c=>c.path==='/emails');
-  assert.equal(notices.length,1);
+  assert.equal(notices.length,2);
+  assert.deepEqual(notices[0],notices[1]);
   assert.equal(notices[0].headers['Idempotency-Key'],'koda-support/'+requestId);
   assert.deepEqual(notices[0].body.to,['joaquimmoraesgabriel@gmail.com']);
   assert.ok(!JSON.stringify(notices[0].body).includes('PRIVATE-') && !JSON.stringify(notices[0].body).includes(userId));
+});
+
+test('support records a permanent sender rejection and limits who controls delivery',async () => {
+  const f=fixture({env:{RESEND_API_KEY:'fixture',KODA_SUPPORT_FROM:'koda@example.test'},email:()=>json({},403),
+    rpc:name=>name==='support_notice_claim' && json({tickets:[{id:requestId,attempt:1}]})});
+  assert.equal((await f.ask({action:'support_list'})).status,200);
+  assert.equal(f.calls.find(c=>c.path.endsWith('support_notice_finish')).body.p_outcome,'failed');
+  assert.equal((await f.ask({action:'support_notice_claim'})).status,404);
+  const unconfigured=fixture();
+  assert.equal((await unconfigured.ask({action:'support_list'})).status,200);
+  assert.ok(!unconfigured.calls.some(c=>c.path.endsWith('support_notice_claim')));
 });
 
 test('budget notices retry with stable content and key without retrying model generations',async () => {

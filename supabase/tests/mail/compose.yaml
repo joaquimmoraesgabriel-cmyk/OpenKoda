@@ -1,0 +1,49 @@
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_PASSWORD: ${KODA_MAIL_TEST_PASSWORD:?}
+    volumes:
+      - ./init.sql:/docker-entrypoint-initdb.d/01-auth.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres && psql -U postgres -Atc \"SELECT to_regnamespace('auth') IS NOT NULL\" | grep -qx t"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  mail:
+    image: axllent/mailpit:v1.22.3
+    ports: ["127.0.0.1::8025"]
+  templates:
+    image: python:3.12-alpine
+    command: ["python", "-m", "http.server", "8080", "--directory", "/templates"]
+    volumes:
+      - ../../templates:/templates:ro
+  auth:
+    image: supabase/gotrue:v2.197.0
+    depends_on:
+      db: { condition: service_healthy }
+      mail: { condition: service_started }
+      templates: { condition: service_started }
+    ports: ["127.0.0.1::9999"]
+    environment:
+      API_EXTERNAL_URL: https://auth.openkoda.test
+      GOTRUE_API_HOST: 0.0.0.0
+      GOTRUE_API_PORT: "9999"
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DB_DATABASE_URL: postgres://postgres:${KODA_MAIL_TEST_PASSWORD:?}@db:5432/postgres?sslmode=disable&search_path=auth
+      GOTRUE_SITE_URL: https://openkoda.test
+      GOTRUE_URI_ALLOW_LIST: https://openkoda.test/conta/retorno/
+      GOTRUE_JWT_SECRET: ${KODA_MAIL_TEST_JWT:?}
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
+      GOTRUE_MAILER_AUTOCONFIRM: "false"
+      GOTRUE_MAILER_URLPATHS_CONFIRMATION: /auth/v1/verify
+      GOTRUE_MAILER_URLPATHS_RECOVERY: /auth/v1/verify
+      GOTRUE_MAILER_TEMPLATES_CONFIRMATION: http://templates:8080/confirmation.html
+      GOTRUE_MAILER_TEMPLATES_RECOVERY: http://templates:8080/recovery.html
+      GOTRUE_MAILER_SUBJECTS_CONFIRMATION: Confirme seu cadastro no OpenKoda
+      GOTRUE_MAILER_SUBJECTS_RECOVERY: Redefina sua senha do OpenKoda
+      GOTRUE_SMTP_HOST: mail
+      GOTRUE_SMTP_PORT: "1025"
+      GOTRUE_SMTP_ADMIN_EMAIL: conta@openkoda.test
+      GOTRUE_SMTP_SENDER_NAME: OpenKoda
+      GOTRUE_SMTP_MAX_FREQUENCY: 1s

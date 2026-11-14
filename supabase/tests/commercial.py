@@ -123,6 +123,16 @@ try:
     assert created["created"] is True
     ticket=created["id"]
     assert rpc("support_create",USER,"Teste de acesso","Mensagem sintética",support_request)=={"id":ticket,"created":False}
+    claims = race([lambda: rpc("support_notice_claim")] * 2)
+    assert [row for claim in claims for row in claim["tickets"]] == [{"id":ticket,"attempt":1}]
+    assert rpc("support_notice_finish",ticket,1,"retry")["updated"]
+    assert rpc("support_notice_claim")["tickets"] == []
+    run(f"update openkoda_private.tickets set notice_retry_at=now() where id='{ticket}';")
+    assert rpc("support_notice_claim")["tickets"] == [{"id":ticket,"attempt":2}]
+    assert not rpc("support_notice_finish",ticket,1,"sent")["updated"]
+    assert rpc("support_notice_finish",ticket,2,"sent")["updated"]
+    assert not rpc("support_notice_claim")["tickets"]
+    denied("permission denied",run,"set role authenticated; select public.openkoda_support_notice_claim();")
     run(f"insert into openkoda_private.replies(ticket_id,message) values('{ticket}','Resposta do atendimento');")
     assert rpc("support_list",OTHER)["tickets"] == []
     assert rpc("support_list",USER)["tickets"][0]["replies"][0]["message"]=="Resposta do atendimento"

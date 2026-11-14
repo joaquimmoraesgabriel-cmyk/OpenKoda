@@ -246,3 +246,12 @@ test('atualizar depois do link de recuperação preserva o formulário até salv
   await expect(page.getByRole('heading',{name:'Minha conta'})).toBeVisible();
   await expect(page).toHaveURL(site+'/conta/');
 });
+
+test('link de e-mail expirado permite pedir outro e remove o erro da URL',async({page})=>{
+  await siteFixture(page);
+  await page.goto(site+'/conta/retorno/?error=access_denied&error_code=otp_expired');
+  await expect(page.getByRole('heading',{name:'Este link não pôde ser usado'})).toBeVisible();
+  expect(new URL(page.url()).search).toBe('');
+  await page.getByRole('button',{name:'Solicitar nova recuperação'}).click();
+  await expect(page.getByLabel('E-mail da conta')).toBeVisible();
+});
