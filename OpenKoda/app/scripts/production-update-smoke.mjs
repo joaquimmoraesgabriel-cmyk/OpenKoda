@@ -3,8 +3,8 @@
 // Run only after reviewing/publishing the exact candidate on the official feed.
 import {chromium,expect} from '@playwright/test';
 import {spawn,execFileSync} from 'node:child_process';
-import {readFile,writeFile,mkdir,lstat} from 'node:fs/promises';
-import {resolve,dirname,join,basename} from 'node:path';
+import {readFile,writeFile,mkdir,lstat,realpath} from 'node:fs/promises';
+import {resolve,dirname,join,basename,toNamespacedPath} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createHash,randomUUID} from 'node:crypto';
 import {createServer} from 'node:net';
@@ -15,7 +15,9 @@ if(!args.includes('--execute-production-upgrade')||!option('--receipt'))throw ne
 const FROM='1.1.0',TO='1.1.1';
 const OLD_INSTALLED_SHA256='73e8a5a739ab80a3f3f338fe0eba0d8d2750cde0561a7ffbe484ef4097b8146b';
 const endpoint='https://github.com/joaquimmoraesgabriel-cmyk/OpenKoda/releases/download/desktop-updates/latest.json';
-const install=join(process.env.LOCALAPPDATA,'OpenKoda'),executable=join(install,'openkoda.exe');
+// LOCALAPPDATA can be virtualized by the packaged host; use the verified
+// per-user NSIS location rather than inheriting that virtualization.
+const install=join(process.env.USERPROFILE,'AppData','Local','OpenKoda'),executable=join(install,'openkoda.exe');
 const data=join(process.env.USERPROFILE,'.openkoda');
 const registration='HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\OpenKoda';
 const directory=join(appRoot,'.local',`production-update-${randomUUID()}`);
@@ -82,7 +84,7 @@ found=[p for p in (root/'update-backups').glob('*/manifest.json') if str(p) not 
 assert len(found)==1,'Expected exactly one newly created native backup'
 manifest_path=found[0];manifest=json.loads(manifest_path.read_text(encoding='utf-8'))
 assert manifest['schema']=='openkoda.update-backup.v1' and manifest['complete'] and manifest['fromVersion']=='1.1.0' and manifest['toVersion']=='1.1.1'
-assert pathlib.Path(manifest['profileDirectory'])==active
+assert pathlib.Path(manifest['profileDirectory']).samefile(active)
 expected_entries={(('profile' if parent==active else 'installation'),p.name) for parent in set([root,active]) for p in parent.glob('*.sqlite3')}
 actual_entries={(e['area'],e['name']) for e in manifest['files']}
 assert len(actual_entries)==len(manifest['files']) and actual_entries==expected_entries,'Incomplete or duplicate database inventory'
@@ -135,9 +137,13 @@ try{
  const response=await fetch(endpoint,{signal:AbortSignal.timeout(25000)});if(!response.ok)throw new Error('Official update feed is unavailable.');
  const manifest=await response.json();expect(manifest.version).toBe(TO);expect(manifest.platforms['windows-x86_64'].signature.trim()).toBe(signature);
  expect(manifest.platforms['windows-x86_64'].url).toBe(`https://github.com/joaquimmoraesgabriel-cmyk/OpenKoda/releases/download/desktop-v${TO}/${basename(expectedArtifact)}`);
- const digest=createHash('sha256').update(data).digest(),bucket=digest.readUInt16LE(0)%100;
+ // Rust canonicalize() uses the Windows verbatim path. Hash that exact spelling,
+ // including its namespace prefix, rather than the USERPROFILE input spelling.
+ const canonicalBase=toNamespacedPath(await realpath(data));
+ const digest=createHash('sha256').update(canonicalBase).digest(),bucket=digest.readUInt16LE(0)%100;
+ receipt.canonicalBase=canonicalBase;receipt.rolloutBucket=bucket;receipt.rolloutPercent=manifest.rolloutPercent;
  if(!Number.isInteger(manifest.rolloutPercent)||bucket>=manifest.rolloutPercent)throw new Error('This installation is not in the published rollout. The test will not bypass it.');
- receipt.candidate={version:TO,bytes:artifact.bytes,sha256:artifact.sha256,authenticode:artifact.authenticode};receipt.rolloutPercent=manifest.rolloutPercent;receipt.rolloutBucket=bucket;
+ receipt.candidate={version:TO,bytes:artifact.bytes,sha256:artifact.sha256,authenticode:artifact.authenticode};
  receipt.before=fingerprint();receipt.existingBackupManifests=backupManifests();await mkdir(directory,{recursive:true});
  const server=createServer();await new Promise((ok,fail)=>{server.once('error',fail);server.listen(0,'127.0.0.1',ok);});port=server.address().port;await new Promise(ok=>server.close(ok));
  const env={...process.env,WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS:`--remote-debugging-address=127.0.0.1 --remote-debugging-port=${port}`};delete env.OPENKODA_DATA_DIR;delete env.OPENKODA_BUILD_TEST_DATA_DIR;
@@ -204,7 +210,7 @@ try{
  receipt.accountAfter=await accountIdentity();expect(receipt.accountAfter).toBe(receipt.accountBefore);receipt.preferencesAfter=await preferences();expect(receipt.preferencesAfter).toBe(receipt.preferencesBefore);
  receipt.after=fingerprint();receipt.preservation=compareData(receipt.before,receipt.after);receipt.backup=verifyBackup(receipt.preInstall);
  await page.getByRole('button',{name:'Configurações',exact:true}).click();await page.getByRole('button',{name:'IA e modelos',exact:true}).click();
- await expect(page.getByRole('tab',{name:/Koda/}).or(page.getByRole('button',{name:'Koda',exact:true})).first()).toBeVisible();
+ await expect(page.getByRole('complementary',{name:'Provedores configurados',exact:true}).getByRole('button',{name:/^Koda /})).toBeVisible();
  await page.screenshot({path:join(directory,'updated-koda.png'),fullPage:true});receipt.checks.push('NSIS installed and automatically restarted 1.1.1','all project/chat/budget/inactive-profile SQLite contents and preferences preserved','same commercial account identity','native backup inventory, hashes, quick_check and contents','Koda provider visible in installed application');receipt.passed=true;note('production upgrade verified');
 }catch(error){receipt.error=String(error);if(page)receipt.lastUpdateStatus=await update('status').catch(()=>undefined);preserveProcess=installationStarted||downloadInFlight||['downloading','installing'].includes(receipt.lastUpdateStatus?.phase);await page?.screenshot({path:join(directory,'failure.png'),fullPage:true}).catch(()=>{});process.exitCode=1;}
 finally{
