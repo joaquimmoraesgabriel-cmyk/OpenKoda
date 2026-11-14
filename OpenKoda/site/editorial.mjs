@@ -79,12 +79,13 @@ export const launch = `<div class="install-panel"><div><h2>Instalador x64</h2><p
 
 const planCards = [
  {name:'Gratuito', price:'0', audience:'Para quem já tem acesso à API de um provedor.', highlight:'Use sua própria chave', features:['Projetos e conversas no Windows','Análise dos arquivos autorizados','Histórico de uso e estimativas locais'], href:'/download/', action:'Baixar o aplicativo'},
- {name:'Plus', price:'219', quota:20, audience:'Para quem prefere uma cota incluída e quer trabalhar com skills.', highlight:'US$ 20 de IA por ciclo mensal', features:['Conexão gerenciada pela Koda','Skills da assinatura','Raciocínio nos modelos compatíveis'], href:'/conta/?plano=plus', action:'Conhecer Plus'},
+ {name:'Plus', price:'219', quota:20, audience:'Para quem prefere uma cota incluída e quer trabalhar com skills.', highlight:'US$ 20 de IA por ciclo mensal', features:['Modelos de IA pela Koda, conforme o catálogo disponível','Skills da assinatura','Raciocínio nos modelos compatíveis, inclusive com chave própria'], href:'/conta/?plano=plus', action:'Conhecer Plus'},
  {name:'Pro', price:'999', quota:100, audience:'Para quem revisa projetos com mais frequência.', highlight:'US$ 100 de IA por ciclo mensal', features:['Todos os recursos do Plus','Cinco vezes a cota do Plus','Acesso antecipado a novidades disponíveis'], href:'/conta/?plano=pro', action:'Conhecer Pro'},
  {name:'Ultra', price:'1.999', quota:200, audience:'Para quem precisa de mais uso e quer experimentar versões em teste.', highlight:'US$ 200 de IA por ciclo mensal', features:['Todos os recursos do Pro','Dez vezes a cota do Plus','Participação opcional em versões experimentais'], href:'/conta/?plano=ultra', action:'Conhecer Ultra'}
 ];
 const comparison = [
  ['Quem fornece a IA','Seu provedor','Koda','Koda','Koda'],
+ ['Escolha de modelos','Catálogo da sua conexão','Catálogo disponível na Koda','Catálogo disponível na Koda','Catálogo disponível na Koda'],
  ['Uso de IA incluído por ciclo','Pago ao seu provedor','US$ 20','US$ 100','US$ 200'],
  ['Projetos e relatórios locais','Incluídos','Incluídos','Incluídos','Incluídos'],
  ['Skills e ajuste de raciocínio¹','Sem acesso','Incluídos','Incluídos','Incluídos'],

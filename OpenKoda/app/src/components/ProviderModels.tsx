@@ -6,6 +6,9 @@ import { errorMessage, type Assessment, type Settings } from '../types';
 import { knownProvider, providers, personalProviders, selectionLabel, type AiSelection, type ProviderId, type ProviderStatus } from '../ai-provider';
 import { Field } from './shared';
 import './provider-models.css';
+import { useDesktopSession } from '../desktop-session';
+import { KodaAccessCard, kodaAccess } from './KodaProvider';
+import type { CommercialModel } from '../commercial';
 
 export function ProviderField({value, onChange, disabled, label = 'Provedor', onCompatible, available}: {
   value: ProviderId; onChange: (provider: ProviderId) => void; disabled?: boolean; label?: string; onCompatible?: () => void;
@@ -34,6 +37,7 @@ export function ModelCatalogField({provider, value, onChange, disabled, label = 
   disabled?: boolean; label?: string; allowManual?: boolean; expanded?: boolean; hasKey?: boolean;
   enabledModels?: string[] | null;
 }) {
+  const session=useDesktopSession(),koda=kodaAccess(session);
   const [attempt, setAttempt] = useState(0);
   const [catalog, setCatalog] = useState<Catalog>(idle);
   const [filter, setFilter] = useState('');
@@ -41,6 +45,16 @@ export function ModelCatalogField({provider, value, onChange, disabled, label = 
   useEffect(() => {
     let active = true;
     setFilter('');
+    if(provider==='openkoda'){
+      setCatalog(idle);
+      if(native&&koda.catalog){
+        setCatalog({phase:'loading',models:[]});
+        void request<{models:CommercialModel[]}>('account.models').then(result=>{
+          if(active)setCatalog({phase:'ready',models:result.models.filter(model=>model.analysis!==false).map(model=>model.id)});
+        }).catch(cause=>{if(active)setCatalog({phase:'failed',models:[],message:errorMessage(cause)});});
+      }
+      return()=>{active=false;};
+    }
     if (!native || (allowManual && !attempt)) {setCatalog(idle); return;}
     if (hasKey === false) {setCatalog({phase: 'no-key', models: []}); return;}
     if (enabledModels) {setCatalog({phase: 'ready', models: enabledModels}); return;}
@@ -66,7 +80,7 @@ export function ModelCatalogField({provider, value, onChange, disabled, label = 
     }
     void load().catch(error => {if (active) setCatalog({phase: 'failed', models: [], message: errorMessage(error)});});
     return () => {active = false;};
-  }, [provider, hasKey, attempt, allowManual, enabledModels]);
+  }, [provider, hasKey, attempt, allowManual, enabledModels,koda.catalog,session.user?.id]);
 
   const hint = !native ? 'O catálogo da sua chave está disponível no aplicativo desktop.'
     : catalog.phase === 'no-key' ? 'Cadastre a chave deste provedor em IA e modelos.'
@@ -76,6 +90,12 @@ export function ModelCatalogField({provider, value, onChange, disabled, label = 
     : catalog.phase === 'loading' ? 'Consultando o catálogo…' : undefined;
   const search = filter.trim().toLowerCase();
   const matching = search ? catalog.models.filter(id => id.toLowerCase().includes(search)) : catalog.models;
+  if(provider==='openkoda')return <div className="provider-model-field"><KodaAccessCard compact/>
+    {koda.catalog&&<Field label={label} hint={catalog.phase==='loading'?'Consultando o catálogo da Koda…':'Modelos compatíveis com análise. A execução depende do plano e da cota.'}>
+      <select value={value} disabled={disabled||!koda.allowed||!catalog.models.length} onChange={e=>{if(koda.allowed)onChange(e.target.value);}}><option value="">Selecione um modelo</option>
+        {value&&!catalog.models.includes(value)&&<option value={value} disabled>{value} · indisponível</option>}{catalog.models.map(model=><option key={model} value={model}>{model}</option>)}
+      </select></Field>}{catalog.phase==='failed'&&<p role="alert">{catalog.message}</p>}
+  </div>;
   const CatalogIcon = catalog.phase === 'loading' ? LoaderCircle : catalog.phase === 'ready' ? Check : RefreshCw;
   return <div className="provider-model-field">
     {!allowManual && catalog.models.length > (expanded ? 1 : 20) && <Field label="Filtrar modelos">
@@ -135,7 +155,7 @@ function ActiveProviderFields({value, onChange, disabled}: {value: AiSelection; 
     return () => {active = false;};
   }, [attempt]);
   if (!keys) return <p role="status">Consultando os provedores do perfil…</p>;
-  const available = (Object.keys(keys) as ProviderId[]).filter(id => keys[id]?.hasApiKey && keys[id]?.enabledModels?.length !== 0);
+  const available:ProviderId[] = ['openkoda',...(Object.keys(keys) as ProviderId[]).filter(id => keys[id]?.hasApiKey && keys[id]?.enabledModels?.length !== 0)];
   const status = keys[value.provider];
   return <>
     <ProviderField value={value.provider} available={available} disabled={disabled || !available.length} onChange={provider => {

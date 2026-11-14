@@ -21,7 +21,6 @@ import SecurityRuntimeStatus from './SecurityRuntimeStatus';
 import { UpdateSettings } from '../DesktopUpdater';
 import { AccountPlans, AccountSecurity } from './AccountPages';
 import { useDesktopSession } from '../desktop-session';
-import { AccountModelCatalog } from './AccountModelCatalog';
 import './settings.css';
 
 const groups = [
@@ -180,7 +179,6 @@ export default function Settings({settings, projects, action, busy, dataRequest=
             ? <AiConnection saved={settings} draft={draft} change={change} action={action} busy={busy}/>
             : <form onSubmit={save}><AiConnection saved={settings} draft={draft} change={change} action={action} busy={busy}/>{saveActions}</form>}
           <AiLocalClosure action={action} busy={busy}/>
-          <AccountModelCatalog/>
         </>}
 
         {section === 'Histórico de uso' && <AiBudgetSettings key={usageRequest} action={action} busy={busy} assessments={assessments} onOpenAssessment={onOpenAssessment}/>}

@@ -95,7 +95,7 @@ export function AccountPlans(){
         return <section key={plan.id} className="desktop-plan" data-selected={selected}><div className="desktop-plan-heading"><h4>{title}</h4>{selected&&<span><Check size={13}/>Atual</span>}</div>
           <p className="desktop-plan-price">{new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(plan.priceBrlCents/100)}<small>/mês</small></p>
           <p>{usdMicros(plan.monthlyLimitMicros)} de uso de IA por ciclo mensal, distribuído em janelas de 7 dias.</p>
-          <ul><li>Modelos disponibilizados pelo serviço</li><li>Ajuste de raciocínio nos modelos compatíveis</li><li>Skills e histórico de uso</li></ul>
+          <ul><li>Modelos de IA pela Koda, conforme o catálogo disponível</li><li>Ajuste de raciocínio nos modelos compatíveis</li><li>Skills e histórico de uso</li></ul>
           {allowed?<button type="button" className="button" disabled={work.pending||session.loading||simulated} onClick={()=>void simulate(plan.id,'activate')}>{simulated?'Simulação ativa':`Simular ${title}`}</button>:<span className="plan-unavailable">Contratação ainda não disponível</span>}
         </section>;
       })}</div>

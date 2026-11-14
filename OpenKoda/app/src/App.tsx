@@ -17,6 +17,7 @@ import { useApplyAppearance } from './appearance';
 import { DesktopSessionProvider, useDesktopSession } from './desktop-session';
 import { Startup, WelcomeEntry } from './components/DesktopEntry';
 import { UpdateNotice } from './DesktopUpdater';
+import { kodaAccountNavigation, type KodaAccountSection } from './components/KodaProvider';
 import './workspace.css';
 import './project-desk.css';
 import './codex-workspace.css';
@@ -52,6 +53,10 @@ function Workspace() {
   const [settingsAccountRequest,setSettingsAccountRequest]=useState<{section:'Conta e segurança'|'Plano e assinatura';revision:number}>();
   const [settingsUpdateRequest,setSettingsUpdateRequest]=useState(0);
   function openAccount(section:'Conta e segurança'|'Plano e assinatura') {setSettingsAccountRequest(previous=>({section,revision:(previous?.revision??0)+1}));setView('settings');}
+  useEffect(()=>{
+    const open=(event:Event)=>{const section=(event as CustomEvent<{section:KodaAccountSection}>).detail?.section;if(section==='Conta e segurança'||section==='Plano e assinatura')openAccount(section);};
+    window.addEventListener(kodaAccountNavigation,open);return()=>window.removeEventListener(kodaAccountNavigation,open);
+  },[]);
   function openDataSettings(){setSettingsUsageRequest(0);setSettingsDataRequest(value=>value+1);setView('settings');}
   function openUsageHistory(){setSettingsDataRequest(0);setSettingsUsageRequest(value=>value+1);setView('settings');}
 

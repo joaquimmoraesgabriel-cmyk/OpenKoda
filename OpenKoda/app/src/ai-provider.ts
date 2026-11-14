@@ -17,7 +17,7 @@ export const providers = {
   gemini: {name: 'Google Gemini', endpoint: 'https://generativelanguage.googleapis.com/v1beta/openai', logo: geminiLogo},
   deepseek: {name: 'DeepSeek', endpoint: 'https://api.deepseek.com', logo: deepseekLogo},
   xai: {name: 'xAI', endpoint: 'https://api.x.ai/v1', logo: xaiLogo},
-  openkoda: {name:'OpenKoda · Assinatura',endpoint:'https://ynjcyvnrfxsrijrwpaye.supabase.co/functions/v1/openkoda',logo:kodaLogo},
+  openkoda: {name:'Koda',endpoint:'https://ynjcyvnrfxsrijrwpaye.supabase.co/functions/v1/openkoda',logo:kodaLogo},
 } as const;
 
 export type ProviderId = keyof typeof providers;

@@ -152,6 +152,7 @@ test('catálogo distingue compatibilidade, modalidade e política sem conceder a
   await fixture(page,'authenticated');
   await page.getByRole('button',{name:'Configurações',exact:true}).click();
   await page.getByRole('button',{name:'IA e modelos',exact:true}).click();
+  await page.getByRole('complementary',{name:'Provedores configurados'}).getByRole('button',{name:/^Koda/}).click();
   const catalog=page.getByRole('region',{name:'Modelos da assinatura'});
   await expect(catalog.getByText('Requer assinatura',{exact:true})).toBeVisible();
   await expect(catalog.getByText('A modalidade de áudio não é suportada no chat.')).toBeVisible();
@@ -165,7 +166,7 @@ test('catálogo distingue compatibilidade, modalidade e política sem conceder a
   const picker=page.getByRole('dialog',{name:'Escolher provedor e modelo'});
   await expect(picker.getByText('Os modelos da assinatura exigem acesso ativo e cota disponível.',{exact:false})).toBeVisible();
   await expect.poll(()=>page.evaluate(()=>Reflect.get(window,'entryCalls').filter((call:{action:string})=>call.action==='account.models').length)).toBeGreaterThan(1);
-  await expect(picker.getByRole('button',{name:'fixture/chat',exact:true})).toHaveCount(0);
+  await expect(picker.getByRole('button',{name:'fixture/chat',exact:true})).toBeDisabled();
 });
 
 test('configurações se adaptam à janela menor e respeitam movimento reduzido',async({page})=>{

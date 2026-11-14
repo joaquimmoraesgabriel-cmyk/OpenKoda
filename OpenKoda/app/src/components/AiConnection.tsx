@@ -8,6 +8,9 @@ import AiBudgetReview, { useBudgetReview } from './AiBudgetReview';
 import './provider-models.css';
 import './provider-setup.css';
 import type { ModelCatalogEntry } from '../model-catalog';
+import { AccountModelCatalog } from './AccountModelCatalog';
+import { KodaAccessCard, kodaAccess } from './KodaProvider';
+import { useDesktopSession } from '../desktop-session';
 
 type Props = {saved: Settings; draft: Settings; change: (key: 'provider'|'endpoint'|'model', value: string) => void; action: Action; busy: boolean};
 const ids = personalProviders;
@@ -49,10 +52,11 @@ function PreviewConnection({draft, change, busy}: Props) {
       change('model', '');
     }}>
       <option value="compatible">Provedor compatível</option>
+      <option value="openkoda">Koda</option>
       {ids.map(id => <option value={id} key={id}>{providers[id].name}</option>)}
     </select></Field>
-    <Field label="Endpoint"><input type="url" value={draft.endpoint} readOnly={knownProvider(id)} onChange={e=>change('endpoint',e.target.value)}/></Field>
-    <Field label="Modelo"><input value={draft.model} maxLength={160} onChange={e=>change('model',e.target.value)}/></Field>
+    {id==='openkoda'?<KodaAccessCard/>:<><Field label="Endpoint"><input type="url" value={draft.endpoint} readOnly={knownProvider(id)} onChange={e=>change('endpoint',e.target.value)}/></Field>
+    <Field label="Modelo"><input value={draft.model} maxLength={160} onChange={e=>change('model',e.target.value)}/></Field></>}
     <p className="muted">Abra o aplicativo desktop para conectar sua chave e consultar o catálogo.</p>
   </section>;
 }
@@ -61,6 +65,7 @@ type Step = {page: 'providers'} | {page: 'key'|'models'; provider: ProviderId};
 type Catalog = {models: string[]; revision: string; entries:ModelCatalogEntry[];note?:string};
 
 function NativeProviders({saved, action, busy}: Pick<Props,'saved'|'action'|'busy'>) {
+  const session=useDesktopSession(),koda=kodaAccess(session);
   const [active, setActive] = useState<ProviderId>(knownProvider(saved.provider) ? saved.provider : 'openai');
   const [statuses, setStatuses] = useState<StatusMap>({});
   const [step, setStep] = useState<Step | null>(null);
@@ -74,7 +79,7 @@ function NativeProviders({saved, action, busy}: Pick<Props,'saved'|'action'|'bus
   const status = statuses[active];
   const activated = isConfigured(active,status,saved);
   const provider = providers[active];
-  const configured = ids.filter(id => id===active || id===saved.provider || statuses[id]?.hasApiKey);
+  const configured:ProviderId[] = ['openkoda',...ids.filter(id => id===active || id===saved.provider || statuses[id]?.hasApiKey)];
 
   useEffect(() => {
     let mounted = true;
@@ -113,14 +118,15 @@ function NativeProviders({saved, action, busy}: Pick<Props,'saved'|'action'|'bus
     <aside className="provider-rail" aria-label="Provedores configurados">
       <h3>Provedores</h3>
       <div className="provider-rail-list">{configured.map(id => <button type="button" className="provider-row" key={id}
-        aria-pressed={id===active} disabled={disabled} onClick={()=>select(id)}>
+        aria-pressed={id===active} disabled={id==='openkoda'?busy:disabled} onClick={()=>select(id)}>
         <img src={providers[id].logo} width="26" height="26" alt=""/>
-        <span><strong>{providers[id].name}</strong><small>{id===saved.provider && isConfigured(id,statuses[id],saved) ? 'Padrão da instalação' : stateLabel(statuses[id],isConfigured(id,statuses[id],saved))}</small></span>
+        <span><strong>{id==='openkoda'?'Koda':providers[id].name}</strong><small>{id==='openkoda'?koda.label:id===saved.provider && isConfigured(id,statuses[id],saved) ? 'Padrão da instalação' : stateLabel(statuses[id],isConfigured(id,statuses[id],saved))}</small></span>
       </button>)}</div>
       <button type="button" className="button provider-add" disabled={disabled} onClick={()=>open({page:'providers'})}>
         <Plus size={15} aria-hidden="true"/>Adicionar provedor</button>
     </aside>
     <div className="provider-detail">
+      {active==='openkoda'?<AccountModelCatalog/>:<>
       <header className="provider-identity"><img src={provider.logo} width="42" height="42" alt=""/>
         <div><h3>{provider.name}</h3><span className="provider-state" data-present={activated}>{reading ? 'Consultando…' : stateLabel(status,activated)}</span></div>
       </header>
@@ -149,8 +155,10 @@ function NativeProviders({saved, action, busy}: Pick<Props,'saved'|'action'|'bus
         </>}
       </section>
       {notice && <p role="status" className="saved-message">{notice}</p>}{error && <p role="alert">{error}</p>}
+      </>}
     </div>
     {step && <ProviderDialog initial={step} statuses={statuses} saved={saved} preferDefault={preferDefault} action={action}
+      onKoda={()=>{select('openkoda');setStep(null);}}
       observe={observe} onKeySaved={id=>setActive(id)} onClose={()=>{setStep(null);setPreferDefault(false);}}
       onComplete={(id, result)=>{setActive(id);observe(id,result);setNotice('Modelos disponíveis nas avaliações.');setStep(null);setPreferDefault(false);}}/>}
   </div>;
@@ -160,9 +168,10 @@ type DialogProps = {
   initial:Step; statuses:StatusMap; saved:Settings; preferDefault:boolean; action:Action;
   observe:(provider:ProviderId,status:ProviderStatus)=>void; onKeySaved:(provider:ProviderId)=>void;
   onClose:()=>void; onComplete:(provider:ProviderId,status:ProviderStatus)=>void;
+  onKoda:()=>void;
 };
 
-function ProviderDialog({initial, statuses, saved, preferDefault, action, observe, onKeySaved, onClose, onComplete}: DialogProps) {
+function ProviderDialog({initial, statuses, saved, preferDefault, action, observe, onKeySaved, onClose, onComplete,onKoda}: DialogProps) {
   const [step,setStep] = useState(initial);
   const [query,setQuery] = useState('');
   const [key,setKey] = useState('');
@@ -270,10 +279,10 @@ function ProviderDialog({initial, statuses, saved, preferDefault, action, observ
     <div className="provider-setup-body">
       {step.page==='providers' && <>
         <label className="provider-search"><Search size={16} aria-hidden="true"/><input type="search" aria-label="Pesquisar provedores" placeholder="Pesquisar provedores" value={query} onChange={e=>setQuery(e.target.value)}/></label>
-        <div className="provider-options">{matching.map(id=><button type="button" className="provider-row" key={id} onClick={()=>go({page:statuses[id]?.hasApiKey?'models':'key',provider:id})}>
+        <div className="provider-options">{fold('Koda').includes(fold(query))&&<button type="button" className="provider-row" onClick={onKoda}><img src={providers.openkoda.logo} width="28" height="28" alt=""/><span><strong>Koda</strong><small>IA incluída na assinatura</small></span><small>Sem chave de API</small></button>}{matching.map(id=><button type="button" className="provider-row" key={id} onClick={()=>go({page:statuses[id]?.hasApiKey?'models':'key',provider:id})}>
           <img src={providers[id].logo} width="28" height="28" alt=""/><span><strong>{providers[id].name}</strong><small>{new URL(providers[id].endpoint).hostname}</small></span>
           <small>{statuses[id]?.hasApiKey ? stateLabel(statuses[id],isConfigured(id,statuses[id],saved)) : 'Chave de API'}</small></button>)}</div>
-        {!matching.length && <p role="status">Nenhum provedor corresponde à pesquisa.</p>}
+        {!matching.length&&!fold('Koda').includes(fold(query)) && <p role="status">Nenhum provedor corresponde à pesquisa.</p>}
       </>}
       {step.page==='key' && item && <form id="provider-key-form" onSubmit={event=>{event.preventDefault();void saveKey();}}>
         <div className="provider-endpoint"><img src={item.logo} width="30" height="30" alt=""/><div><strong>{item.name}</strong><small>{item.endpoint}</small></div></div>

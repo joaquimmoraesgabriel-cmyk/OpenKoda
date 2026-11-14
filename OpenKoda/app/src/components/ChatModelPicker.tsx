@@ -5,6 +5,7 @@ import { personalProviders, providers, type AiSelection, type ProviderId, type P
 import { type CommercialModel, type Reasoning, accountChanged } from '../commercial';
 import { errorMessage } from '../types';
 import { useDesktopSession } from '../desktop-session';
+import { KodaAccessCard, kodaAccess } from './KodaProvider';
 
 type Group = { provider: ProviderId; models: string[] };
 type Props = {
@@ -17,7 +18,7 @@ type Props = {
 
 export function ChatModelPicker({ value, onChange, disabled, onModels, forAnalysis = false }: Props) {
   const session=useDesktopSession();
-  const managedAllowed=session.account?.entitlements?.hostedInference===true;
+  const koda=kodaAccess(session),managedAllowed=koda.allowed;
   const reasoningAllowed=session.account?.entitlements?.reasoning===true;
   const id = useId();
   const trigger = useRef<HTMLButtonElement>(null);
@@ -57,16 +58,16 @@ export function ChatModelPicker({ value, onChange, disabled, onModels, forAnalys
   useEffect(()=>{
     if(!native||!open&&value?.provider!=='openkoda')return;
     let active=true;
+    setCommercial([]);setCommercialNote('');setCommercialLoaded(false);
+    if(!koda.catalog){setCommercialLoaded(true);return;}
     async function catalog(){
       try{
-        const session=await request<{user:{id:string}|null}>('account.session');
-        if(!session?.user){if(active){setCommercial([]);setCommercialLoaded(true);}return;}
         const result=await request<{models:CommercialModel[];note?:string}>('account.models');
         if(active){setCommercial(Array.isArray(result.models)?result.models.filter(model=>!forAnalysis||model.analysis!==false):[]);setCommercialNote(result.note??'');setCommercialLoaded(true);}
-      }catch{if(active){setCommercial([]);setCommercialLoaded(true);}}
+      }catch{if(active){setCommercial([]);setCommercialLoaded(true);setCommercialNote('Não foi possível consultar o catálogo da Koda. Tente novamente ao abrir o seletor.');}}
     }
     void catalog();return ()=>{active=false;};
-  },[open,value?.provider,sessionRevision,forAnalysis]);
+  },[open,value?.provider,sessionRevision,forAnalysis,koda.catalog,session.user?.id]);
   const [error, setError] = useState('');
 
   useLayoutEffect(() => {
@@ -139,7 +140,7 @@ export function ChatModelPicker({ value, onChange, disabled, onModels, forAnalys
     if (restoreFocus) trigger.current?.focus({ preventScroll: true });
   }
   const term = query.toLocaleLowerCase().trim();
-  const allGroups:Group[]=managedAllowed&&commercial.length?[{provider:'openkoda',models:commercial.map(m=>m.id)},...groups]:groups;
+  const allGroups:Group[]=[{provider:'openkoda',models:commercial.map(m=>m.id)},...groups];
   const personal=personalReasoning?.key===value?.provider+':'+value?.model?personalReasoning:undefined;
   const levels=!reasoningAllowed?[]:value?.provider==='openkoda'?(managedAllowed?commercial.find(m=>m.id===value.model)?.reasoningLevels??[]:[]):personal?.levels??[];
   const levelLabel:Record<string,string>={minimal:'Mínimo',low:'Leve',medium:'Médio',high:'Alto',xhigh:'Muito alto',max:'Máximo'};
@@ -148,6 +149,7 @@ export function ChatModelPicker({ value, onChange, disabled, onModels, forAnalys
   })).filter(g => g.models.length);
 
   async function choose(selection: AiSelection,closeAfter=true) {
+    if(selection.provider==='openkoda'&&!managedAllowed){setError(koda.message);return;}
     setSaving(true); setError('');
     try { await onChange(selection); if(closeAfter)close(true); }
     catch (e) { setError(errorMessage(e)); }
@@ -189,12 +191,13 @@ export function ChatModelPicker({ value, onChange, disabled, onModels, forAnalys
           </button>)}
         </nav>
         <div className="chat-model-list" ref={list}>
+          {(!filter||filter==='openkoda')&&(!term||'koda'.includes(term)||filter==='openkoda')&&<KodaAccessCard compact onNavigate={()=>close(false)}/>}
           {loading && <p role="status">Consultando provedores…</p>}
           {!loading && !visible.length && <p>{groups.length ? 'Nenhum modelo corresponde à busca.' : forAnalysis ? 'Ative um modelo de texto com tarifa disponível para análise.' : 'Ative um modelo em IA e modelos.'}</p>}
           {visible.map(g => <section key={g.provider}><h4>{providers[g.provider].name}</h4>
             {g.models.map(m => {
               const selected = value?.provider === g.provider && value.model === m;
-              return <button key={m} type="button" disabled={saving} aria-pressed={selected} onClick={() => {
+              return <button key={m} type="button" disabled={saving||g.provider==='openkoda'&&!managedAllowed} title={g.provider==='openkoda'&&!managedAllowed?koda.message:undefined} aria-pressed={selected} onClick={() => {
                 const compatible=g.provider==='openkoda'?commercial.find(row=>row.id===m)?.reasoningLevels??[]:selected?levels:[];
                 const effort=value?.reasoning&&compatible.includes(value.reasoning)?value.reasoning:undefined;
                 void choose({provider:g.provider,model:m,...(effort?{reasoning:effort}:{})});

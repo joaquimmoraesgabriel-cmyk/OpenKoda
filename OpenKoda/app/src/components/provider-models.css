@@ -69,3 +69,9 @@
   .provider-rail { border-bottom: 1px solid var(--line); }
   .provider-add { width: fit-content; }
 }
+.koda-provider-access{padding:4px 0 22px;border-bottom:1px solid var(--line);margin-bottom:20px}
+.koda-provider-access h3{margin:0 0 8px}
+.koda-provider-access p{max-width:65ch;line-height:1.6;color:var(--muted);margin:12px 0}
+.koda-provider-access.compact{padding:12px;margin:0 0 8px;border-radius:10px;background:var(--surface);font-size:13px}
+.koda-provider-access.compact h3{font-size:14px}
+.chat-model-list .koda-provider-access.compact .button{width:auto;min-height:32px;padding:6px 10px;border:1px solid var(--line);font-size:12px}
