@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState } from 'react';
-import { Plus, Folder, Globe, Code2, Network, FileText, Archive, Play, ArrowLeft, ChevronRight } from 'lucide-react';
+import { Plus, Folder, Globe, Code2, Network, FileText, Archive, Play } from 'lucide-react';
 import { Action, Assessment, Kind, Project, kindLabels, shortDate } from '../types';
 import { Empty, Field, Notice, SearchBox, Status, Tabs } from './shared';
 import AssessmentComparison from './AssessmentComparison';
@@ -104,14 +104,13 @@ export default function Projects({ projects, assessments, action, onNewAssessmen
           <span className="project-kind-icon"><KindIcon kind={item.kind}/></span>
           <span className="project-row-copy"><strong>{item.name}</strong><small>{kindLabels[item.kind]} · {item.target}</small></span>
           <time dateTime={item.createdAt}>{shortDate(item.createdAt)}</time>
-          <ChevronRight size={17} aria-hidden="true"/>
         </button>
       </li>)}</ul> : <Empty title={query ? 'Nenhum projeto encontrado' : 'Nenhum projeto cadastrado'} description={query ? 'Experimente outro nome ou endereço.' : 'Crie um projeto para reunir seus alvos e avaliações.'} icon={<Folder size={30}/>} action={!query && <button className="button" data-project-trigger="add" onClick={() => startProject('add')}><Plus size={17}/>Adicionar projeto</button>}/>}
     </div>
   </section>;
 
   return <section ref={page} className="projects-page project-detail" aria-label="Detalhes do projeto">
-    {!panel && <button className="project-back" type="button" onClick={backToProjects}><ArrowLeft size={16}/>Voltar aos projetos</button>}
+    {!panel && <button className="project-back" type="button" onClick={backToProjects}>Voltar aos projetos</button>}
     {creating ? <form className="form-page" onSubmit={event => void create(event).catch(() => {})}>
       <div className="detail-heading"><div><h1>Novo projeto</h1><p>Defina o alvo e o contexto do seu trabalho.</p></div></div>
       <div className="project-form-sheet">

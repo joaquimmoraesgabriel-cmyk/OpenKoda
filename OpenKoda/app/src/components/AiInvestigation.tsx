@@ -4,7 +4,7 @@ import { ProjectionNotice } from './DataAccess';
 import { ContextTargets, useContextTargets } from './TargetSelection';
 import { ScopeRestriction, useScopeAccess } from './ScopeAccess';
 import { useEffect, useRef, useState } from 'react';
-import { ChevronDown, Users } from 'lucide-react';
+import { Users } from 'lucide-react';
 import { native, request } from '../api';
 import type { ScopeRef } from '../scope';
 import { sameTargetRef, targetAllows } from '../combined-scope';
@@ -32,7 +32,7 @@ const resultStates:Record<string,string>={pending:'Resposta pendente',completed:
 
 export default function AiInvestigation({assessment,action,busy,onOpenWork}:{assessment:Assessment;action:Action;busy:boolean;onOpenWork?:(jobId:string)=>void}){
   const [opened,setOpened]=useState(false);
-  return <details className="disclosure" onToggle={e=>setOpened(e.currentTarget.open)}><summary><Users size={21}/><span>Perspectivas independentes de IA</span><ChevronDown size={18}/></summary><div className="disclosure-body">{opened&&(native?<InvestigationPanel assessment={assessment} action={action} busy={busy} onOpenWork={onOpenWork}/>:<Notice>A investigação por perspectivas está disponível no aplicativo desktop. A prévia não envia contexto à IA nem executa ferramentas.</Notice>)}</div></details>;
+  return <details className="disclosure" onToggle={e=>setOpened(e.currentTarget.open)}><summary><Users size={21}/><span>Perspectivas independentes de IA</span></summary><div className="disclosure-body">{opened&&(native?<InvestigationPanel assessment={assessment} action={action} busy={busy} onOpenWork={onOpenWork}/>:<Notice>A investigação por perspectivas está disponível no aplicativo desktop. A prévia não envia contexto à IA nem executa ferramentas.</Notice>)}</div></details>;
 }
 
 export type InvestigationWorkflow={preparation:AiPreparation;perspectives:Perspective[];onAttached:(job:WorkJobView)=>void;onDone:()=>Promise<unknown>;refresh:()=>Promise<unknown>;isCurrent:()=>boolean;journal:(command:{action:string;payload:Record<string,unknown>}|null,failed?:boolean)=>void};

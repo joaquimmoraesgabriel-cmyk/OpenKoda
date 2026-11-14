@@ -1,5 +1,5 @@
 import { useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import { Check, ChevronDown, CircleDot, ListChecks, Paperclip, Plus, ShieldCheck, ShieldQuestion } from 'lucide-react';
+import { Check, CircleDot, ListChecks, Paperclip, Plus, ShieldCheck, ShieldQuestion } from 'lucide-react';
 import { approvalModes, type ApprovalMode } from '../project-chat';
 
 type MenuProps = {
@@ -114,7 +114,7 @@ export function ChatComposerMenus({ mode, onMode, proposing, hasAttachment, disa
     </ComposerMenu>
     <ComposerMenu kind="approval" label="Modo de aprovação" title={'Modo de aprovação · ' + approvalModes[mode]} disabled={disabled}
       triggerLabel={'Modo de aprovação, ' + current.trigger}
-      trigger={<><Icon size={16}/><span>{current.trigger}</span><ChevronDown size={13}/></>}>
+      trigger={<><Icon size={16}/><span>{current.trigger}</span></>}>
       <p className="composer-menu-title">Aprovação nesta conversa</p>
       {choices.map(choice => <button type="button" role="menuitemradio" tabIndex={-1} key={choice.mode} aria-checked={mode === choice.mode}
         aria-label={approvalModes[choice.mode]} aria-describedby={id + choice.mode} onClick={() => onMode(choice.mode)}>

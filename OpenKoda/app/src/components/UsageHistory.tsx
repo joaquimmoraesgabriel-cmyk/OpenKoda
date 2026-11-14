@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowUpRight, CalendarDays, RefreshCw } from 'lucide-react';
+import { CalendarDays, RefreshCw } from 'lucide-react';
 import { native, request } from '../api';
 import { errorMessage, type Assessment } from '../types';
 import { emptyTotals, groupUsage, localDay, modelKey, offsetDay, periodRows, providerName, streaks, type UsageRow, type UsageTotals } from '../usage-history';
@@ -70,7 +70,7 @@ function Ranking({title,label,groups,names,colors,onOpen}:{
       <div className="uh-table-wrap"><table><thead><tr><th scope="col">{label}</th><th scope="col">Chamadas</th><th scope="col">Tokens</th></tr></thead>
         <tbody>{(showAll?entries:entries.slice(0,6)).map(([id,totals])=><tr key={id}><td>
           {colors && <i aria-hidden="true" className="uh-dot" data-color={colors.get(id)}/>}
-          {onOpen ? <button type="button" className="text-button" onClick={()=>onOpen(id)}>{names.get(id)} <ArrowUpRight size={12}/></button> : names.get(id) ?? id}
+          {onOpen ? <button type="button" className="text-button" onClick={()=>onOpen(id)}>{names.get(id)} </button> : names.get(id) ?? id}
         </td><td>{number.format(totals.requests)}</td><td>{metric(totals)}</td></tr>)}</tbody>
       </table></div>{entries.length>6 && <button type="button" className="text-button uh-expand" aria-expanded={showAll} onClick={()=>setShowAll(!showAll)}>{showAll?'Mostrar menos':'Mostrar todos ('+entries.length+')'}</button>}
     </>}

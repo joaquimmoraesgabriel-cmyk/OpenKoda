@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Check, ChevronRight, Eye, EyeOff, Plus, Search, X } from 'lucide-react';
+import { Check, Eye, EyeOff, Plus, Search, X } from 'lucide-react';
 import { native, request } from '../api';
 import { knownProvider, providers, personalProviders, type ProviderId, type ProviderStatus } from '../ai-provider';
 import { type Action, type Settings, errorMessage, shortDate } from '../types';
@@ -270,7 +270,7 @@ function ProviderDialog({initial, statuses, saved, preferDefault, action, observ
         <label className="provider-search"><Search size={16} aria-hidden="true"/><input type="search" aria-label="Pesquisar provedores" placeholder="Pesquisar provedores" value={query} onChange={e=>setQuery(e.target.value)}/></label>
         <div className="provider-options">{matching.map(id=><button type="button" className="provider-row" key={id} onClick={()=>go({page:statuses[id]?.hasApiKey?'models':'key',provider:id})}>
           <img src={providers[id].logo} width="28" height="28" alt=""/><span><strong>{providers[id].name}</strong><small>{new URL(providers[id].endpoint).hostname}</small></span>
-          <small>{statuses[id]?.hasApiKey ? stateLabel(statuses[id],isConfigured(id,statuses[id],saved)) : 'Chave de API'}</small><ChevronRight size={15} aria-hidden="true"/></button>)}</div>
+          <small>{statuses[id]?.hasApiKey ? stateLabel(statuses[id],isConfigured(id,statuses[id],saved)) : 'Chave de API'}</small></button>)}</div>
         {!matching.length && <p role="status">Nenhum provedor corresponde à pesquisa.</p>}
       </>}
       {step.page==='key' && item && <form id="provider-key-form" onSubmit={event=>{event.preventDefault();void saveKey();}}>

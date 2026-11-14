@@ -1,4 +1,4 @@
-import { Activity, ChevronRight } from 'lucide-react';
+import { Activity } from 'lucide-react';
 import { shortDate, type ActivityEvent } from '../types';
 import type { ProjectionInfo } from '../data-policy';
 import { ProjectionNotice } from './DataAccess';
@@ -32,7 +32,7 @@ export function ConversationTimeline({ events, messages, onContinue }: { events:
     </article>;
     const last = group[group.length - 1];
     return <details className="chat-activity" key={'activity-' + group[0].id}>
-      <summary><span className="chat-activity-label"><Activity size={16}/><strong>Atividade</strong><span>{group.length} {group.length === 1 ? 'etapa' : 'etapas'}</span><ChevronRight size={14}/></span><span className="chat-last-step">{last.message}</span></summary>
+      <summary><span className="chat-activity-label"><Activity size={16}/><strong>Atividade</strong><span>{group.length} {group.length === 1 ? 'etapa' : 'etapas'}</span></span><span className="chat-last-step">{last.message}</span></summary>
       <ol>{group.map(event => <li key={event.id}><span>{event.message}</span><time dateTime={event.at}>{shortDate(event.at)}</time></li>)}</ol>
     </details>;
   })}</>;

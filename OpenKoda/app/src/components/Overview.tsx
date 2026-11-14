@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowRight, ArrowUpRight, Clock3, Folder, FolderOpen, Layers, Plus } from 'lucide-react';
+import { Clock3, Folder, FolderOpen, Layers, Plus } from 'lucide-react';
 import { kindLabels, shortDate, statusLabels, type Assessment, type Project } from '../types';
 
 type Period = 'week' | 'month';
@@ -84,7 +84,7 @@ export default function Overview({ assessments, projects, busy, onOpenAssessment
     <div className="dashboard-numbers">
       <section className="dashboard-panel dashboard-stat dashboard-stat-featured">
         <h2>Aguardando revisão</h2><Clock3 aria-hidden="true" size={28}/><strong>{String(awaiting.length).padStart(2, '0')}</strong>
-        {pending && <button className="dashboard-link" onClick={() => onOpenAssessment(pending.id)}>Revisar pendência<ArrowUpRight size={15}/></button>}
+        {pending && <button className="dashboard-link" onClick={() => onOpenAssessment(pending.id)}>Revisar pendência</button>}
       </section>
       <section className="dashboard-panel dashboard-stat"><h2>Avaliações em andamento</h2><Layers aria-hidden="true" size={28}/><strong>{String(ongoing.length).padStart(2, '0')}</strong></section>
       <section className="dashboard-panel dashboard-stat"><h2>Projetos ativos</h2><Folder aria-hidden="true" size={28}/><strong>{String(activeProjects.length).padStart(2, '0')}</strong></section>
@@ -100,7 +100,7 @@ export default function Overview({ assessments, projects, busy, onOpenAssessment
         </div>
         <button type="button" className="dashboard-pill" disabled={busy && !next}
           onClick={() => next ? onOpenAssessment(next.id) : activeProjects.length ? onNewAssessment() : onNewProject()}>
-          {next ? pending ? 'Revisar avaliação' : 'Abrir avaliação' : activeProjects.length ? 'Preparar avaliação' : 'Criar projeto'}<ArrowRight size={16}/>
+          {next ? pending ? 'Revisar avaliação' : 'Abrir avaliação' : activeProjects.length ? 'Preparar avaliação' : 'Criar projeto'}
         </button>
       </section>
     </div>
@@ -109,7 +109,7 @@ export default function Overview({ assessments, projects, busy, onOpenAssessment
       {recentProjects.length === 0 ? <p className="dashboard-empty-projects">Seus projetos aparecerão aqui.</p> :
         <ul>{recentProjects.map(project => <li key={project.id}><button type="button" onClick={() => onOpenProject(project.id)}>
           <span className="dashboard-symbol"><Folder size={20} aria-hidden="true"/></span><strong>{project.name}</strong>
-          <span className="dashboard-project-kind">{kindLabels[project.kind]}</span><time dateTime={lastActivity.get(project.id)}>{shortDate(lastActivity.get(project.id)!)}</time><ArrowRight size={17}/>
+          <span className="dashboard-project-kind">{kindLabels[project.kind]}</span><time dateTime={lastActivity.get(project.id)}>{shortDate(lastActivity.get(project.id)!)}</time>
         </button></li>)}</ul>}
     </section>
   </div>;

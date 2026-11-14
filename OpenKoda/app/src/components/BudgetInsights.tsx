@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowRight, ChartNoAxesColumn, Wallet } from 'lucide-react';
+import { ChartNoAxesColumn, Wallet } from 'lucide-react';
 import type { BudgetStatus, BudgetCharge } from '../ai-budget';
 import { providers } from '../ai-provider';
 import { shortDate } from '../types';
@@ -38,7 +38,7 @@ export function BudgetOverview({status, onPolicy, policyOpen}: {status:BudgetSta
             <div className="balance-fractions"><span>{committedLabel}</span><span>Limite de {readableAmount(balance?.limitUsd)}</span></div></>}
         </div>
         <div className="budget-card-footer"><span>Custos pendentes <strong>{balance?.unresolvedCount ?? 'Não informado'}</strong></span>
-        <button type="button" className="button" aria-expanded={policyOpen} aria-controls={policyOpen ? 'usage-limits' : undefined} onClick={onPolicy}>{policyOpen ? 'Fechar limites e preços' : 'Gerenciar limites e preços'}<ArrowRight size={14} aria-hidden="true"/></button></div>
+        <button type="button" className="button" aria-expanded={policyOpen} aria-controls={policyOpen ? 'usage-limits' : undefined} onClick={onPolicy}>{policyOpen ? 'Fechar limites e preços' : 'Gerenciar limites e preços'}</button></div>
       </div>
     </section>
     <section className="billing-group">

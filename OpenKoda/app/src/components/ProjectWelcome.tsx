@@ -1,4 +1,4 @@
-import { ArrowRight, FolderCode, Github, Globe2, Network } from 'lucide-react';
+import { FolderCode, Github, Globe2, Network } from 'lucide-react';
 import { useState } from 'react';
 import { KMark } from './ProjectRail';
 
@@ -26,7 +26,7 @@ export default function ProjectWelcome({onStart,sourceOnly=false}:{onStart:(kind
           <span className="welcome-radio" aria-hidden="true"/>
         </label>)}
       </fieldset>
-      <button type="button" className="button primary welcome-start" onClick={()=>onStart(kind)}>Criar projeto<ArrowRight size={16}/></button>
+      <button type="button" className="button primary welcome-start" onClick={()=>onStart(kind)}>Criar projeto</button>
     </div>
   </section>;
 }

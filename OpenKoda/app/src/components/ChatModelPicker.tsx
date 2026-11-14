@@ -1,5 +1,5 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
-import { Check, ChevronDown, Grid2X2, Plus, Search, X } from 'lucide-react';
+import { Check, Grid2X2, Plus, Search, X } from 'lucide-react';
 import { native, request } from '../api';
 import { personalProviders, providers, type AiSelection, type ProviderId, type ProviderStatus } from '../ai-provider';
 import { type CommercialModel, type Reasoning, accountChanged } from '../commercial';
@@ -136,7 +136,7 @@ export function ChatModelPicker({ value, onChange, disabled, onModels, forAnalys
       title={value ? providers[value.provider].name + ' · ' + value.model : 'Escolher modelo'}
       aria-label={'Escolher modelo · ' + (value?.model || 'Nenhum selecionado')}>
       {value && <img src={providers[value.provider].logo} alt="" width="17" height="17"/>}
-      <span>{value?.model || 'Escolher modelo'}</span><ChevronDown size={13}/>
+      <span>{value?.model || 'Escolher modelo'}</span>
     </button>
     <div id={id} popover="auto" role="dialog" ref={dialog} className="chat-model-dialog" aria-label="Escolher provedor e modelo"
       onToggle={e => {

@@ -5,7 +5,7 @@ import { evidenceMethodGate } from '../evidence-scope';
 import { OriginView, useEvidenceOrigins } from './EvidenceOrigins';
 import { ScopeRestriction, useScopeAccess } from './ScopeAccess';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ChevronDown, RefreshCw, Square, Wrench } from 'lucide-react';
+import { RefreshCw, Square, Wrench } from 'lucide-react';
 import { native, request } from '../api';
 import { Action, Assessment, CandidateDraft, errorMessage, shortDate } from '../types';
 import { Field, KeyValue, Notice } from './shared';
@@ -62,7 +62,7 @@ export default function KaliBridgePanel({assessment,action,busy,onCandidate,reve
   useEffect(()=>setTransferConsent(false),[scope.revision,originKey]);
   const blocked=busy||pending||checking||!!active||status?.hasUnresolved;
 
-  return <details ref={detailsRef} className="disclosure kali-bridge" onToggle={event=>setOpen(event.currentTarget.open)}><summary><Wrench size={21}/><span>{scanOnly?'Analisar evidência com ripgrep':'Kali: diagnóstico e integridade'}</span><ChevronDown size={18}/></summary><div className="disclosure-body">
+  return <details ref={detailsRef} className="disclosure kali-bridge" onToggle={event=>setOpen(event.currentTarget.open)}><summary><Wrench size={21}/><span>{scanOnly?'Analisar evidência com ripgrep':'Kali: diagnóstico e integridade'}</span></summary><div className="disclosure-body">
     {!native?<Notice>O diagnóstico e a verificação de evidências no Kali estão disponíveis apenas no aplicativo desktop. A prévia não inicia sessões MCP.</Notice>:<>
       {!scanOnly&&<><p className="muted">Consulte o ambiente dedicado, calcule o hash ou analise padrões de uma evidência selecionada. Estas operações não executam o conteúdo nem liberam outras ferramentas.</p>
       <ScopeRestriction method="kali.runtime-diagnostics.v1"/>{!origins.combined&&<><ScopeRestriction method="kali.hash-evidence.v1"/><ScopeRestriction method="kali.rg.signals.v1"/></>}{origins.combined&&<p className="muted">O diagnóstico depende somente do método comum do ambiente e não comprova acesso a uma entrada. Hash e análise exigem permissão de todas as entradas contribuintes da evidência escolhida.</p>}<div className="inline-actions"><button className="button" type="button" disabled={checking} onClick={()=>void check()}><RefreshCw size={16}/>{checking?'Consultando…':'Consultar estado da conexão'}</button><button className="button" type="button" disabled={!!blocked||!diagnosticAllowed} onClick={()=>void perform('kali.mcp.diagnose')}>Diagnosticar Kali nesta avaliação</button></div></>}

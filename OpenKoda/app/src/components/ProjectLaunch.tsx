@@ -1,6 +1,6 @@
 import { conversationTitle } from '../chat-draft';
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, ArrowRight, FolderOpen, Github, Globe2, Network, SlidersHorizontal } from 'lucide-react';
+import { FolderOpen, Github, Globe2, Network, SlidersHorizontal } from 'lucide-react';
 import { native, request } from '../api';
 import { knownProvider, selectionLabel, type AiSelection, type ProviderStatus } from '../ai-provider';
 import { stageOpeningAnalysis } from '../chat-opening';
@@ -244,7 +244,7 @@ export default function ProjectLaunch({sourceOnly=false,snapshot, action, busy, 
     setKind(next);setRoot('');setRelative('');setNarrow(false);setTitle('');setRipgrep(false);setError('');
   }
   return <section className="launch-page">
-    <header><button className="button quiet" onClick={onCancel} disabled={locked}><ArrowLeft size={16}/>Voltar</button>
+    <header><button className="button quiet" onClick={onCancel} disabled={locked}>Voltar</button>
       <h1>{initialProject?'Nova conversa':'Novo projeto'}</h1></header>
     <form onSubmit={event=>{event.preventDefault();void launch();}}>
       <fieldset disabled={locked}><legend className="launch-legend">{sourceOnly?'Código do projeto':'Tipo de análise'}</legend>
@@ -303,7 +303,7 @@ export default function ProjectLaunch({sourceOnly=false,snapshot, action, busy, 
         {error && saved && <button className="button" type="button" onClick={()=>onCreated(saved.projectId,saved.assessmentId)}>Abrir conversa criada</button>}
         {terminalImport&&<div className="inline-actions"><p>O download anterior terminou sem uma cópia pronta. Inicie outra tentativa para este mesmo repositório.</p><button type="button" className="button" disabled={locked||unsupportedScan||needsModel} onClick={()=>void launch(true)}>Tentar novo download</button></div>}
         <button type="submit" className="button primary launch-submit" disabled={locked || terminalImport || unsupportedScan || needsModel || !!review&&!review.accepted || !(source==='github'?githubUrl.trim():root.trim()) || narrow&&!relative.trim()}>
-          {submitting?imported?.status==='downloading'?'Baixando repositório…':'Criando…':initialProject?'Criar conversa':'Criar projeto'}<ArrowRight size={16}/></button>
+          {submitting?imported?.status==='downloading'?'Baixando repositório…':'Criando…':initialProject?'Criar conversa':'Criar projeto'}</button>
       </fieldset>
       {imported?.status==='downloading'&&<div className="github-import-progress" role="status"><p>{imported.message||'Baixando a cópia do repositório…'}</p><button type="button" className="button" disabled={cancellingImport} onClick={()=>void cancelImport()}>{cancellingImport?'Cancelando…':'Cancelar download'}</button></div>}
     </form>

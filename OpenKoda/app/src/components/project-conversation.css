@@ -63,8 +63,6 @@
 .chat-activity summary::-webkit-details-marker { display: none; }
 .chat-activity-label { display: flex; align-items: center; gap: .45rem; line-height: 1.5; }
 .chat-activity-label strong { color: var(--text); font-weight: 600; }
-.chat-activity-label svg:last-child { margin-inline-start: .1rem; }
-.chat-activity[open] .chat-activity-label svg:last-child { transform: rotate(90deg); }
 .chat-activity summary:hover { background: var(--subtle); }
 .chat-last-step { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-inline-start: 1.45rem; margin-top: .2rem; }
 .chat-activity[open] .chat-last-step { display: none; }

@@ -2,7 +2,7 @@ import { PacketContext, PacketOptions, PacketReview, packetReady, usePacketOptio
 import { ContextTargets, useContextTargets, OperationTarget, useOperationTarget } from './TargetSelection';
 import { ScopeRestriction, useScopeAccess } from './ScopeAccess';
 import { useEffect, useRef, useState } from 'react';
-import { ChevronDown, Lightbulb } from 'lucide-react';
+import { Lightbulb } from 'lucide-react';
 import { native, request } from '../api';
 import { Action, Assessment, Settings, errorMessage, shortDate } from '../types';
 import { OperationAdapter, OperationProposal, operationAdapters, operationLabels, validOperationProposal, operationMatchesTargets } from '../ai-operation';
@@ -17,7 +17,7 @@ const states:Record<string,string>={pending:'Sugestão pendente',accepted:'Suges
 const responseStates:Record<string,string>={pending:'Envio pendente',completed:'Resposta recebida',incomplete:'Resposta incompleta',unknown:'Resultado ou consumo desconhecido',failed:'Falha registrada'};
 const hostActions:Partial<Record<OperationAdapter,string>>={'local.inventory.v1':'assessment.plan','source.rules.v1':'assessment.sourcePlan','http.headers.v1':'assessment.plan'};
 
-export default function AiOperationProposal(props:Props){const [opened,setOpened]=useState(false);return <details className="disclosure ai-operation-proposal" onToggle={e=>setOpened(e.currentTarget.open)}><summary><Lightbulb size={21}/><span>Sugerir próxima operação com IA</span><ChevronDown size={18}/></summary><div className="disclosure-body">{opened&&(native?<ProposalPanel {...props}/>:<Notice>A sugestão assistida está disponível no aplicativo desktop. A prévia não envia contexto à IA nem prepara operações.</Notice>)}</div></details>;}
+export default function AiOperationProposal(props:Props){const [opened,setOpened]=useState(false);return <details className="disclosure ai-operation-proposal" onToggle={e=>setOpened(e.currentTarget.open)}><summary><Lightbulb size={21}/><span>Sugerir próxima operação com IA</span></summary><div className="disclosure-body">{opened&&(native?<ProposalPanel {...props}/>:<Notice>A sugestão assistida está disponível no aplicativo desktop. A prévia não envia contexto à IA nem prepara operações.</Notice>)}</div></details>;}
 function ProposalPanel({assessment,settings,projectActive,action,busy,onNavigate}:Props){
   const scope=useScopeAccess();const targets=useContextTargets('ai.remote-review.v1');const packet=usePacketOptions(assessment);const operationTarget=useOperationTarget();const operationPayload=operationTarget.combined&&operationTarget.option?{operationTargetRef:operationTarget.option.targetRef}:{};
   const [selected,setSelected]=useState<string[]>([]);const [allowed,setAllowed]=useState<OperationAdapter[]>([]);const [message,setMessage]=useState('');

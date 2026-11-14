@@ -60,7 +60,13 @@ test('cadastro protegido abre o site e a conta pode entrar e sair sem alterar o 
   await page.getByRole('button',{name:/PLUS.*219/}).click();
   await expect(page.getByText('Simulação registrada.')).toBeVisible();
   await expect(page.getByText('teste@example.invalid · Sem assinatura')).toBeVisible();
-  await page.getByText('Chamados de suporte e erros',{exact:true}).click();
+  const support = page.locator('summary').filter({hasText:'Chamados de suporte e erros'});
+  await support.focus();
+  await support.press('Enter');
+  await expect(page.getByLabel('Assunto',{exact:true})).toBeVisible();
+  await support.press('Space');
+  await expect(page.getByLabel('Assunto',{exact:true})).toBeHidden();
+  await support.press('Enter');
   await page.getByLabel('Assunto',{exact:true}).fill('Falha sintética');
   await page.getByLabel('Descrição do chamado').fill('Teste do fluxo de suporte.');
   await page.getByRole('button',{name:'Enviar chamado'}).click();

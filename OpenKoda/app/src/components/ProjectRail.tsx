@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronDown, ChevronRight, Folder, Globe, House, Network, PanelsTopLeft, Plus, ScanSearch, Settings, UserRound } from 'lucide-react';
+import { Minus, Folder, Globe, House, Network, PanelsTopLeft, Plus, ScanSearch, Settings, UserRound } from 'lucide-react';
 import { useIdentity } from '../profile-identity';
 import type { Assessment, Project, View } from '../types';
 
@@ -39,7 +39,7 @@ export function ProjectTree({projects,assessments,projectId,assessmentId,busy,on
       const chats=assessments.filter(a=>a.projectId===project.id).sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt));
       return <section key={project.id} className="tree-group">
         <div className="tree-row" data-active={project.id===projectId}>
-          <button type="button" className="tree-toggle" aria-label={(open?'Recolher ':'Expandir ')+project.name} aria-expanded={open} onClick={()=>setCollapsed(prev=>open?[...prev,project.id]:prev.filter(id=>id!==project.id))}>{open?<ChevronDown size={12}/>:<ChevronRight size={12}/>}</button>
+          <button type="button" className="tree-toggle" aria-label={(open?'Recolher ':'Expandir ')+project.name} aria-expanded={open} onClick={()=>setCollapsed(prev=>open?[...prev,project.id]:prev.filter(id=>id!==project.id))}>{open?<Minus size={12} aria-hidden="true"/>:<Plus size={12} aria-hidden="true"/>}</button>
           <button className="tree-project" type="button" onClick={()=>{setCollapsed(prev=>prev.filter(id=>id!==project.id));onProject(project.id);}} title={project.name}><Icon size={17}/><span>{project.name}</span></button>
           <button className="tree-add" type="button" disabled={busy} title="Criar nova conversa" aria-label={'Criar nova conversa em '+project.name} onClick={()=>{setCollapsed(prev=>prev.filter(id=>id!==project.id));onNewChat(project);}}><Plus size={16}/></button>
         </div>

@@ -1,5 +1,5 @@
 import { useRef, useState, type FormEvent } from 'react';
-import { ArrowUpRight, CalendarDays, Database, Monitor, Pencil, UserRound } from 'lucide-react';
+import { CalendarDays, Database, Monitor, Pencil, UserRound } from 'lucide-react';
 import { native } from '../api';
 import { avatarColors, saveIdentity, useIdentity, type Identity } from '../profile-identity';
 import type { Snapshot } from '../types';
@@ -102,8 +102,8 @@ export default function WorkspaceProfile({ snapshot, onSettings, onUsageHistory 
           <div><dt><Database size={17} aria-hidden="true"/>Armazenamento</dt><dd>{native ? 'Banco de dados local' : 'Dados de demonstração do navegador'}</dd></div>
         </dl>
         <div className="inline-actions">
-          <button type="button" className="button" onClick={onSettings}>Preferências do aplicativo<ArrowUpRight size={15} aria-hidden="true"/></button>
-          <button type="button" className="button" onClick={onUsageHistory}>Histórico de uso<ArrowUpRight size={15} aria-hidden="true"/></button>
+          <button type="button" className="button" onClick={onSettings}>Preferências do aplicativo</button>
+          <button type="button" className="button" onClick={onUsageHistory}>Histórico de uso</button>
         </div>
       </section>
     </div>
