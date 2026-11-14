@@ -1,6 +1,6 @@
 import {desktopVersion} from './editorial.mjs';
 const groups = [
- {title:'Produto', description:'Conheça seu espaço para investigar código.', note:'Projeto, conversa e evidência, da primeira pergunta ao relatório.', pages:[
+ {title:'OpenKoda', description:'Conheça seu espaço para investigar código.', note:'Projeto, conversa e evidência, da primeira pergunta ao relatório.', pages:[
   ['produto','Visão geral','Conheça o aplicativo para Windows.'],
   ['exemplos','Exemplos de revisão','Siga um caso do código ao relatório.'],
   ['conexoes','Conexões de IA','Compare credencial pessoal e assinatura.'],
@@ -34,5 +34,5 @@ export function footer(brand,route) {
   ['Atendimento',[['suporte','Contato e suporte'],['perguntas','Perguntas frequentes'],['guias/conta','Conta e chamados']]],
   ['Privacidade e termos',[['politicas','Todas as políticas'],['privacidade','Privacidade'],['termos','Termos de uso'],['reembolso','Cancelamento e reembolso'],['suboperadores','Fornecedores']]]
  ];
- return `<footer class="site-footer"><div class="footer-inner"><div class="footer-brand">${brand}<p>Entenda o código.<br>Continue a investigação.</p><small>Koda · Brasil</small></div><div class="footer-groups">${blocks.map(([title,items])=>`<nav aria-label="${title}"><strong>${title}</strong>${items.map(([path,label])=>link(route,path,label)).join('')}</nav>`).join('')}</div><div class="footer-tools"><span>OpenKoda ${desktopVersion} · edição de pré-lançamento</span><button id="cookies" type="button">Preferências de cookies</button><div class="site-appearance"><label for="site-appearance">Aparência</label><select id="site-appearance"><option value="system">Do sistema</option><option value="light">Clara</option><option value="dark">Escura</option></select></div></div></div></footer>`;
+ return `<footer class="site-footer"><div class="footer-inner"><div class="footer-brand">${brand}<p>Entenda o código.<br>Continue a investigação.</p><small>OpenKoda é um aplicativo da OpenGlitch.<br>Brasil · pré-lançamento</small></div><div class="footer-groups">${blocks.map(([title,items])=>`<nav aria-label="${title}"><strong>${title}</strong>${items.map(([path,label])=>link(route,path,label)).join('')}</nav>`).join('')}</div><div class="footer-tools"><span>OpenKoda ${desktopVersion} · edição de pré-lançamento</span><button id="cookies" type="button">Preferências de cookies</button><div class="site-appearance"><label for="site-appearance">Aparência</label><select id="site-appearance"><option value="system">Do sistema</option><option value="light">Clara</option><option value="dark">Escura</option></select></div></div></div></footer>`;
 }

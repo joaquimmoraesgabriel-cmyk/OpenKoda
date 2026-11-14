@@ -1,0 +1,298 @@
+/* OpenGlitch: paper, graphite and ordered digital matter.
+   Additive presentation layer. Existing routes, state selectors and embedded
+   desktop styles remain owned by their original modules. */
+:root {
+  --ink: light-dark(#202124, #f5f4ef);
+  --paper: light-dark(#f5f4ef, #202124);
+  --surface: light-dark(#eeede8, #292a2f);
+  --muted: light-dark(#5e5d66, #b9b7c2);
+  --line: light-dark(#cecdc8, #505057);
+  --dark: #202124;
+  --light: light-dark(#e9e2fa, #353044);
+  /* Existing dark panels use accent as a fill behind graphite text. */
+  --accent: #cbbdff;
+  --og-violet: light-dark(#6942e7, #b8a4ff);
+  --on-accent: #202124;
+  --focus: var(--og-violet);
+  --on-action: light-dark(#f5f4ef, #202124);
+  --action-hover: light-dark(#414148, #dedbd3);
+  --matter-ink: #202124;
+  --matter-accent: #6942e7;
+  --og-gutter: clamp(1.25rem, 5vw, 5rem);
+  --gutter: var(--og-gutter);
+  --section-space: clamp(4.5rem, 8vw, 8rem);
+  --reading-size: 1.125rem;
+}
+body { font-size: 1.125rem; }
+::selection { background: #ded4fa; color: #202124; }
+button, input, select, textarea { accent-color: var(--og-violet); }
+:focus-visible { outline-color: var(--og-violet); }
+.section-name, .cover-context { letter-spacing: .055em; font-size: .8125rem; }
+.inner { padding-block: clamp(3.5rem, 7vw, 6.5rem); }
+.inner > h1 { font-size: clamp(2.8rem, 5.5vw, 5.25rem); line-height: 1.035; letter-spacing: -.055em; }
+.inner > .lead { max-width: 53ch; margin-block: 1.5rem 3.5rem; }
+.lead { font-size: clamp(1.125rem, 1.65vw, 1.4rem); }
+.site-header { border-bottom-color: transparent; }
+.header-inner { min-height: 5.5rem; gap: clamp(1rem, 3vw, 3rem); }
+.brand { font-size: 1.55rem; letter-spacing: -.035em; gap: .65rem; }
+.brand svg { width: 1.85rem; height: 1.85rem; }
+.brand span { line-height: 1.1; }
+#primary-nav { gap: clamp(.9rem, 1.8vw, 1.7rem); }
+.nav-flyout { border-radius: 0 0 1.25rem 1.25rem; box-shadow: 0 20px 30px -25px #20212440; }
+.nav-destinations a { border-radius: .75rem; }
+.nav-actions { gap: .75rem; }
+.primary, .login, .plan-link, #menu-toggle,
+.site-appearance select, #account button:not(.secondary), #account .secondary,
+#account input:not([type=checkbox]):not([type=radio]), #account select, #account textarea,
+#cookie-box button { border-radius: .8rem; }
+.primary, .login, #account button:not(.secondary), #cookie-box button {
+  background: var(--ink); color: var(--on-action); border-color: var(--ink);
+}
+.primary:hover, .login:hover, #account button:not(.secondary):hover, #cookie-box button:hover {
+  background: var(--action-hover); color: var(--on-action); border-color: var(--action-hover);
+}
+.plan-link:hover { background: var(--ink); color: var(--paper); }
+.text-action { border-bottom-color: var(--og-violet); }
+.text-action:hover { color: var(--og-violet); text-decoration: none; }
+
+/* The artwork owns the complete section; content retains its reading measure. */
+main.home { max-width: none; padding-inline: 0; }
+.home > :not(.og-opening):not(.og-closing) {
+  width: calc(100% - 2 * var(--gutter));
+  max-width: calc(var(--wrap) - 2 * var(--gutter));
+  margin-inline: auto;
+}
+.og-opening { position: relative; isolation: isolate; background: var(--paper); }
+.og-opening-inner {
+  position: relative; z-index: 1;
+  width: 100%; max-width: var(--wrap); margin-inline: auto;
+  min-height: min(48rem, calc(100svh - 5.5rem));
+  padding: clamp(4rem, 7.5vw, 7rem) var(--gutter) clamp(5rem, 9vw, 9rem);
+}
+.og-opening-copy { width: min(70%, 49rem); }
+.og-opening .section-name { margin-bottom: 1.3rem; }
+.og-opening h1 { font-size: clamp(3.4rem, 6.6vw, 6.4rem); line-height: 1.025; letter-spacing: -.055em; font-weight: 620; }
+.og-opening .og-lead { font-size: clamp(1.125rem, 1.5vw, 1.35rem); line-height: 1.65; color: var(--muted); max-width: 39ch; margin-top: 1.8rem; }
+.og-opening .actions { margin-top: 2rem; }
+.og-opening .og-availability { max-width: 48ch; margin-top: 1.25rem; font-size: .9rem; color: var(--muted); line-height: 1.65; }
+.og-matter { position: absolute; inset: 0; z-index: 0; overflow: clip; pointer-events: none; user-select: none; }
+.og-matter canvas, .og-fallback, .og-fallback img, .og-runtime-fallback {
+  position: absolute; inset: 0; display: block; width: 100%; height: 100%; pointer-events: none;
+}
+.og-fallback img { object-fit: cover; }
+.og-runtime-fallback > svg { display: block; width: 100%; height: 100%; }
+.og-matter canvas { opacity: 0; }
+.og-fallback-dark { display: none; }
+.og-opening[data-fallback-ready="true"] .og-fallback { visibility: hidden; }
+[data-matter-ready="true"] > .og-matter canvas { opacity: 1; }
+[data-matter-ready="true"] > .og-matter .og-fallback { visibility: hidden; }
+[data-matter-ready="true"] > .og-matter .og-runtime-fallback { visibility: hidden; }
+:root[data-appearance="dark"] { --matter-ink: #f5f4ef; --matter-accent: #b8a4ff; }
+:root[data-appearance="dark"] .og-fallback-light { display: none; }
+:root[data-appearance="dark"] .og-fallback-dark { display: block; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-appearance="light"]) { --matter-ink: #f5f4ef; --matter-accent: #b8a4ff; }
+  :root:not([data-appearance="light"]) .og-fallback-light { display: none; }
+  :root:not([data-appearance="light"]) .og-fallback-dark { display: block; }
+}
+.edition-band { min-height: 3.75rem; border-bottom: 1px solid var(--line); font-size: .875rem; }
+.edition-band a { color: var(--ink); }
+
+/* The real desktop demo stays a calm, usable frame between expressive fields. */
+.home .koda-tour { margin-block: 4.5rem var(--section-space); }
+.tour-heading { gap: clamp(2rem, 5vw, 5rem); margin-bottom: 2rem; }
+.tour-heading h2 { font-size: clamp(2.1rem, 3.7vw, 3.8rem); max-width: 19ch; line-height: 1.08; letter-spacing: -.045em; }
+.tour-heading p { font-size: var(--reading-size); color: var(--muted); }
+.koda-demo { border-radius: 1rem; box-shadow: none; border-color: var(--line); }
+.kd-topline { background: #202124; color: #f5f4ef; }
+.kd-wordmark span { color: #bbb8c5; }
+.kd-reset { border-color: #76737f; border-radius: .7rem; }
+.kd-reset:hover { background: #3a3742; }
+.kd-disclosure, .tour-footnote { font-size: .875rem; }
+.kd-skip { font-size: .8125rem; }
+.feature-heading h2, .comparison-section h2 { letter-spacing: -.045em; line-height: 1.08; }
+.review-controls, .review-capture a, .usage-capture a, .guide-figure, .screen-print a { border-radius: 1rem; }
+.review-controls button { border-radius: .65rem; }
+.review-steps > li[data-current]::before { background: var(--og-violet); }
+.review-steps > li[data-current] .review-number { color: var(--og-violet); }
+.review-steps > li[data-current] blockquote { border-color: var(--og-violet); }
+.review-steps p, .connection-scene > div > p, .usage-explanation > p:not(.section-name) { line-height: 1.75; }
+.product-atlas { border-block: 0; padding-block: 0; }
+.atlas-grid { gap: 1.25rem; }
+.atlas-grid > article { border-radius: 1.1rem; }
+.atlas-conversation { background: var(--surface); border: 1px solid var(--line); }
+.atlas-personal { background: transparent; }
+.atlas-evidence, .route-note, .home-quota, .card-sketch.evidence { background: #25252b; border-color: #45434f; }
+.atlas-evidence .atlas-copy p:not(.section-name), .file-label { color: #c3c0cd; }
+.evidence-note { background: #202124; border-color: #55515f; border-radius: .8rem; }
+.evidence-note [data-evidence-line] { background: #34313e; }
+.evidence-note button { border-radius: .75rem; }
+.evidence-note button:hover { background: #413a50; }
+.evidence-note > p:last-child:not(.file-label) { color: #d5d0df; border-color: #55515f; }
+.preference-strips span { border-radius: .75rem; }
+.switch-nav { scrollbar-color: var(--muted) var(--surface); }
+.nav-ready .switch-nav { border-radius: .95rem; }
+.switch-nav button { border-radius: .7rem; }
+.route-note { border-radius: 1.1rem; }
+.route-simulation button { border-radius: .75rem; }
+.route-simulation p { color: #e0daee; }
+.usage-feature { border-block: 0; padding-block: 0; }
+.home-quota { border-radius: 1.1rem; }
+.home-faq, .home-news { padding-top: clamp(2.5rem, 5vw, 4.5rem); border-top: 1px solid var(--line); }
+.home-faq h2, .home-news h2 { font-size: clamp(2.2rem, 3.4vw, 3.6rem); }
+.story-card > div > p { font-size: 1.0625rem; }
+.card-sketch { border-radius: 1rem; }
+.bulletin-list a { padding-block: 1.65rem; }
+.bulletin-list strong { letter-spacing: -.035em; }
+.bulletin-list a:hover strong { text-decoration-color: var(--og-violet); }
+.home .og-closing {
+  position: relative; isolation: isolate; width: 100%; max-width: none;
+  margin: var(--section-space) 0 0; border: 0; border-top: 1px solid var(--line); border-radius: 0;
+  background: var(--surface); color: var(--ink);
+  padding: clamp(4rem, 7vw, 7rem) max(var(--gutter), calc((100% - var(--wrap)) / 2 + var(--gutter)));
+}
+.og-closing > div:not(.og-matter) { position: relative; z-index: 1; }
+.og-closing .og-matter { opacity: .22; }
+.og-closing h2 { max-width: 22ch; }
+.og-closing .section-name, .og-closing p:not(.section-name) { color: var(--muted); }
+.home .og-closing > div:last-child > a:last-child { color: var(--ink); }
+.og-closing .primary { background: var(--ink); border-color: var(--ink); color: var(--on-action); }
+.og-closing .primary:hover { background: var(--action-hover); border-color: var(--action-hover); }
+
+/* Pricing is a comparison, guides are reading space, news is an index. */
+.pricing-intro { background: transparent; border-width: 1px 0; border-radius: 0; padding: 1.25rem 0; }
+.offer-section { margin-top: 3rem; }
+.offer { border-radius: 1rem; background: var(--paper); gap: 1.3rem; }
+.offer:first-child { background: var(--surface); }
+.offer:nth-child(2) { border-color: var(--og-violet); }
+.offer h2 { font-size: 2.15rem; }
+.offer h3 { line-height: 1.6; }
+.offer li { font-size: 1rem; }
+.offer a { border-radius: .75rem; }
+.comparison-scroll { border-block: 1px solid var(--line); scrollbar-color: var(--muted) var(--surface); }
+.comparison-scroll th, .comparison-scroll td { padding-block: 1.2rem; }
+.comparison-scroll tbody th { font-weight: 550; }
+.guide-directory a { padding-block: 1.9rem; }
+.guide-directory a:hover strong { color: var(--og-violet); }
+.guide-intro-note { border-color: var(--og-violet); background: var(--surface); border-radius: 0 1rem 1rem 0; }
+.lesson-index { border-color: var(--og-violet); }
+.lesson-index a[aria-current] { color: var(--og-violet); }
+.guide-figure { padding: 1rem; }
+.capture-notes { gap: .85rem; }
+.capture-notes li > span { border-radius: .4rem; }
+.policy-text p, .story-body p { line-height: 1.85; }
+.story-meta { font-size: .9rem; }
+.news-archive { margin-top: 4rem; }
+.news-archive h2 { color: var(--muted); font-size: 1.1rem; font-weight: 550; letter-spacing: -.015em; }
+.install-panel { background: var(--surface); border-radius: 1.1rem; padding: clamp(1.5rem, 3vw, 2.5rem); }
+
+/* Account surfaces use the same palette without changing form/route behavior. */
+.account-panels { background: light-dark(#faf9f6, #25262b); border-radius: 1rem; }
+.account-navigation a { border-radius: .75rem; }
+.account-navigation a[aria-current=page] { background: var(--surface); }
+.account-navigation a[aria-current=page]::before, .account-plan-state::before { background: var(--og-violet); }
+.account-summary { background: #25252b; border-color: #55515f; border-radius: .9rem; }
+.account-summary > div + div { border-color: #55515f; }
+.account-summary p { color: #c3c0cd; }
+.account-summary [data-plan-label] { color: var(--on-accent); border-radius: .5rem; }
+.account-task-list > a, .account-surface, .account-plan-state, .account-empty, #tickets > li { border-radius: .85rem; }
+#account .account-workspace button { border-radius: .75rem; min-height: 2.75rem; }
+#account .account-workspace input:not([type=checkbox]):not([type=radio]), #account .account-workspace textarea {
+  border-radius: .75rem; background: var(--paper);
+}
+#account .plan-choice label { border-radius: .75rem; background: var(--paper); }
+#account .plan-choice label:has(:checked) { background: var(--surface); border-color: var(--og-violet); }
+.account-usage-grid progress { accent-color: var(--og-violet); }
+.account-usage-grid progress::-webkit-progress-value { background: var(--og-violet); }
+#account .account-danger button:not(.secondary), #account .danger button,
+#account .account-danger button:not(.secondary):hover, #account .danger button:hover {
+  background: #842d26; border-color: #842d26; color: #fff;
+}
+.site-footer { margin-top: 0; background: var(--surface); border-color: var(--line); }
+.footer-inner { padding-block: 4.5rem 1.75rem; }
+.footer-brand > p { max-width: 24ch; }
+.footer-groups a { min-height: 2.2rem; font-size: .9375rem; line-height: 1.5; }
+.footer-groups strong { font-size: .9375rem; }
+.footer-tools { font-size: .875rem; }
+#cookie-box { border-radius: 1rem; box-shadow: 0 10px 35px -25px #20212450; }
+#cookie-box p { font-size: .9375rem; }
+
+@media (min-width: 1500px) {
+  .og-opening-inner { min-height: 48rem; }
+}
+@media (max-width: 1100px) {
+  .header-inner { gap: 1.25rem; }
+  .brand { font-size: 1.35rem; }
+  #primary-nav { gap: .9rem; }
+  .og-opening-copy { width: min(78%, 45rem); }
+  .og-opening h1 { font-size: clamp(3.2rem, 7vw, 5rem); }
+}
+@media (max-width: 900px) {
+  .header-inner { min-height: 4.5rem; gap: .5rem; }
+  .brand { font-size: 1.3rem; }
+  .brand svg { width: 1.55rem; height: 1.55rem; }
+  .nav-actions { gap: .45rem; }
+  #menu-toggle { min-height: 2.75rem; padding-inline: .65rem; border: 1px solid var(--line); }
+  .nav-ready #primary-nav.is-open { border-radius: 0 0 1rem 1rem; }
+  .nav-flyout { border-radius: 0; box-shadow: none; }
+  .og-opening-inner { min-height: 38rem; padding-block: 3.5rem 5rem; }
+  .og-opening-copy { width: min(83%, 42rem); }
+  .og-opening h1 { font-size: clamp(3rem, 7.5vw, 4.5rem); }
+  .tour-heading h2 { font-size: clamp(2.1rem, 5vw, 3rem); max-width: 24ch; }
+  .home .koda-tour { margin-top: 3.5rem; }
+  .home .og-closing { padding-block: 4rem; }
+  .og-closing > div:last-child { max-width: none; }
+  .footer-inner { padding-top: 3.5rem; }
+}
+@media (max-width: 640px) {
+  :root { --gutter: 1.25rem; --section-space: 4.5rem; }
+  /* Keep the mobile reading area clear; the same field emerges at its foot. */
+  .og-opening .og-matter {
+    -webkit-mask-image: linear-gradient(to bottom, transparent 78%, #000 92%);
+    mask-image: linear-gradient(to bottom, transparent 78%, #000 92%);
+  }
+  .og-opening-inner { min-height: 0; padding-top: 2.75rem; padding-bottom: 11rem; }
+  .og-opening-copy { width: 100%; max-width: 34rem; }
+  .og-opening h1 { font-size: clamp(2.15rem, 9.1vw, 3.65rem); letter-spacing: -.052em; }
+  .og-opening .section-name { margin-bottom: 1.1rem; }
+  .og-opening .og-lead { max-width: 34ch; font-size: 1.125rem; margin-top: 1.5rem; }
+  .og-opening .actions { gap: .85rem 1.3rem; margin-top: 1.6rem; }
+  .og-opening .og-availability { font-size: .875rem; max-width: 39ch; }
+  .edition-band { padding-block: .9rem; }
+  .home .koda-tour { margin-top: 3rem; }
+  .tour-heading { gap: 1.2rem; }
+  .tour-heading h2 { font-size: 2.15rem; }
+  .tour-heading p { font-size: 1.0625rem; }
+  .kd-disclosure { font-size: .8125rem; }
+  .home-faq, .home-news { padding-top: 2.5rem; }
+  .home-faq h2, .home-news h2 { font-size: 2.2rem; }
+  .home .og-closing { padding-block: 3.5rem; }
+  .og-closing h2 { font-size: 2.25rem; }
+  .inner { padding-block: 3rem; }
+  .inner > h1 { font-size: clamp(2.5rem, 8.5vw, 3.5rem); }
+  .inner > .lead { margin-bottom: 2.5rem; }
+  .guide-figure { padding: .6rem; }
+  .capture-notes { padding-inline: .15rem; }
+  .guide-directory a { padding-block: 1.5rem; }
+  .offer { padding: 1.5rem; }
+  .footer-groups { gap: 1.75rem 1.1rem; }
+  .footer-groups a { font-size: .875rem; }
+}
+@media (max-width: 370px) {
+  .header-inner { column-gap: .25rem; }
+  .brand { font-size: 1.12rem; gap: .4rem; }
+  .brand svg { width: 1.35rem; height: 1.35rem; }
+  .nav-actions .login { padding-inline: .6rem; font-size: .8rem; }
+  .nav-actions { gap: .3rem; }
+  #menu-toggle { padding-inline: .5rem; font-size: .85rem; }
+  .og-opening .actions { align-items: flex-start; flex-direction: column; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .primary, .login, .plan-link, .nav-flyout, .review-controls button { animation: none; transition: none; }
+  .primary:active, .login:active, .plan-link:active { transform: none; }
+}
+@media (forced-colors: active) {
+  .og-matter { display: none; }
+  .primary, .login, .plan-link { border: 2px solid ButtonText; }
+  .offer:nth-child(2) { border-color: CanvasText; }
+}
