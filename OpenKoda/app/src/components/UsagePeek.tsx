@@ -10,12 +10,16 @@ import './usage-peek.css';
 
 const dollars=(value:number|null|undefined)=>value==null?'Não informado':new Intl.NumberFormat('pt-BR',{style:'currency',currency:'USD',maximumFractionDigits:6}).format(value);
 const count=(value:number)=>new Intl.NumberFormat('pt-BR').format(value);
+const quotaDeadlines=(value:AccountView|null|undefined)=>[value?.subscription?.periodEnd,value?.usage?.windowEnd]
+  .flatMap(end=>{const at=end?Date.parse(end):NaN;return Number.isFinite(at)?[at]:[];});
+const quotaExpired=(value:AccountView|null|undefined)=>quotaDeadlines(value).some(at=>at<=Date.now());
 export default function UsagePeek({onOpen,activeProvider='openai'}:{onOpen:()=>void;activeProvider?:string}){
   const [open,setOpen]=useState(false),[provider,setProvider]=useState(activeProvider),[effectiveProvider,setEffectiveProvider]=useState(activeProvider);
   const [budget,setBudget]=useState<BudgetStatus>(),[account,setAccount]=useState<AccountView|null>();
   const [rows,setRows]=useState<UsageRow[]>([]),[configured,setConfigured]=useState<string[]>([]);
   const [historyAvailable,setHistoryAvailable]=useState(false),[pending,setPending]=useState(false);
   const root=useRef<HTMLDivElement>(null),button=useRef<HTMLButtonElement>(null),panel=useRef<HTMLDivElement>(null);
+  const currentAccount=useRef(account);currentAccount.current=account;
   const revision=useRef(0),mounted=useRef(true),closing=useRef<ReturnType<typeof setTimeout>|undefined>(undefined);
   const dragging=useRef<{x:number;left:number;pointerId:number;active:boolean}|undefined>(undefined);
   const providersRef=useRef<HTMLDivElement>(null),[edges,setEdges]=useState({start:false,end:false});
@@ -30,16 +34,27 @@ export default function UsagePeek({onOpen,activeProvider='openai'}:{onOpen:()=>v
     setBudget(b.status==='fulfilled'&&typeof b.value?.enabled==='boolean'?b.value:undefined);
     const valid=h.status==='fulfilled'&&Array.isArray(h.value?.rows);
     setRows(valid?h.value.rows:[]);setHistoryAvailable(valid);
-    setAccount(a.status==='fulfilled'?a.value.account:undefined);setPending(false);
+    const nextAccount=a.status==='fulfilled'?a.value.account:undefined;
+    // A stale/failed overview must not revive a spent window or schedule retries.
+    setAccount(quotaExpired(nextAccount)?undefined:nextAccount);setPending(false);
   }
   useEffect(()=>{
     mounted.current=true;void reload();
     const changed=()=>void reload();
     const identityChanged=()=>{setAccount(undefined);void reload();};
+    let resumedAt=-Infinity;
+    const resumed=()=>{
+      if(document.visibilityState!=='visible'||Date.now()-resumedAt<1000)return;
+      resumedAt=Date.now();
+      if(quotaExpired(currentAccount.current))setAccount(undefined);
+      void reload();
+    };
     window.addEventListener('openkoda-budget-changed',changed);
     window.addEventListener(accountChanged,identityChanged);
+    window.addEventListener('focus',resumed);document.addEventListener('visibilitychange',resumed);
     return()=>{mounted.current=false;revision.current++;clearTimeout(closing.current);
-      window.removeEventListener('openkoda-budget-changed',changed);window.removeEventListener(accountChanged,identityChanged);};
+      window.removeEventListener('openkoda-budget-changed',changed);window.removeEventListener(accountChanged,identityChanged);
+      window.removeEventListener('focus',resumed);document.removeEventListener('visibilitychange',resumed);};
   },[]);
   useEffect(()=>{setProvider(activeProvider);setEffectiveProvider(activeProvider);},[activeProvider]);
   useEffect(()=>{const changed=(e:Event)=>{const next=(e as CustomEvent<string>).detail;if(typeof next==='string'){setEffectiveProvider(next);setProvider(next);}};
@@ -54,11 +69,16 @@ export default function UsagePeek({onOpen,activeProvider='openai'}:{onOpen:()=>v
     return()=>{current=false;document.removeEventListener('pointerdown',outside);};
   },[open]);
   useEffect(()=>{
-    const end=account?.subscription?.periodEnd;if(!end)return;
-    const remaining=Date.parse(end)-Date.now();if(!Number.isFinite(remaining)||remaining<=0)return;
-    const timer=setTimeout(()=>{setAccount(undefined);void reload();},Math.min(remaining+1,2147483647));
-    return()=>clearTimeout(timer);
-  },[account?.subscription?.periodEnd]);
+    const deadlines=quotaDeadlines(account);if(!deadlines.length)return;
+    const next=Math.min(...deadlines);
+    let timer:ReturnType<typeof setTimeout>;
+    const check=()=>{
+      const remaining=next-Date.now();
+      if(remaining<=0){setAccount(undefined);void reload();return;}
+      timer=setTimeout(check,Math.min(remaining+1,2147483647));
+    };
+    check();return()=>clearTimeout(timer);
+  },[account?.subscription?.periodEnd,account?.usage?.windowEnd]);
   const activeLimit=usageLimit(effectiveProvider,budget,account),limit=usageLimit(provider,budget,account);
   useEffect(()=>{
     document.documentElement.dataset.usageLow=String(activeLimit.low);

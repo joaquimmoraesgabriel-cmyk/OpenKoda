@@ -9,7 +9,7 @@ async function desktop(page:Page,provider='openrouter',subscribed=false){
   snapshot.assessments=[{id:'chat',projectId:'fixture',kind:'code',title:'Conversa de teste',target:'D:/Fixture',objective:'',createdAt:at,updatedAt:at,status:'draft',coverage:[],evidence:[],events:[],summary:'',aiSelection:{provider:provider as 'openrouter',model:'example/model'}}];
   await page.addInitScript(({snapshot,subscribed})=>{
     const date=new Date(),pad=(n:number)=>String(n).padStart(2,'0'),today=[date.getFullYear(),pad(date.getMonth()+1),pad(date.getDate())].join('-');
-    const bridge={budget:{enabled:true,degraded:false,unknownCharges:[],unknownChargesTotal:0,installation:{limitUsd:'10',pricedUsageUsd:'8',heldUsd:'1',remainingUsd:'1'},recentCharges:[{model:'example/model',endpoint:'https://openrouter.ai/api/v1',pricedUsageUsd:'0.025'}],policy:{prices:[]}},
+    const bridge={overviewCalls:0,overviewFailure:false,budget:{enabled:true,degraded:false,unknownCharges:[],unknownChargesTotal:0,installation:{limitUsd:'10',pricedUsageUsd:'8',heldUsd:'1',remainingUsd:'1'},recentCharges:[{model:'example/model',endpoint:'https://openrouter.ai/api/v1',pricedUsageUsd:'0.025'}],policy:{prices:[]}},
       account:subscribed?{plan:{id:'plus'},subscription:{status:'active',mode:'production',periodEnd:new Date(Date.now()+86400000).toISOString()},usage:{monthlyLimitMicros:20000000,monthlyUsedMicros:1000000,windowLimitMicros:5000000,windowUsedMicros:500000}}:null};
     Object.assign(window,{usageFixture:bridge,isTauri:true,__TAURI_INTERNALS__:{invoke:async(_cmd:string,args:{request:{action:string;payload:Record<string,unknown>}})=>{
       const {action,payload}=args.request;
@@ -23,7 +23,7 @@ async function desktop(page:Page,provider='openrouter',subscribed=false){
         case 'ai.budget.history':return {rows:[{day:today,provider:'openrouter',model:'example/model',assessmentId:'chat',requests:2,input:120,output:40,partial:0}]};
         case 'ai.status':return {hasApiKey:true,provider:payload.provider,enabledModels:['example/model']};
         case 'account.session':return {user:subscribed?{id:'fixture',email:'fixture@example.invalid'}:null};
-        case 'account.overview':return bridge.account;
+        case 'account.overview':bridge.overviewCalls++;if(bridge.overviewFailure)throw new Error('Servidor temporariamente indisponível');return bridge.account;
         default:return {};
       }
     }}});
@@ -92,4 +92,56 @@ test('assinatura separa cota e chave pessoal, desconhecido nunca dispara alerta'
   await page.evaluate(()=>{document.documentElement.style.zoom='1.25';});
   await button.focus();
   await expect.poll(async()=>{const b=await popup.boundingBox();return !!b&&b.x>=0&&b.y>=0&&b.x+b.width<=391&&b.y+b.height<=801;}).toBe(true);
+});
+
+
+test('janela de assinatura renova sem hover e retorno de suspensão revalida a cota',async({page})=>{
+  await page.clock.install();
+  await desktop(page,'openkoda',true);
+  const ring=page.getByRole('button',{name:'Abrir histórico de uso',exact:true});
+  await expect(ring).toHaveAttribute('data-known','true');
+  await page.evaluate(()=>{
+    const f=Reflect.get(window,'usageFixture');f.account.usage.windowUsedMicros=4750000;
+    f.account.usage.windowEnd=new Date(Date.now()+60000).toISOString();
+    window.dispatchEvent(new Event('openkoda-budget-changed'));
+  });
+  await expect(ring).toHaveAttribute('data-low','true');
+  const before=await page.evaluate(()=>Reflect.get(window,'usageFixture').overviewCalls);
+  await page.evaluate(()=>{const f=Reflect.get(window,'usageFixture');f.account.usage.windowUsedMicros=0;f.account.usage.windowEnd=new Date(Date.now()+604800000).toISOString();});
+  await page.clock.fastForward(60001);
+  await expect(ring).toHaveAttribute('data-low','false');
+  await expect(ring).toHaveAttribute('data-known','true');
+  expect(await page.evaluate(()=>Reflect.get(window,'usageFixture').overviewCalls)).toBe(before+1);
+  await page.evaluate(()=>{
+    const f=Reflect.get(window,'usageFixture');f.account.usage.windowUsedMicros=4750000;
+    f.account.usage.windowEnd=new Date(Date.now()+60000).toISOString();
+    window.dispatchEvent(new Event('openkoda-budget-changed'));
+  });
+  await expect(ring).toHaveAttribute('data-low','true');
+  const wakeAt=await page.evaluate(()=>Date.now()+60001);
+  await page.clock.setSystemTime(wakeAt);
+  await page.evaluate(()=>{const f=Reflect.get(window,'usageFixture');f.account.usage.windowUsedMicros=0;f.account.usage.windowEnd=new Date(Date.now()+604800000).toISOString();window.dispatchEvent(new Event('focus'));});
+  await expect(ring).toHaveAttribute('data-low','false');
+});
+
+test('janela vencida ou falha no refresh fica desconhecida sem repetição automática',async({page})=>{
+  await page.clock.install();
+  await desktop(page,'openkoda',true);
+  const ring=page.getByRole('button',{name:'Abrir histórico de uso',exact:true});
+  await expect(ring).toHaveAttribute('data-known','true');
+  await page.evaluate(()=>{const f=Reflect.get(window,'usageFixture');f.account.usage.windowUsedMicros=4750000;f.account.usage.windowEnd=new Date(Date.now()+60000).toISOString();window.dispatchEvent(new Event('openkoda-budget-changed'));});
+  await expect(ring).toHaveAttribute('data-low','true');
+  const before=await page.evaluate(()=>Reflect.get(window,'usageFixture').overviewCalls);
+  await page.clock.fastForward(60001);
+  await expect(ring).toHaveAttribute('data-known','false');
+  await page.clock.fastForward(3600000);
+  expect(await page.evaluate(()=>Reflect.get(window,'usageFixture').overviewCalls)).toBe(before+1);
+  await page.evaluate(()=>{const f=Reflect.get(window,'usageFixture');f.account.usage.windowEnd=new Date(Date.now()+60000).toISOString();window.dispatchEvent(new Event('focus'));});
+  await expect(ring).toHaveAttribute('data-known','true');
+  await page.evaluate(()=>{Reflect.get(window,'usageFixture').overviewFailure=true;});
+  const beforeFailure=await page.evaluate(()=>Reflect.get(window,'usageFixture').overviewCalls);
+  await page.clock.fastForward(60001);
+  await expect(ring).toHaveAttribute('data-known','false');
+  await page.clock.fastForward(3600000);
+  expect(await page.evaluate(()=>Reflect.get(window,'usageFixture').overviewCalls)).toBe(beforeFailure+1);
 });
