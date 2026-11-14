@@ -8,7 +8,9 @@ import type {BrowserContext} from '@playwright/test';
 const origin='https://openkoda.example.invalid';
 const dist=fileURLToPath(new URL('../../site/dist/',import.meta.url));
 const routes=['/','/produto/','/download/','/precos/','/suporte/','/seguranca/','/perguntas/','/guias/',
-  '/guias/primeiro-projeto/','/guias/conversas/','/guias/relatorios/','/guias/uso/','/guias/skills/','/guias/conta/'];
+  '/guias/primeiro-projeto/','/guias/conversas/','/guias/relatorios/','/guias/uso/','/guias/skills/','/guias/conta/',
+  '/exemplos/','/exemplos/revisao-de-api/','/novidades/','/novidades/openkoda-0-2-5/','/novidades/openkoda-0-2-4/','/novidades/openkoda-0-2-3/',
+  '/politicas/','/privacidade/','/termos/','/reembolso/','/suboperadores/'];
 test.beforeAll(()=>execFileSync(process.execPath,[fileURLToPath(new URL('../../site/build.mjs',import.meta.url))]));
 async function serve(context:BrowserContext){
   await context.route('**/*',async route=>{
@@ -27,6 +29,10 @@ for(const width of [375,1440]){
     try{
       await serve(context);
       const page=await context.newPage();
+      await page.goto(origin+'/');
+      await page.getByRole('button',{name:'Entendi'}).click();
+      await page.reload();
+      await expect(page.getByRole('complementary',{name:'Cookies e armazenamento'})).toBeHidden();
       for(const path of routes){
         await page.goto(origin+path,{waitUntil:'domcontentloaded'});
         await expect(page.getByRole('main').getByRole('heading',{level:1})).toHaveCount(1);
@@ -35,7 +41,7 @@ for(const width of [375,1440]){
         for(const link of await page.locator('main a[href^="#"]').all()){
           await expect(page.locator(await link.getAttribute('href') as string)).toHaveCount(1);
         }
-        if(path==='/guias/'||path==='/guias/relatorios/'||path==='/'){
+        if(['/guias/','/guias/relatorios/','/precos/','/novidades/','/privacidade/','/'].includes(path)){
           const filename=(path.split('/').filter(Boolean).at(-1)??'inicio')+'-'+width+'.png';
           await page.screenshot({path:testInfo.outputPath(filename),animations:'disabled'});
         }
@@ -53,6 +59,7 @@ for(const width of [375,1440]){
       await expect(page).toHaveURL(/#cobertura$/);
       await page.goto(origin+'/perguntas/');
       const question=page.locator('summary').first();
+      await expect(question).toHaveCSS('list-style-type','none');
       await question.focus();await page.keyboard.press('Enter');
       await expect(page.locator('details[open] p')).toBeVisible();
       if(width===375){

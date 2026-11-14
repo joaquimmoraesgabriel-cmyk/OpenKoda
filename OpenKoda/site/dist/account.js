@@ -134,16 +134,20 @@ async function attachCaptcha(action){
 function account(){
  content(`<div class="dashboard"><div class="dashboard-head"><div><h1>Minha conta</h1><p id="identity"></p></div><button class="secondary" data-do="logout">Sair</button></div>
  <section class="dash-block is-summary"><h2>Plano e uso</h2><p id="usage" aria-live="polite">Consultando seu plano…</p></section>
- <div class="dash-grid"><section class="dash-block"><h2>Assinatura</h2><form id="checkout"><label>Plano para simulação<select name="plan"><option value="plus">Plus — R$ 219 por mês</option><option value="pro">Pro — R$ 999 por mês</option><option value="ultra">Ultra — R$ 1.999 por mês</option></select></label><p>Simulação sem cobrança, renovação ou crédito de produção.</p><button>Simular assinatura</button></form><button class="secondary" data-do="cancel">Cancelar renovação ou simulação</button></section>
- <section class="dash-block"><h2>Suporte</h2><form id="support"><label>Assunto<input name="subject" required maxlength="120"></label><label>Mensagem sem dados confidenciais<textarea name="message" required rows="3" minlength="10" maxlength="2000"></textarea></label><button>Enviar chamado</button></form><details><summary>Meus chamados e respostas</summary><ul id="tickets"></ul></details></section>
+ <div class="dash-grid"><section class="dash-block"><h2>Assinatura</h2><form id="checkout"><fieldset class="plan-choice"><legend>Plano para simulação</legend>
+ <label><input type="radio" name="plan" value="plus" checked><span>Plus</span><span>R$ 219 por mês</span></label>
+ <label><input type="radio" name="plan" value="pro"><span>Pro</span><span>R$ 999 por mês</span></label>
+ <label><input type="radio" name="plan" value="ultra"><span>Ultra</span><span>R$ 1.999 por mês</span></label>
+ </fieldset><p>Simulação sem cobrança, renovação ou crédito de produção.</p><button>Simular assinatura</button></form><button class="secondary" data-do="cancel">Cancelar renovação ou simulação</button></section>
+ <section class="dash-block"><h2>Suporte</h2><form id="support"><label>Assunto<input name="subject" required maxlength="120"></label><label>Mensagem sem dados confidenciais<textarea name="message" required rows="3" minlength="10" maxlength="2000"></textarea></label><button>Enviar chamado</button></form><details><summary>Meus chamados e respostas</summary><p id="tickets-empty" hidden>Você ainda não abriu chamados.</p><ul id="tickets"></ul></details></section>
  <section class="dash-block"><h2>Preferências</h2><details><summary>Aceites e comunicações</summary><form id="consent">${agreements}<button>Salvar aceites</button></form></details><button class="secondary" data-do="unsubscribe">Retirar consentimento de marketing</button></section>
  <section class="dash-block"><h2>Meus dados</h2><button class="secondary" data-do="export">Exportar dados da conta</button><details class="danger"><summary>Excluir minha conta</summary><form id="delete"><p>A exclusão da conta hospedada é permanente. Para continuar, digite EXCLUIR.</p><label>Frase de confirmação<input name="confirmation" required pattern="EXCLUIR"></label><button>Excluir minha conta</button></form></details></section></div></div>`,null);
  root.querySelector('#identity').textContent=email;
- const selected=params.get('plano');if(['plus','pro','ultra'].includes(selected))root.querySelector('select').value=selected;
+ const selected=params.get('plano');if(['plus','pro','ultra'].includes(selected))root.querySelector('#checkout input[value="'+selected+'"]').checked=true;
  void refreshAccount();
  if(params.get('acao')==='suporte')root.querySelector('#support input').focus();
 }
-const usd = micros => (micros / 1000000).toLocaleString('pt-BR',{style:'currency',currency:'USD'});
+const usd = micros => (micros / 1000000).toLocaleString('pt-BR',{style:'currency',currency:'USD',maximumFractionDigits:6});
 async function refreshAccount(){
  try {
   const r=await edge('account');
@@ -162,7 +166,9 @@ async function refreshAccount(){
   const saved=Boolean(r.consent?.acceptedAt && r.consent.termsVersion===r.consent.requiredTermsVersion && r.consent.privacyVersion===r.consent.requiredPrivacyVersion);
   root.querySelector('#consent [name=agreement]').checked=saved;
   const list=root.querySelector('#tickets');
-  if(list){const {tickets}=await edge('support_list');list.replaceChildren();for(const ticket of tickets??[]){
+  if(list){const {tickets}=await edge('support_list');list.replaceChildren();
+   root.querySelector('#tickets-empty').hidden=Boolean(tickets?.length);
+   for(const ticket of tickets??[]){
    const row=document.createElement('li');row.textContent=ticket.subject+' · '+ticket.status;
    for(const reply of ticket.replies??[]){const p=document.createElement('p');p.textContent=reply.message;row.append(p);}
    list.append(row);

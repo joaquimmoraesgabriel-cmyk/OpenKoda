@@ -6,9 +6,15 @@ toggle.addEventListener('click',()=>menuOpen(toggle.getAttribute('aria-expanded'
 document.addEventListener('keydown',event=>{if(event.key==='Escape'&&toggle.getAttribute('aria-expanded')==='true'){menuOpen(false);toggle.focus();}});
 document.addEventListener('click',event=>{if(!event.target.closest('.site-header'))menuOpen(false);});
 matchMedia('(min-width:761px)').addEventListener('change',()=>menuOpen(false));
-// The site stores only essentials. The footer opens the disclosure on demand.
-document.querySelector('#cookies').addEventListener('click',()=>{box.hidden=false;box.querySelector('button').focus();});
-document.querySelector('#accept-essential').addEventListener('click',()=>{try{localStorage.setItem('koda.cookies','essential');}catch{} box.hidden=true;document.querySelector('#cookies').focus();});
+const cookieSettings=document.querySelector('#cookies');
+let openedFromFooter=false;
+try{box.hidden=localStorage.getItem('koda.cookies')==='essential';}catch{box.hidden=false;}
+cookieSettings.addEventListener('click',()=>{openedFromFooter=true;box.hidden=false;box.querySelector('button').focus();});
+document.querySelector('#accept-essential').addEventListener('click',()=>{
+ try{localStorage.setItem('koda.cookies','essential');}catch{}
+ box.hidden=true;
+ if(openedFromFooter)cookieSettings.focus();
+});
 const viewButtons=[...document.querySelectorAll('[data-view]')];
 for(const button of viewButtons){
  const panelId='demo-'+button.dataset.view;

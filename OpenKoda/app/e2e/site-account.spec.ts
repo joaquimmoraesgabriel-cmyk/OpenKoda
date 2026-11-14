@@ -183,6 +183,18 @@ test('site mantém a sessão no reload, nos preços e numa nova aba; sair revoga
   await page.getByRole('button',{name:'Entrar',exact:true}).click();
   await expect(page.getByRole('heading',{name:'Minha conta'})).toBeVisible();
   expect(await page.evaluate(()=>document.cookie)).not.toContain('koda-');
+  const tickets=page.locator('summary').filter({hasText:'Meus chamados e respostas'});
+  await expect(tickets).toHaveCSS('list-style-type','none');
+  await tickets.focus();await page.keyboard.press('Enter');
+  await expect(page.getByText('Você ainda não abriu chamados.')).toBeVisible();
+  await page.keyboard.press('Space');
+  await expect(page.getByText('Você ainda não abriu chamados.')).toBeHidden();
+  await page.goto(site+'/conta/?plano=ultra');
+  await expect(page.getByRole('radio',{name:/Ultra/})).toBeChecked();
+  await page.getByRole('radio',{name:/Pro/}).check();
+  await page.getByRole('button',{name:'Simular assinatura'}).click();
+  await expect(page.getByText('Simulação registrada.',{exact:false})).toBeVisible();
+  expect(f.posted.filter(p=>p.action==='checkout')).toEqual([expect.objectContaining({plan:'pro'})]);
   await page.reload();await expect(page.getByRole('heading',{name:'Minha conta'})).toBeVisible();
   await page.getByRole('link',{name:'Preços',exact:true}).click();
   await page.getByRole('link',{name:'Minha conta',exact:true}).click();

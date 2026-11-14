@@ -31,6 +31,7 @@ test('a navegação pública resolve páginas, recursos e seções da compilaç�
   if(!route.startsWith('/conta/')){
    assert.equal([...html.matchAll(/<h1\b/gi)].length,1,route);
    assert.doesNotMatch(html,/\b(?:Gemini|Ministral)\b/i,route);
+   assert.doesNotMatch(html,/[→←↓↗▸▶]/u,route);
   }
   for(const [,value] of html.matchAll(/\b(?:href|src)="([^"]+)"/gi)){
    const target=new URL(value,new URL(route,origin));
