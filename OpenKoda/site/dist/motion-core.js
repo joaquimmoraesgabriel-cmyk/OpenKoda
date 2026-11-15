@@ -31,7 +31,7 @@ export function createCopyAction(write,onState){
 export function createMotionRuntime(win){
  const doc=win.document,reduce=win.matchMedia('(prefers-reduced-motion: reduce)');
  const entries=new Set(),listeners=new Set();let id=0,last=0,disposed=false,paused=false;
- function readPause(){try{return win.localStorage.getItem(pauseKey)==='true';}catch{return paused;}}
+ function readPause(){if(!doc.querySelector?.('[data-ui-pause]'))return paused;try{return win.localStorage.getItem(pauseKey)==='true';}catch{return paused;}}
  paused=readPause();
  const isStatic=()=>reduce.matches||paused;
  function needed(e){return e.visible&&e.element.isConnected&&(e.pending||e.continuous&&!isStatic());}

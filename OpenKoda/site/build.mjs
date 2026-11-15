@@ -85,7 +85,7 @@ for (const [route,[name,body]] of Object.entries(pages)) {
 // Serve the same reviewed files through a Worker so security headers also
 // protect direct visits to the OAuth callback and account forms.
 const files = [...Object.keys(pages).map(route=>(route?route+'/':'')+'index.html'),
- 'openglitch.css','openglitch.js','matter-field.js','motion-ui.css','motion-ui.js','motion-core.js','motion-controls.js','motion-editorial.js','brand/favicon.svg',
+ 'openglitch.css','openglitch.js','matter-field.js','orbit-field.js','motion-ui.css','motion-ui.js','motion-core.js','motion-controls.js','motion-editorial.js','motion-type.js','brand/favicon.svg',
  'brand/openglitch-aperture-desktop-dark.svg','brand/openglitch-aperture-desktop-light.svg',
  'brand/openglitch-aperture-mobile-dark.svg','brand/openglitch-aperture-mobile-light.svg',
  'style.css','tema.css','tema.js','account.js','account-dashboard.css','site.js','cloud.js','demo.css','demo.js','download.js','painel.png','conversa.png','projeto.png','relatorio.png','aparencia.png','uso.png','modelos.png','favicon.svg'];

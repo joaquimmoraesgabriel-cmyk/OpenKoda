@@ -33,11 +33,13 @@ export function mountWordRoll(host,runtime){
 }
 
 export function mountWeightWave(host,runtime){
- const text=host.textContent;host.setAttribute('aria-label',text);host.replaceChildren();
+ const text=host.textContent;host.replaceChildren();
+ const readable=document.createElement('span');readable.className='sr-only';readable.textContent=text;
+ const visual=document.createElement('span');visual.setAttribute('aria-hidden','true');host.append(readable,visual);
  const letters=[];
  text.split(' ').forEach((word,wordIndex)=>{
-  if(wordIndex)host.append(document.createTextNode(' '));
-  const group=document.createElement('span');group.className='motion-wave-word';group.setAttribute('aria-hidden','true');host.append(group);
+  if(wordIndex)visual.append(document.createTextNode(' '));
+  const group=document.createElement('span');group.className='motion-wave-word';visual.append(group);
   for(const char of word){const element=document.createElement('span');element.textContent=char;group.append(element);letters.push({element,index:letters.length,w:spring(400,springs.weight)});}
  });
  const focus=spring(-.2,springs.focus);let hover=false,clock=0;

@@ -3,7 +3,10 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 
 // The browser asset is an ES module without imposing a package type on the site.
-const source = await readFile(new URL('../dist/matter-field.js', import.meta.url), 'utf8');
+const orbitSource=await readFile(new URL('../dist/orbit-field.js',import.meta.url),'utf8');
+const orbitUrl='data:text/javascript;base64,'+Buffer.from(orbitSource).toString('base64');
+const {orbitVisibility}=await import(orbitUrl);
+const source = (await readFile(new URL('../dist/matter-field.js', import.meta.url), 'utf8')).replace('./orbit-field.js',orbitUrl);
 const {createMatterField, evolveMatterField, stepMatterField, resetMatterField, paintMatterField, renderMatterSvg, mountMatterFields, matterLimits, matterPauseKey} = await import('data:text/javascript;base64,' + Buffer.from(source).toString('base64'));
 
 test('the two compositions are deterministic, distinct, bounded and recomposed for portrait', () => {
@@ -18,7 +21,8 @@ test('the two compositions are deterministic, distinct, bounded and recomposed f
         assert.ok(Number.isFinite(field.x[i] + field.y[i] + field.size[i]));
         assert.ok(field.size[i] > 0 && field.size[i] < 40);
         assert.ok(field.alpha[i] >= 0 && field.alpha[i] <= 1);
-        assert.ok(field.compact ? field.y[i] > height * 0.36 : field.x[i] > width * 0.32);
+        if(scene==='constellation')assert.ok(field.compact ? field.y[i] > height * 0.36 : field.x[i] > width * 0.32);
+        else if(orbitVisibility(field,field.x[i],field.y[i])===0)assert.equal(field.coverage[i],0,'the central reading area stays empty');
       }
       assert.ok(Math.max(...field.x) > width * 0.95, 'the field reaches the right section edge');
     }
@@ -27,22 +31,25 @@ test('the two compositions are deterministic, distinct, bounded and recomposed f
   const constellation = createMatterField('constellation', 1440, 800);
   assert.notDeepEqual(aperture.x, constellation.x);
   const narrow = createMatterField('aperture', 390, 800);
-  assert.ok(Math.min(...narrow.y) > 800 * 0.36, 'portrait has its own upper reading region');
+  assert.ok(Math.min(...narrow.x)<0&&Math.max(...narrow.x)>390,'portrait orbit reaches both side edges');
   assert.ok(createMatterField('aperture', 1440, 800, {coarse: true}).count <= matterLimits.compact);
   assert.throws(() => createMatterField('noise', 800, 600), TypeError);
   assert.throws(() => createMatterField('aperture', 0, 600), RangeError);
   assert.throws(() => createMatterField('aperture', Infinity, 600), RangeError);
 });
 
-test('color belongs to the same square modules and decays to rest without allocating buffers', () => {
+test('local orbital gravity attracts clockwise and dissolves, then restores the field even after a stationary pointer', () => {
   const field = createMatterField('aperture', 1440, 800);
   const buffers = {x: field.x, y: field.y, heat: field.heat};
   const pointer = {active: true, x: field.x[150], y: field.y[150], radius: 100};
   for (let i = 0; i < 60; i++) stepMatterField(field, pointer, 1 / 60);
-  assert.ok(field.heat[150] > 0.99);
+  assert.ok(field.heat[150] > 0.5);
   assert.ok([...field.heat].some(value => value === 0));
   assert.ok([...field.heat].every(value => value >= 0 && value <= 1));
-  assert.ok([...field.dx, ...field.dy].every(value => value === 0));
+  assert.ok([...field.dx, ...field.dy].some(value => Math.abs(value)>1));
+  assert.ok(field.dissolve[150]>.5);
+  for(let i=0;i<360;i++)stepMatterField(field,pointer,1/60);
+  assert.ok([...field.dx,...field.dy,...field.heat,...field.dissolve].every(value=>value===0),'idle pointer releases the live field');
   let moving = true;
   for (let i = 0; i < 240; i++) moving = stepMatterField(field, {active: false}, 1 / 60);
   assert.equal(moving, false);
@@ -89,8 +96,15 @@ test('the living volume evolves at 0, 3 and 8 seconds without input, with bounde
       assert.notDeepEqual(initial, three); assert.notDeepEqual(three, eight);
       assert.ok([...field.flowX, ...field.flowY].some(value => Math.abs(value) > 4));
       for (let i = 0; i < field.count; i++) {
-        assert.ok(Math.hypot(field.flowX[i], field.flowY[i]) <= matterLimits.ambientDisplacement);
-        assert.ok(field.coverage[i] >= 0.79 && field.coverage[i] <= 1.21);
+        if(scene==='constellation'){
+          assert.ok(Math.hypot(field.flowX[i], field.flowY[i]) <= matterLimits.ambientDisplacement);
+          assert.ok(field.coverage[i] >= 0.79 && field.coverage[i] <= 1.21);
+        }else{
+          assert.ok(Math.hypot(field.flowX[i],field.flowY[i])<Math.hypot(width,height)*2.5);
+          assert.ok(field.coverage[i]>=0&&field.coverage[i]<=1);
+          const x=field.x[i]+field.flowX[i],y=field.y[i]+field.flowY[i];
+          if(orbitVisibility(field,x,y)===0)assert.equal(field.coverage[i],0);
+        }
       }
       assert.deepEqual([...field.x], anchors);
       assert.equal(field.flowX, buffers[0]); assert.equal(field.flowY, buffers[1]); assert.equal(field.coverage, buffers[2]);
@@ -122,6 +136,31 @@ test('autonomous time is frame-rate independent and a long suspension is clamped
   for (let i = 0; i < at60.count; i++) assert.ok(Math.abs(at60.flowX[i] - at120.flowX[i]) < 0.0001);
   const previous = at60.time; evolveMatterField(at60, 30);
   assert.ok(at60.time - previous <= matterLimits.maxDelta + 0.000001);
+});
+
+test('the ellipse turns clockwise, spirals inward and fades before birth-cycle wrapping',()=>{
+ const field=createMatterField('aperture',1440,800),i=0;
+ const coordinate=()=>{const x=(field.x[i]+field.flowX[i]-field.width*.5)/field.radiusX,y=(field.y[i]+field.flowY[i]-field.height*.5)/field.radiusY;return {angle:Math.atan2(y,x),radius:Math.hypot(x,y)};};
+ const start=coordinate();assert.equal(field.coverage[i],0);
+ for(let n=0;n<180;n++)evolveMatterField(field,1/60);
+ const end=coordinate(),turn=(end.angle-start.angle+Math.PI*2)%(Math.PI*2);
+ assert.ok(turn>.6&&turn<.75,'clockwise motion is perceptible in three seconds');
+ assert.ok(end.radius<start.radius,'orbital material moves inward');
+ assert.ok(field.coverage[i]>0,'birth fades in');
+ field.time=(1-.00001)/.021;evolveMatterField(field,0);assert.ok(field.coverage[i]<.00001);
+ field.time=(1+.00001)/.021;evolveMatterField(field,0);assert.ok(field.coverage[i]<.00001);
+});
+
+test('orbital impulses stay local and bounded while rapid input cannot occupy the safe middle',()=>{
+ const field=createMatterField('aperture',1024,640);
+ for(let frame=0;frame<120;frame++){
+  evolveMatterField(field,1/60);
+  stepMatterField(field,{active:true,x:frame%2?80:940,y:100+frame*3},1/60);
+  for(let i=0;i<field.count;i++)assert.ok(Math.hypot(field.dx[i],field.dy[i])<=field.maxDisplacement+.0001);
+ }
+ const context={clearRect(){},fillRect(x,y,size){if(this.globalAlpha>0)assert.ok(orbitVisibility(field,x+size/2,y+size/2)>0);}};
+ paintMatterField(context,field,{ink:'#222222',accent:'#666666'});
+ assert.ok([...field.dx].some(value=>value===0),'distant squares never receive a global drag');
 });
 
 function context() {
@@ -162,7 +201,7 @@ class Events {
   count() { return [...this.listeners.values()].reduce((sum, handlers) => sum + handlers.size, 0); }
 }
 
-function browserFixture({reduced = false, coarse = false, noContext = false, paused = false} = {}) {
+function browserFixture({reduced = false, coarse = false, noContext = false, paused = false, controls=true} = {}) {
   const win = new Events(), doc = new Events(), motions = new Map(), callbacks = new Map();
   const stored = new Map([[matterPauseKey, String(paused)]]);
   win.localStorage = {getItem: key => stored.get(key), setItem: (key, value) => stored.set(key, value)};
@@ -180,13 +219,13 @@ function browserFixture({reduced = false, coarse = false, noContext = false, pau
   const sections = ['aperture', 'constellation'].map(scene => {
     const section = Object.assign(new Events(), {dataset: {}});
     const button = Object.assign(new Events(), {hidden: true, attributes: {}, setAttribute(name, value) { this.attributes[name] = value; }});
-    section.button = button; section.querySelector = () => button;
+    section.button = button; section.querySelector = () => controls?button:null;
     const canvas = Object.assign(new Events(), {dataset: {matterField: scene}, width: 0, height: 0,
       getBoundingClientRect: () => ({width: 1024, height: 640, left: 0, top: 0}),
       closest: () => section, setAttribute() {}, getContext: () => noContext ? null : canvas.context, context: context()});
     section.canvas = canvas; return section;
   });
-  doc.querySelectorAll = () => sections.map(section => section.canvas);
+  doc.querySelectorAll = selector => selector==='[data-matter-pause]'?(controls?sections.map(section=>section.button):[]):sections.map(section => section.canvas);
   const flush = () => { time += 1000 / 60; const pending = [...callbacks.values()]; callbacks.clear(); for (const callback of pending) callback(time); };
   return {win, doc, sections, observers, motions, callbacks, flush, stored};
 }
@@ -218,6 +257,15 @@ test('one coordinated frame serves visible sections; hidden/offscreen work pause
   for (const observer of env.observers) assert.equal(observer.targets.length, 0);
   for (const motion of env.motions.values()) assert.equal(motion.count(), 0);
   assert.equal(env.win.count(), 0); assert.equal(env.doc.count(), 0);
+});
+
+test('public scenes without pause controls ignore a legacy saved pause and keep automatic reduced motion',()=>{
+ const env=browserFixture({paused:true,controls:false}),cleanup=mountMatterFields(env.doc);
+ env.observers[0].callback(env.sections.map(target=>({target,isIntersecting:true})));env.flush();
+ assert.equal(env.callbacks.size,1);
+ env.win.emit('storage',{key:matterPauseKey,newValue:'true'});env.flush();assert.equal(env.callbacks.size,1);
+ const reduce=env.motions.get('(prefers-reduced-motion: reduce)');reduce.matches=true;reduce.emit('change');env.flush();assert.equal(env.callbacks.size,0);
+ cleanup();
 });
 
 test('reduced motion freezes the field while touch keeps autonomous motion without hijacking gestures', () => {

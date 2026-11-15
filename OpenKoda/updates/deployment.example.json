@@ -1,0 +1,21 @@
+{
+  "entrypoint": "worker.mjs",
+  "compatibilityDate": "2026-11-14",
+  "compatibilityFlags": [],
+  "observability": {
+    "enabled": true,
+    "headSamplingRate": 0.1,
+    "traces": { "enabled": true, "headSamplingRate": 0.1 }
+  },
+  "bindings": {
+    "UPDATES_BUCKET": "Private R2 bucket; public r2.dev URL and public custom domains disabled",
+    "REQUEST_LIMITER": "Cloudflare Rate Limiting binding; suggested 60 requests per IP per 60 seconds"
+  },
+  "vars": {
+    "PUBLIC_ORIGIN": "https://updates.example.invalid",
+    "SUPABASE_URL": "https://ynjcyvnrfxsrijrwpaye.supabase.co",
+    "UPDATES_ENABLED": "false"
+  },
+  "environmentValuesToConfigure": ["SUPABASE_PUBLISHABLE_KEY"],
+  "notes": "Deployment inventory, not a Wrangler/cf CLI configuration. Use the active Cloudflare CLI/API schema when deploying. Never add service_role, signing private keys or user tokens here."
+}

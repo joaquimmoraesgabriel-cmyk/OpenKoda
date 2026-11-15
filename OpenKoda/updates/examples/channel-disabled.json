@@ -1,0 +1,7 @@
+{
+  "schema": "openkoda.update-channel.v1",
+  "enabled": false,
+  "release": null,
+  "rolloutPercent": 0,
+  "rolloutSeed": "configure-before-release"
+}

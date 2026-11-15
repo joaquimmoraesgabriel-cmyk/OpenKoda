@@ -64,17 +64,17 @@ main.home { max-width: none; padding-inline: 0; }
 }
 .og-opening { position: relative; isolation: isolate; background: var(--paper); }
 .og-opening-inner {
-  position: relative; z-index: 1;
+  position: relative; z-index: 1; display: grid; place-items: center; text-align: center;
   width: 100%; max-width: var(--wrap); margin-inline: auto;
-  min-height: min(48rem, calc(100svh - 5.5rem));
-  padding: clamp(4rem, 7.5vw, 7rem) var(--gutter) clamp(5rem, 9vw, 9rem);
+  min-height: clamp(32rem, calc(100svh - 5.5rem), 50rem);
+  padding: 5rem var(--gutter);
 }
-.og-opening-copy { width: min(70%, 49rem); }
-.og-opening .section-name { margin-bottom: 1.3rem; }
-.og-opening h1 { font-size: clamp(3.4rem, 6.6vw, 6.4rem); line-height: 1.025; letter-spacing: -.055em; font-weight: 620; }
-.og-opening .og-lead { font-size: clamp(1.125rem, 1.5vw, 1.35rem); line-height: 1.65; color: var(--muted); max-width: 39ch; margin-top: 1.8rem; }
-.og-opening .actions { margin-top: 2rem; }
-.og-opening .og-availability { max-width: 48ch; margin-top: 1.25rem; font-size: .9rem; color: var(--muted); line-height: 1.65; }
+.og-opening-copy { width: 100%; }
+.og-opening h1 { font-size: clamp(4.2rem, 14.8vw, 13rem); line-height: .95; letter-spacing: -.065em; font-weight: 650; }
+.og-opening .og-subtitle { font-size: clamp(1.25rem, 2.6vw, 2.75rem); line-height: 1.4; letter-spacing: -.035em; color: var(--ink); margin: 1.75rem auto 0; }
+.og-opening .actions { margin-top: 2.25rem; justify-content: center; }
+.og-introduction { padding-block: clamp(4rem, 8vw, 8rem) 1.5rem; text-align: center; }
+.og-introduction p { max-width: 46rem; margin-inline: auto; font-size: clamp(1.35rem, 2.3vw, 2.25rem); line-height: 1.6; letter-spacing: -.025em; }
 .og-matter { position: absolute; inset: 0; z-index: 0; overflow: clip; pointer-events: none; user-select: none; }
 .og-matter canvas, .og-fallback, .og-fallback img, .og-runtime-fallback {
   position: absolute; inset: 0; display: block; width: 100%; height: 100%; pointer-events: none;
@@ -82,17 +82,6 @@ main.home { max-width: none; padding-inline: 0; }
 .og-fallback img { object-fit: cover; }
 .og-runtime-fallback > svg { display: block; width: 100%; height: 100%; }
 .og-matter canvas { opacity: 0; }
-.og-motion-toggle {
-  position: absolute; z-index: 2; inset-inline-end: var(--gutter); bottom: 1rem;
-  display: inline-flex; align-items: center; gap: .5rem; min-height: 2.75rem;
-  padding: .5rem .75rem; border: 1px solid var(--line); border-radius: .75rem;
-  background: var(--paper); color: var(--muted); font: inherit; font-size: .8125rem;
-}
-.og-motion-toggle[hidden] { display: none; }
-.og-motion-toggle::before { content: 'Ⅱ'; font-size: .9rem; font-weight: 650; }
-.og-motion-toggle[aria-pressed="true"]::before { content: '▷'; }
-.og-motion-toggle:hover:not(:disabled) { border-color: var(--ink); color: var(--ink); }
-.og-motion-toggle:disabled { cursor: default; }
 .og-fallback-dark { display: none; }
 .og-opening[data-fallback-ready="true"] .og-fallback { visibility: hidden; }
 [data-matter-ready="true"] > .og-matter canvas { opacity: 1; }
@@ -235,8 +224,7 @@ main.home { max-width: none; padding-inline: 0; }
   .header-inner { gap: 1.25rem; }
   .brand { font-size: 1.35rem; }
   #primary-nav { gap: .9rem; }
-  .og-opening-copy { width: min(78%, 45rem); }
-  .og-opening h1 { font-size: clamp(3.2rem, 7vw, 5rem); }
+  .og-opening-copy { width: 100%; }
 }
 @media (max-width: 900px) {
   .header-inner { min-height: 4.5rem; gap: .5rem; }
@@ -246,9 +234,9 @@ main.home { max-width: none; padding-inline: 0; }
   #menu-toggle { min-height: 2.75rem; padding-inline: .65rem; border: 1px solid var(--line); }
   .nav-ready #primary-nav.is-open { border-radius: 0 0 1rem 1rem; }
   .nav-flyout { border-radius: 0; box-shadow: none; }
-  .og-opening-inner { min-height: 38rem; padding-block: 3.5rem 5rem; }
-  .og-opening-copy { width: min(83%, 42rem); }
-  .og-opening h1 { font-size: clamp(3rem, 7.5vw, 4.5rem); }
+  .og-opening-inner { min-height: clamp(32rem, calc(100svh - 4.5rem), 50rem); padding-block: 5rem; }
+  .og-opening-copy { width: 100%; }
+  .og-opening h1 { font-size: clamp(4.2rem, 14.8vw, 13rem); }
   .tour-heading h2 { font-size: clamp(2.1rem, 5vw, 3rem); max-width: 24ch; }
   .home .koda-tour { margin-top: 3.5rem; }
   .home .og-closing { padding-block: 4rem; }
@@ -257,18 +245,11 @@ main.home { max-width: none; padding-inline: 0; }
 }
 @media (max-width: 640px) {
   :root { --gutter: 1.25rem; --section-space: 4.5rem; }
-  /* Keep the mobile reading area clear; the same field emerges at its foot. */
-  .og-opening .og-matter {
-    -webkit-mask-image: linear-gradient(to bottom, transparent 78%, #000 92%);
-    mask-image: linear-gradient(to bottom, transparent 78%, #000 92%);
-  }
-  .og-opening-inner { min-height: 0; padding-top: 2.75rem; padding-bottom: 11rem; }
-  .og-opening-copy { width: 100%; max-width: 34rem; }
-  .og-opening h1 { font-size: clamp(2.15rem, 9.1vw, 3.65rem); letter-spacing: -.052em; }
-  .og-opening .section-name { margin-bottom: 1.1rem; }
-  .og-opening .og-lead { max-width: 34ch; font-size: 1.125rem; margin-top: 1.5rem; }
-  .og-opening .actions { gap: .85rem 1.3rem; margin-top: 1.6rem; }
-  .og-opening .og-availability { font-size: .875rem; max-width: 39ch; }
+  .og-opening-inner { min-height: clamp(32rem, calc(100svh - 5.5rem), 50rem); padding-block: 5rem; }
+  .og-opening-copy { width: 100%; }
+  .og-opening h1 { font-size: clamp(4.2rem, 14.8vw, 6rem); }
+  .og-opening .og-subtitle { max-width: 23ch; margin-top: 1.5rem; }
+  .og-opening .actions { margin-top: 1.75rem; }
   .edition-band { padding-block: .9rem; }
   .home .koda-tour { margin-top: 3rem; }
   .tour-heading { gap: 1.2rem; }
@@ -296,8 +277,17 @@ main.home { max-width: none; padding-inline: 0; }
   .nav-actions .login { padding-inline: .6rem; font-size: .8rem; }
   .nav-actions { gap: .3rem; }
   #menu-toggle { padding-inline: .5rem; font-size: .85rem; }
-  .og-opening .actions { align-items: flex-start; flex-direction: column; }
+  .og-opening .actions { align-items: center; flex-direction: row; }
 }
+
+/* Editorial rhythm comes from spacing, not horizontal decorative rules.
+   Tables, inputs, navigation panels and the real application keep functional borders. */
+.site-header,.site-footer,.footer-tools,.home-faq,.home-news,.home .og-closing,
+.product-feature,.project-feature,.resource-shelf,.product-chapters,.product-chapters article,
+.lesson-index,.lesson-section,.reading-section,.next-guide,.capture-notes,.story-body,.policy-text,
+.fact-list>div,.guide-directory li,.guide-directory li:last-child,.bulletin-list li,.bulletin-list li:first-child,
+.review-steps>li,.offer h3,.capabilities dt,.faq-list details,.faq-list details:last-child,
+.motion-editorial,.motion-fan-art { border-top: 0; border-bottom: 0; }
 @media (prefers-reduced-motion: reduce) {
   .primary, .login, .plan-link, .nav-flyout, .review-controls button { animation: none; transition: none; }
   .primary:active, .login:active, .plan-link:active { transform: none; }

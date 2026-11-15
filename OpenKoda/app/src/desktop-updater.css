@@ -13,3 +13,8 @@
 .desktop-update-notes{margin:14px 0;font-size:13px}.desktop-update-notes summary{cursor:pointer;list-style:none;padding:8px 0;font-weight:600}.desktop-update-notes p{white-space:pre-wrap;max-height:200px;overflow:auto}
 .desktop-update-spin{animation:desktop-update-spin 1s linear infinite}@keyframes desktop-update-spin{to{transform:rotate(360deg)}}
 @media(prefers-reduced-motion:reduce){.desktop-update-spin{animation:none}}
+:root[data-motion=reduced] .desktop-update-spin{animation:none}
+.desktop-update-channels{display:grid;gap:10px;border:1px solid var(--line);border-radius:14px;padding:16px;margin:20px 0 8px;font-size:13px}
+.desktop-update-channels legend{padding:0 6px;font-weight:600}.desktop-update-channels select{max-width:350px;border:1px solid var(--line);border-radius:9px;padding:9px;background:var(--surface);color:var(--text);font:inherit}
+.desktop-update-channels button{justify-self:start;border:1px solid var(--line);border-radius:9px;padding:8px 12px;background:var(--subtle);color:var(--text);font:inherit;cursor:pointer}.desktop-update-channels:disabled,.desktop-update-channels button:disabled{opacity:.65}.desktop-update-channels button:disabled{cursor:default}
+.desktop-update-opt-in{display:flex;align-items:flex-start;gap:8px;line-height:1.5}.desktop-update-opt-in input{margin-top:3px}

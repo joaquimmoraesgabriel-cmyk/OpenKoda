@@ -1,3 +1,4 @@
+import {createOrbitField,evolveOrbitField,stepOrbitInput,orbitVisibility} from './orbit-field.js';
 // Original OpenGlitch compositions. Shapes are sampled once onto an ordered
 // lattice. A coherent living base and pointer input move those same marks;
 // neither layer regenerates random noise while rendering.
@@ -17,6 +18,7 @@ export const matterPauseKey = 'openglitch.motion-paused';
 export function createMatterField(scene, width, height, options = {}) {
   if (!['aperture', 'constellation'].includes(scene)) throw new TypeError('Unknown matter composition.');
   if (!(width > 0 && height > 0 && Number.isFinite(width) && Number.isFinite(height))) throw new RangeError('A positive finite field size is required.');
+  if (scene === 'aperture') return createOrbitField(width,height,options,matterLimits);
   const compact = width < 700 || height > width * 1.25;
   const limit = Math.max(160, Math.floor((compact || options.coarse ? matterLimits.compact : matterLimits.desktop) * clamp(finite(options.density, 1), 0.25, 1)));
   const spacing = Math.max(compact ? 9 : 10, Math.sqrt(width * height / (limit * 3)));
@@ -35,17 +37,7 @@ export function createMatterField(scene, width, height, options = {}) {
       const quiet = compact ? smooth(0.36, 0.62, y / height) : smooth(0.32, 0.57, x / width);
       if (!quiet) continue;
       let density, tone;
-      if (scene === 'aperture') {
-        const nx = (x / width - (compact ? 0.8 : 0.79)) / (compact ? 0.87 : 0.43);
-        const ny = (y / height - (compact ? 0.76 : 0.53)) / (compact ? 0.42 : 0.76);
-        const theta = Math.atan2(ny, nx), radius = Math.hypot(nx, ny);
-        const folded = radius + Math.sin(theta * 3 + 0.6) * 0.085 + Math.cos(theta * 6) * 0.024;
-        const opening = smooth(0.25, 0.78, Math.acos(Math.cos(theta - Math.PI)));
-        const band = 1 - smooth(0.12, 0.33, Math.abs(folded - 0.92));
-        const ribs = 0.66 + 0.34 * Math.pow(0.5 + 0.5 * Math.sin(folded * 35 - theta * 2), 2);
-        density = band * opening * ribs * quiet;
-        tone = smooth(0.82, 1.16, folded) * 0.14;
-      } else {
+      {
         let core = 0, closest = 0;
         for (let k = 0; k < clusters.length; k++) {
           const [cx, cy, rx, ry] = clusters[k];
@@ -62,7 +54,7 @@ export function createMatterField(scene, width, height, options = {}) {
       }
       const threshold = (BAYER[((row & 3) << 2) + (column & 3)] + 0.5) / 16;
       if (density <= threshold * 0.94 || density < 0.055) continue;
-      samples.push([x, y, spacing * (scene === 'aperture' ? 0.32 + 0.39 * density : 0.105 + 0.16 * density), 0.16 + 0.67 * density, tone]);
+      samples.push([x, y, spacing * (0.105 + 0.16 * density), 0.16 + 0.67 * density, tone]);
     }
   }
   const count = Math.min(limit, samples.length);
@@ -83,6 +75,7 @@ export function createMatterField(scene, width, height, options = {}) {
 
 /** A bounded, deterministic base volume; time advances only while the scene runs. */
 export function evolveMatterField(field, elapsed) {
+  if(field.scene==='aperture'){evolveOrbitField(field,elapsed);return;}
   field.time += clamp(finite(elapsed, 0), 0, matterLimits.maxDelta);
   const rate = field.scene === 'aperture' ? 0.34 : 0.25;
   const reach = field.compact ? 0.8 : 1;
@@ -98,6 +91,8 @@ export function evolveMatterField(field, elapsed) {
 
 export function resetMatterField(field) {
   for (const key of ['heat', 'dx', 'dy', 'vx', 'vy']) field[key].fill(0);
+  field.dissolve?.fill(0);
+  field.pointerX=field.pointerY=NaN;field.pointerIdle=field.inputVX=field.inputVY=0;
 }
 
 /** Build-time static counterpart; numeric geometry and hex colors only. */
@@ -108,7 +103,7 @@ export function renderMatterSvg({width, height, kind, ink = '#1a1920', accent = 
   const marks = accentPass => {
     const output = [];
     for (let i = 0; i < field.count; i++) {
-      const alpha = field.alpha[i] * (accentPass ? field.tone[i] : 1);
+      const alpha = field.alpha[i] * field.coverage[i] * (accentPass ? field.tone[i] : 1);
       if (accentPass && field.tone[i] < 0.008) continue;
       output.push(kind === 'constellation'
         ? `<circle cx="${n(field.x[i])}" cy="${n(field.y[i])}" r="${n(field.size[i])}" opacity="${n(alpha)}"/>`
@@ -123,6 +118,7 @@ export function renderMatterSvg({width, height, kind, ink = '#1a1920', accent = 
 export function stepMatterField(field, pointer, elapsed) {
   const dt = clamp(finite(elapsed, 0), 0, matterLimits.maxDelta);
   if (!dt) return false;
+  if(field.scene==='aperture')return stepOrbitInput(field,pointer,dt);
   const active = !!pointer?.active && Number.isFinite(pointer.x) && Number.isFinite(pointer.y);
   const radius = clamp(finite(pointer?.radius, Math.min(field.width, field.height) * 0.23), 60, 220);
   const omega = 16, decay = Math.exp(-omega * dt);
@@ -173,14 +169,16 @@ export function paintMatterField(context, field, palette) {
   // Two color passes keep color-state changes independent of the element count.
   context.fillStyle = palette.ink;
   for (let i = 0; i < field.count; i++) {
-    context.globalAlpha = Math.min(1, field.alpha[i] * field.coverage[i]);
+    const visibility=dots?1:orbitVisibility(field,field.x[i]+field.flowX[i]+field.dx[i],field.y[i]+field.flowY[i]+field.dy[i])*(1-field.dissolve[i]);
+    context.globalAlpha = Math.min(1, field.alpha[i] * field.coverage[i])*visibility;
     mark(field.x[i] + field.flowX[i] + field.dx[i], field.y[i] + field.flowY[i] + field.dy[i], field.size[i] * Math.sqrt(field.coverage[i]));
   }
   context.fillStyle = palette.accent;
   for (let i = 0; i < field.count; i++) {
     const strength = Math.max(field.tone[i], field.heat[i]);
     if (strength < 0.008) continue;
-    context.globalAlpha = Math.min(1, field.alpha[i] * field.coverage[i]) * strength;
+    const visibility=dots?1:orbitVisibility(field,field.x[i]+field.flowX[i]+field.dx[i],field.y[i]+field.flowY[i]+field.dy[i])*(1-field.dissolve[i]);
+    context.globalAlpha = Math.min(1, field.alpha[i] * field.coverage[i]) * strength*visibility;
     mark(field.x[i] + field.flowX[i] + field.dx[i], field.y[i] + field.flowY[i] + field.dy[i], field.size[i] * Math.sqrt(field.coverage[i]));
   }
   context.globalAlpha = 1;
@@ -197,7 +195,10 @@ export function mountMatterFields(root = document) {
   const coarse = win.matchMedia('(pointer: coarse)');
   const items = [];
   let frame = 0, previous = 0, disposed = false, paused = false;
-  try { paused = win.localStorage?.getItem(matterPauseKey) === 'true'; } catch { /* Storage can be unavailable. */ }
+  // Legacy pause preferences only apply where an explicit control still exists.
+  // The current public site intentionally has no manual animation controls.
+  const hasPauseControl=root.querySelectorAll('[data-matter-pause]').length>0;
+  if(hasPauseControl)try { paused = win.localStorage?.getItem(matterPauseKey) === 'true'; } catch { /* Storage can be unavailable. */ }
   const staticMode = () => reduce.matches || paused;
   const needsFrame = item => !item.failed && item.visible && (item.dirty || item.animating || item.resize || !staticMode());
   function schedule() {
@@ -332,7 +333,7 @@ export function mountMatterFields(root = document) {
     win.removeEventListener('storage', storage);
     win.removeEventListener('openglitch:motion-change', sharedPause);
   }
-  const storage = event => { if (event.key === matterPauseKey || event.key === null) setPaused(event.newValue === 'true', false); };
+  const storage = event => { if (hasPauseControl&&(event.key === matterPauseKey || event.key === null)) setPaused(event.newValue === 'true', false); };
   const sharedPause = event => { if (typeof event.detail?.paused === 'boolean') setPaused(event.detail.paused, false); };
   reduce.addEventListener('change', mode); coarse.addEventListener('change', mode);
   doc.addEventListener('visibilitychange', visibility); win.addEventListener('resize', layout, {passive: true}); win.addEventListener('pagehide', cleanup, {once: true});
