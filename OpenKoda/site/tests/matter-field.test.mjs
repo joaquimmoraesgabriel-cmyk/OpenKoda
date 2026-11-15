@@ -176,7 +176,61 @@ test('painting draws original marks without adding an overlay circle', () => {
     paintMatterField(ctx, field, {ink: '#141414', accent: '#7042ed'});
     assert.equal(ctx.clears, 1); assert.equal(ctx.globalAlpha, 1);
     assert.equal(scene === 'aperture' ? ctx.dots : ctx.squares, 0);
-    assert.ok((scene === 'aperture' ? ctx.squares : ctx.dots) >= field.count);
+    assert.ok((scene === 'aperture' ? ctx.squares : ctx.dots) > 0);
+  }
+});
+
+test('culling preserves every visible mark, alpha and paint order across evolving frames', () => {
+  const palette = {ink: '#141414', accent: '#7042ed'};
+  for (const scene of ['aperture', 'constellation']) {
+    for (const [width, height] of [[1440, 800], [390, 844]]) {
+      const field = createMatterField(scene, width, height);
+      for (const time of [0, 3, 8]) {
+        field.time = time; evolveMatterField(field, 0);
+        stepMatterField(field, {active: true, x: width * .9, y: height * .5}, 1 / 60);
+        const expected = []; let originalCalls = 0;
+        // Reference the original two-pass painter, retaining only marks whose
+        // bounds intersect the canvas. Compare double-precision values exactly.
+        for (const accent of [false, true]) for (let i = 0; i < field.count; i++) {
+          const strength = Math.max(field.tone[i], field.heat[i]);
+          if (accent && strength < .008) continue;
+          originalCalls++;
+          const x = field.x[i] + field.flowX[i] + field.dx[i], y = field.y[i] + field.flowY[i] + field.dy[i];
+          const size = field.size[i] * Math.sqrt(field.coverage[i]);
+          const dots = scene === 'constellation', extent = dots ? size : size / 2;
+          const visibility = dots ? 1 : orbitVisibility(field, x, y) * (1 - field.dissolve[i]);
+          const base = Math.min(1, field.alpha[i] * field.coverage[i]);
+          const alpha = accent ? base * strength * visibility : base * visibility;
+          if (alpha <= 0 || size <= 0 || x + extent < 0 || x - extent > width || y + extent < 0 || y - extent > height) continue;
+          expected.push({color: accent ? palette.accent : palette.ink, alpha,
+            geometry: dots ? [x, y, size, 0, Math.PI * 2] : [x - size / 2, y - size / 2, size, size]});
+        }
+        const actual = [], ctx = {clearRect() {}, beginPath() {}, fill() {},
+          fillRect(...geometry) { actual.push({color: this.fillStyle, alpha: this.globalAlpha, geometry}); },
+          arc(...geometry) { actual.push({color: this.fillStyle, alpha: this.globalAlpha, geometry}); }};
+        paintMatterField(ctx, field, palette);
+        assert.deepEqual(actual, expected);
+        assert.ok(actual.length < originalCalls, 'offscreen draws are removed without dropping visible marks');
+      }
+    }
+  }
+});
+
+test('culling retains partially visible circles and squares at each canvas edge', () => {
+  for (const scene of ['aperture', 'constellation']) {
+    const field = createMatterField(scene, 100, 100);
+    field.count = 8;
+    field.x.set([-1, 101, 50, 50, -3, 103, 50, 50]);
+    field.y.set([50, 50, -1, 101, 50, 50, -3, 103]);
+    field.size.fill(scene === 'constellation' ? 2 : 4);
+    field.alpha.fill(1); field.coverage.fill(1); field.tone.fill(0); field.heat.fill(0);
+    field.flowX.fill(0); field.flowY.fill(0); field.dx.fill(0); field.dy.fill(0);
+    if (scene === 'aperture') { field.safeX = field.safeY = 1; field.dissolve.fill(0); }
+    const ctx = context(); paintMatterField(ctx, field, {ink: '#111111', accent: '#222222'});
+    assert.equal(scene === 'constellation' ? ctx.dots : ctx.squares, 4);
+    field.alpha.fill(0);
+    const empty = context(); paintMatterField(empty, field, {ink: '#111111', accent: '#222222'});
+    assert.equal(empty.squares + empty.dots, 0, 'reused buffers do not replay stale marks');
   }
 });
 

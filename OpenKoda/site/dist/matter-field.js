@@ -159,9 +159,19 @@ export function stepMatterField(field, pointer, elapsed) {
   return unsettled;
 }
 
+// Reuse rendering scratch space without changing the simulation's buffers.
+// Float64 retains the exact geometry and alpha values of the original painter.
+const paintBuffers = new WeakMap();
+
 export function paintMatterField(context, field, palette) {
   context.clearRect(0, 0, field.width, field.height);
   const dots = field.scene === 'constellation';
+  let buffer = paintBuffers.get(field);
+  if (!buffer || buffer.length < field.count * 4) {
+    buffer = new Float64Array(field.count * 4);
+    paintBuffers.set(field, buffer);
+  }
+  let used = 0;
   const mark = (x, y, size) => {
     if (dots) { context.beginPath(); context.arc(x, y, size, 0, TAU); context.fill(); }
     else context.fillRect(x - size / 2, y - size / 2, size, size);
@@ -169,17 +179,25 @@ export function paintMatterField(context, field, palette) {
   // Two color passes keep color-state changes independent of the element count.
   context.fillStyle = palette.ink;
   for (let i = 0; i < field.count; i++) {
-    const visibility=dots?1:orbitVisibility(field,field.x[i]+field.flowX[i]+field.dx[i],field.y[i]+field.flowY[i]+field.dy[i])*(1-field.dissolve[i]);
-    context.globalAlpha = Math.min(1, field.alpha[i] * field.coverage[i])*visibility;
-    mark(field.x[i] + field.flowX[i] + field.dx[i], field.y[i] + field.flowY[i] + field.dy[i], field.size[i] * Math.sqrt(field.coverage[i]));
+    const baseAlpha = Math.min(1, field.alpha[i] * field.coverage[i]);
+    if (baseAlpha <= 0) continue;
+    const x = field.x[i] + field.flowX[i] + field.dx[i], y = field.y[i] + field.flowY[i] + field.dy[i];
+    const size = field.size[i] * Math.sqrt(field.coverage[i]), extent = dots ? size : size / 2;
+    if (size <= 0 || x + extent < 0 || x - extent > field.width || y + extent < 0 || y - extent > field.height) continue;
+    const visibility = dots ? 1 : orbitVisibility(field, x, y) * (1 - field.dissolve[i]);
+    const alpha = baseAlpha * visibility;
+    if (alpha <= 0) continue;
+    const strength = Math.max(field.tone[i], field.heat[i]);
+    buffer[used++] = x; buffer[used++] = y; buffer[used++] = size;
+    buffer[used++] = strength < 0.008 ? 0 : baseAlpha * strength * visibility;
+    context.globalAlpha = alpha;
+    mark(x, y, size);
   }
   context.fillStyle = palette.accent;
-  for (let i = 0; i < field.count; i++) {
-    const strength = Math.max(field.tone[i], field.heat[i]);
-    if (strength < 0.008) continue;
-    const visibility=dots?1:orbitVisibility(field,field.x[i]+field.flowX[i]+field.dx[i],field.y[i]+field.flowY[i]+field.dy[i])*(1-field.dissolve[i]);
-    context.globalAlpha = Math.min(1, field.alpha[i] * field.coverage[i]) * strength*visibility;
-    mark(field.x[i] + field.flowX[i] + field.dx[i], field.y[i] + field.flowY[i] + field.dy[i], field.size[i] * Math.sqrt(field.coverage[i]));
+  for (let i = 0; i < used; i += 4) {
+    if (buffer[i + 3] <= 0) continue;
+    context.globalAlpha = buffer[i + 3];
+    mark(buffer[i], buffer[i + 1], buffer[i + 2]);
   }
   context.globalAlpha = 1;
 }

@@ -50,7 +50,10 @@
 .motion-word-actions button:disabled { cursor: default; }
 .motion-weight { font-family: var(--sans); font-kerning: none; }
 .motion-weight .motion-wave-word { display: inline-block; white-space: nowrap; }
-.motion-wave-word > span { display: inline-block; }
+.motion-wave-word > span { display: inline-grid; vertical-align: baseline; }
+.motion-wave-word > span > span { grid-area: 1 / 1; text-align: center; }
+.motion-wave-light { font-weight: 400; }
+.motion-wave-heavy { font-weight: 800; opacity: 0; }
 .motion-fan { position: relative; display: grid; gap: .75rem; min-width: 0; }
 .motion-fan > a { display: block; border: 1px solid var(--line); border-radius: 1rem; background: var(--paper); padding: 1.25rem; color: var(--ink); text-decoration: none; }
 .motion-fan > a:nth-child(2) { background: var(--surface); }

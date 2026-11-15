@@ -31,8 +31,8 @@ export function createOrbitField(width,height,options,limits){
  const density=Number.isFinite(options.density)?clamp(options.density,.25,1):1;
  const count=Math.floor((compact||options.coarse?limits.compact:limits.desktop)*density);
  const field={scene:'aperture',width,height,count,compact,time:0,maxDisplacement:compact?44:68,
-  radiusX:width*(compact?.76:.66),radiusY:height*(compact?.7:.69),
-  safeX:width*(compact?.43:.38),safeY:Math.max(128,height*(compact?.27:.28)),
+  radiusX:width*(compact?.74:.63),radiusY:height*(compact?.68:.66),
+  safeX:width*(compact?.42:.36),safeY:Math.max(128,height*(compact?.26:.27)),
   pointerX:NaN,pointerY:NaN,pointerIdle:0,inputVX:0,inputVY:0};
  for(const key of ['x','y','size','alpha','tone','flowX','flowY','coverage','phase','crossPhase','heat','dx','dy','vx','vy','dissolve'])field[key]=new Float32Array(count);
  for(let i=0;i<count;i++){

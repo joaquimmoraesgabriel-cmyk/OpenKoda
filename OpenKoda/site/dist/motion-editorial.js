@@ -40,13 +40,22 @@ export function mountWeightWave(host,runtime){
  text.split(' ').forEach((word,wordIndex)=>{
   if(wordIndex)visual.append(document.createTextNode(' '));
   const group=document.createElement('span');group.className='motion-wave-word';visual.append(group);
-  for(const char of word){const element=document.createElement('span');element.textContent=char;group.append(element);letters.push({element,index:letters.length,w:spring(400,springs.weight)});}
+  for(const char of word){
+   const element=document.createElement('span'),light=document.createElement('span'),heavy=document.createElement('span');
+   light.className='motion-wave-light';heavy.className='motion-wave-heavy';light.textContent=heavy.textContent=char;
+   element.append(light,heavy);group.append(element);letters.push({element,light,heavy,index:letters.length,w:spring(400,springs.weight),mix:-1});
+  }
  });
  const focus=spring(-.2,springs.focus);let hover=false,clock=0;
  const animation=runtime.watch(host,(dt,staticMode)=>{
   if(!staticMode){clock+=dt;if(!hover)focus.t=-.06+1.12*(.5-.5*Math.cos(clock*Math.PI*2/4.6));}
   step(focus,dt,staticMode);
-  for(const letter of letters){const distance=((letter.index+.5)/letters.length-focus.x)/.13;letter.w.t=staticMode?600:400+380*Math.exp(-distance*distance);step(letter.w,dt,staticMode);letter.element.style.fontWeight=String(clamp(letter.w.x,400,800));}
+  // Two fixed glyph faces share one grid cell: no font reshaping or changing
+  // advances on every frame. Preserve the original spring and focus timing.
+  for(const letter of letters){const distance=((letter.index+.5)/letters.length-focus.x)/.13;letter.w.t=staticMode?600:400+380*Math.exp(-distance*distance);step(letter.w,dt,staticMode);
+   const mix=Math.round(clamp((letter.w.x-400)/400,0,1)*1000)/1000;
+   if(mix!==letter.mix){letter.light.style.opacity=String(1-mix);letter.heavy.style.opacity=String(mix);letter.mix=mix;}
+  }
   return false;
  },true);
  const move=event=>{if(event.pointerType==='touch'||runtime.isStatic())return;const rect=host.getBoundingClientRect();hover=true;focus.t=(event.clientX-rect.left)/rect.width;animation.request();};
